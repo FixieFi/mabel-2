@@ -35,23 +35,42 @@ main {
 
 header {
   text-align: center;
-  padding: 34px 20px 24px;
-  background: linear-gradient(145deg, rgba(255, 248, 238, 0.88), rgba(227, 209, 255, 0.82));
-  border: 3px solid rgba(107, 74, 143, 0.25);
-  border-radius: 26px;
+  padding: 42px 24px 30px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(247, 200, 216, 0.35), transparent 35%),
+    radial-gradient(circle at 80% 80%, rgba(201, 167, 255, 0.35), transparent 35%),
+    linear-gradient(145deg, rgba(255, 248, 238, 0.92), rgba(227, 209, 255, 0.78));
+  border: 3px solid rgba(107, 74, 143, 0.2);
+  border-radius: 30px;
   box-shadow: var(--card-shadow);
 }
 
 h1 {
   margin: 0;
   color: var(--deep-plum);
-  font-size: 2.4rem;
-  letter-spacing: 0.04em;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 2.1rem;
+  font-weight: normal;
+  letter-spacing: 0.03em;
 }
 
 .tagline {
   margin: 10px 0 0;
   color: var(--plum);
+  font-style: italic;
+}
+
+.header-flowers {
+  margin: 18px 0 10px;
+  color: var(--soft-purple);
+  font-size: 1.2rem;
+  letter-spacing: 0.35em;
+}
+
+.header-note {
+  margin: 0;
+  color: var(--plum);
+  font-size: 0.95rem;
   font-style: italic;
 }
 

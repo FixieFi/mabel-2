@@ -1124,15 +1124,19 @@ function startMabel() {
     }
   }, 45000);
 
-  // Mabel has one AI-generated autonomous moment every 30 minutes.
+  // Mabel has one AI-generated autonomous moment every 20 to 40 minutes.
   setInterval(function () {
     const timeSinceLastMoment = Date.now() - lastAutonomousMoment;
-    const thirtyMinutes = 30 * 60 * 1000;
+    const twentyMinutes = 20 * 60 * 1000;
+    const fortyMinutes = 40 * 60 * 1000;
+
+    const nextMomentDelay =
+      twentyMinutes + Math.random() * (fortyMinutes - twentyMinutes);
 
     if (
       mabel &&
       document.visibilityState === "visible" &&
-      timeSinceLastMoment >= thirtyMinutes
+      timeSinceLastMoment >= nextMomentDelay
     ) {
       handleAutonomousMoment();
     }
