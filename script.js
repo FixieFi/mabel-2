@@ -1,9 +1,10 @@
-// MABEL SCRIPT VERSION 5 — RESTORED
+// MABEL SCRIPT VERSION 6 — AUTONOMOUS DAY
 
 const moodElement = document.getElementById("mood");
 const activityElement = document.getElementById("activity");
 const thoughtElement = document.getElementById("thought");
 const diaryElement = document.getElementById("diary");
+const activityLogElement = document.getElementById("activity-log");
 const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
@@ -12,6 +13,8 @@ const needCuriosity = document.getElementById("need-curiosity");
 const needConnection = document.getElementById("need-connection");
 const needRest = document.getElementById("need-rest");
 const needWonder = document.getElementById("need-wonder");
+const needFood = document.getElementById("need-food");
+const needWater = document.getElementById("need-water");
 const wishesElement = document.getElementById("wishes");
 const interestsElement = document.getElementById("interests");
 const changesElement = document.getElementById("changes");
@@ -26,10 +29,13 @@ const tabPanels = document.querySelectorAll(".tab-panel");
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 const MABEL_WANDER_URL =
   "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-wander";
+const MABEL_DAY_URL =
+  "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 
-const mabelStorageKey = "mabel-character-v4";
+const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-v2";
 const wanderingsStorageKey = "mabel-wanderings-v1";
+const autonomousStorageKey = "mabel-autonomous-v1";
 
 const interestSeeds = [
   {
@@ -79,6 +85,7 @@ const interestSeeds = [
 let mabel = null;
 let conversation = [];
 let wanderings = [];
+let lastAutonomousMoment = 0;
 
 function now() {
   return new Date().toISOString();
@@ -156,9 +163,34 @@ function loadWanderings() {
   return [];
 }
 
+function saveLastAutonomousMoment() {
+  try {
+    localStorage.setItem(
+      autonomousStorageKey,
+      JSON.stringify(lastAutonomousMoment)
+    );
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function loadLastAutonomousMoment() {
+  try {
+    const saved = localStorage.getItem(autonomousStorageKey);
+
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    // Fall through to zero.
+  }
+
+  return 0;
+}
+
 function createDefaultMabel() {
   return {
-    version: 4,
+    version: 5,
     character: {
       name: "Mabel",
       title: "Mabel of the Hawthorn Hollow",
@@ -170,7 +202,9 @@ function createDefaultMabel() {
       curiosity: 0.6,
       connection: 0.4,
       rest: 0.8,
-      wonder: 0.5
+      wonder: 0.5,
+      food: 0.7,
+      water: 0.75
     },
     now: {
       updatedAt: now(),
@@ -200,8 +234,8 @@ function addFeedEntry(entry) {
     ok: true
   });
 
-  if (mabel.feed.length > 60) {
-    mabel.feed.length = 60;
+  if (mabel.feed.length > 80) {
+    mabel.feed.length = 80;
   }
 }
 
@@ -248,15 +282,46 @@ function updateInterest(interestId, change) {
   }
 }
 
+function clampNeed(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
 function chooseAction() {
+  const hungry = mabel.needs.food < 0.35;
+  const thirsty = mabel.needs.water < 0.35;
+  const tired = mabel.needs.rest < 0.35;
+  const lonely = mabel.needs.connection < 0.3;
+
   const actionNames = [
     "follow_the_silver_thread",
     "listen_to_rain",
     "find_a_treasure",
     "visit_the_old_lane",
     "rest_in_hollow",
-    "write_in_diary"
+    "write_in_diary",
+    "inspect_a_leaf",
+    "listen_for_small_creatures",
+    "watch_the_weather",
+    "sit_by_the_path",
+    "gather_moss",
+    "follow_a_scent"
   ];
+
+  if (hungry) {
+    actionNames.push("look_for_food", "look_for_food", "look_for_food");
+  }
+
+  if (thirsty) {
+    actionNames.push("find_water", "find_water", "find_water");
+  }
+
+  if (tired) {
+    actionNames.push("rest_in_hollow", "rest_in_hollow");
+  }
+
+  if (lonely) {
+    actionNames.push("sit_by_the_path", "sit_by_the_path");
+  }
 
   const chosen = actionNames[
     Math.floor(Math.random() * actionNames.length)
@@ -274,7 +339,23 @@ function chooseAction() {
     rest_in_hollow:
       "resting in her nest of moss and fallen blossom",
     write_in_diary:
-      "writing by the light of a thimble-lantern"
+      "writing by the light of a thimble-lantern",
+    inspect_a_leaf:
+      "turning a curled leaf over in her paws",
+    listen_for_small_creatures:
+      "listening for small creatures moving through the grass",
+    watch_the_weather:
+      "watching the weather change above the hawthorn",
+    sit_by_the_path:
+      "sitting beside the path and listening for a familiar voice",
+    gather_moss:
+      "gathering a little moss for her nest",
+    follow_a_scent:
+      "following a faint scent through the damp grass",
+    look_for_food:
+      "searching the brambles for blackberries or fallen seeds",
+    find_water:
+      "looking for rainwater gathered in a curled leaf"
   };
 
   const actionMood = {
@@ -283,7 +364,15 @@ function chooseAction() {
     find_a_treasure: "curious",
     visit_the_old_lane: "brave",
     rest_in_hollow: "sleepy",
-    write_in_diary: "thoughtful"
+    write_in_diary: "thoughtful",
+    inspect_a_leaf: "curious",
+    listen_for_small_creatures: "attentive",
+    watch_the_weather: "quiet",
+    sit_by_the_path: "hopeful",
+    gather_moss: "busy",
+    follow_a_scent: "curious",
+    look_for_food: "hungry",
+    find_water: "thirsty"
   };
 
   const actionThought = {
@@ -298,7 +387,23 @@ function chooseAction() {
     rest_in_hollow:
       "Even small creatures need a place where the world grows quiet.",
     write_in_diary:
-      "A diary is a little boat for the day’s forgotten weather."
+      "A diary is a little boat for the day’s forgotten weather.",
+    inspect_a_leaf:
+      "A leaf can hold a whole small world in its veins.",
+    listen_for_small_creatures:
+      "The grass is full of tiny movements if you stay still long enough.",
+    watch_the_weather:
+      "The sky changes its mind more often than Mabel does.",
+    sit_by_the_path:
+      "Sometimes it is nice simply to wait where someone might pass.",
+    gather_moss:
+      "Soft things make a home feel safer.",
+    follow_a_scent:
+      "A scent is a story that has not yet found its ending.",
+    look_for_food:
+      "Mabel’s stomach feels small and empty. The brambles might have something.",
+    find_water:
+      "Mabel is thirsty. A leaf may have saved a little rain for her."
   };
 
   mabel.now.updatedAt = now();
@@ -306,34 +411,48 @@ function chooseAction() {
   mabel.now.mood = actionMood[chosen];
   mabel.now.thought = actionThought[chosen];
 
-  mabel.needs.comfort = Math.max(
-    0,
-    Math.min(1, mabel.needs.comfort + (Math.random() - 0.45) * 0.08)
+  mabel.needs.comfort = clampNeed(
+    mabel.needs.comfort + (Math.random() - 0.45) * 0.08
   );
 
-  mabel.needs.curiosity = Math.max(
-    0,
-    Math.min(1, mabel.needs.curiosity + (Math.random() - 0.4) * 0.08)
+  mabel.needs.curiosity = clampNeed(
+    mabel.needs.curiosity + (Math.random() - 0.4) * 0.08
   );
 
-  mabel.needs.connection = Math.max(
-    0,
-    Math.min(1, mabel.needs.connection - 0.03)
+  mabel.needs.connection = clampNeed(
+    mabel.needs.connection - 0.03
   );
 
-  mabel.needs.rest = Math.max(
-    0,
-    Math.min(1, mabel.needs.rest + (Math.random() - 0.5) * 0.08)
+  mabel.needs.rest = clampNeed(
+    mabel.needs.rest + (Math.random() - 0.5) * 0.08
   );
 
-  mabel.needs.wonder = Math.max(
-    0,
-    Math.min(1, mabel.needs.wonder + (Math.random() - 0.45) * 0.08)
+  mabel.needs.wonder = clampNeed(
+    mabel.needs.wonder + (Math.random() - 0.45) * 0.08
   );
 
-  mabel.now.energy = Math.max(
-    0.15,
-    Math.min(1, mabel.now.energy + (Math.random() - 0.45) * 0.12)
+  mabel.needs.food = clampNeed(
+    mabel.needs.food - 0.015
+  );
+
+  mabel.needs.water = clampNeed(
+    mabel.needs.water - 0.02
+  );
+
+  if (chosen === "look_for_food") {
+    mabel.needs.food = clampNeed(mabel.needs.food + 0.18);
+  }
+
+  if (chosen === "find_water") {
+    mabel.needs.water = clampNeed(mabel.needs.water + 0.22);
+  }
+
+  if (chosen === "rest_in_hollow") {
+    mabel.needs.rest = clampNeed(mabel.needs.rest + 0.2);
+  }
+
+  mabel.now.energy = clampNeed(
+    mabel.now.energy + (Math.random() - 0.45) * 0.12
   );
 
   addFeedEntry({
@@ -368,6 +487,8 @@ function updateNeeds() {
   if (needConnection) needConnection.value = mabel.needs.connection;
   if (needRest) needRest.value = mabel.needs.rest;
   if (needWonder) needWonder.value = mabel.needs.wonder;
+  if (needFood) needFood.value = mabel.needs.food;
+  if (needWater) needWater.value = mabel.needs.water;
 }
 
 function updateWishes() {
@@ -467,7 +588,21 @@ function updateDiary() {
 
   diaryElement.innerHTML = "";
 
-  mabel.feed.slice(0, 10).forEach(entry => {
+  const diaryEntries = mabel.feed.filter(
+    entry =>
+      entry.kind === "diary" ||
+      entry.kind === "noticed" ||
+      entry.kind === "mind"
+  );
+
+  if (diaryEntries.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel’s day is still gathering itself.";
+    diaryElement.appendChild(item);
+    return;
+  }
+
+  diaryEntries.slice(0, 10).forEach(entry => {
     const item = document.createElement("li");
     const time = new Date(entry.at).toLocaleTimeString([], {
       hour: "2-digit",
@@ -476,6 +611,30 @@ function updateDiary() {
 
     item.textContent = `${time} — ${entry.text}`;
     diaryElement.appendChild(item);
+  });
+}
+
+function updateActivityLog() {
+  if (!activityLogElement) return;
+
+  activityLogElement.innerHTML = "";
+
+  if (mabel.feed.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel’s day has not begun yet.";
+    activityLogElement.appendChild(item);
+    return;
+  }
+
+  mabel.feed.slice(0, 20).forEach(entry => {
+    const item = document.createElement("li");
+    const time = new Date(entry.at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    item.textContent = `${time} — ${entry.text}`;
+    activityLogElement.appendChild(item);
   });
 }
 
@@ -496,14 +655,16 @@ function updateMusing(wandering) {
     return;
   }
 
+  const linkPart = wandering.url
+    ? `<a href="${wandering.url}" target="_blank" rel="noopener">${wandering.title}</a>`
+    : wandering.title;
+
   musingElement.innerHTML = `
     <p class="musing-source">
-      Mabel followed: ${wandering.searchQuestion}
+      Mabel followed: ${wandering.searchQuestion || "a quiet thought"}
     </p>
     <p class="musing-text">
-      She found: <a href="${wandering.url}" target="_blank" rel="noopener">
-        ${wandering.title}
-      </a>
+      She found: ${linkPart}
     </p>
     <p class="mabel-thought">
       “${wandering.musing}”
@@ -526,11 +687,18 @@ function updateWanderings() {
   wanderings.slice(0, 10).forEach(wandering => {
     const item = document.createElement("li");
 
-    const link = document.createElement("a");
-    link.href = wandering.url;
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = wandering.title;
+    if (wandering.url) {
+      const link = document.createElement("a");
+      link.href = wandering.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = wandering.title;
+      item.appendChild(link);
+    } else {
+      const title = document.createElement("span");
+      title.textContent = wandering.title;
+      item.appendChild(title);
+    }
 
     const thought = document.createElement("p");
     thought.textContent = wandering.musing;
@@ -539,7 +707,6 @@ function updateWanderings() {
     change.className = "wandering-change";
     change.textContent = wandering.change || "";
 
-    item.appendChild(link);
     item.appendChild(thought);
 
     if (wandering.change) {
@@ -556,6 +723,7 @@ function updatePage() {
   thoughtElement.textContent = `“${mabel.now.thought}”`;
 
   updateDiary();
+  updateActivityLog();
   updateNeeds();
   updateWishes();
   updateInterests();
@@ -672,14 +840,12 @@ async function handleVisitorMessage() {
       text: `A visitor whispered: “${message}”`
     });
 
-    mabel.needs.connection = Math.max(
-      0,
-      Math.min(1, mabel.needs.connection + 0.18)
+    mabel.needs.connection = clampNeed(
+      mabel.needs.connection + 0.18
     );
 
-    mabel.needs.curiosity = Math.max(
-      0,
-      Math.min(1, mabel.needs.curiosity + 0.08)
+    mabel.needs.curiosity = clampNeed(
+      mabel.needs.curiosity + 0.08
     );
 
     if (mabel.memories.length > 20) {
@@ -706,170 +872,4 @@ async function handleVisitorMessage() {
 async function handleWander() {
   wanderButton.disabled = true;
   wanderStatus.textContent =
-    "Mabel is following a little thread through the moss...";
-
-  if (musingElement) {
-    musingElement.innerHTML = `
-      <p class="musing-source">Mabel is wandering…</p>
-      <p class="musing-text">
-        Her small paws are quiet among the moss and fallen leaves.
-      </p>
-      <p class="mabel-thought">
-        “Perhaps something small and shining is waiting.”
-      </p>
-    `;
-  }
-
-  try {
-    const response = await fetch(MABEL_WANDER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        interests: mabel.interests,
-        memories: mabel.memories.slice(0, 10),
-        conversation: conversation.slice(-10),
-        mood: mabel.now.mood,
-        energy: mabel.now.energy
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Mabel could not wander. Status ${response.status}`
-      );
-    }
-
-    const data = await response.json();
-
-    const wandering = {
-      at: now(),
-      searchQuestion: data.searchQuestion,
-      title: data.title,
-      url: data.url,
-      musing: data.musing,
-      change: data.change || "",
-      interest: data.interest || null
-    };
-
-    wanderings.unshift(wandering);
-
-    if (wanderings.length > 30) {
-      wanderings.length = 30;
-    }
-
-    saveWanderings();
-
-    if (wandering.interest) {
-      const existing = mabel.interests.find(
-        interest => interest.id === wandering.interest.id
-      );
-
-      if (existing) {
-        existing.pull = Math.max(
-          0,
-          Math.min(1, existing.pull + 0.12)
-        );
-
-        if (existing.pull > 0.65 && existing.stage === "dormant") {
-          existing.stage = "pursuing";
-        }
-      } else {
-        mabel.interests.push(wandering.interest);
-
-        addFeedEntry({
-          kind: "mind",
-          text: `Mabel began a new thread: ${wandering.interest.title}.`,
-          why: wandering.interest.question,
-          interest: wandering.interest.id
-        });
-      }
-    }
-
-    mabel.needs.curiosity = Math.max(
-      0,
-      Math.min(1, mabel.needs.curiosity + 0.1)
-    );
-
-    mabel.needs.wonder = Math.max(
-      0,
-      Math.min(1, mabel.needs.wonder + 0.08)
-    );
-
-    addFeedEntry({
-      kind: "noticed",
-      text: `Mabel encountered: ${wandering.title}.`,
-      why: wandering.musing
-    });
-
-    saveMabel();
-    updatePage();
-
-    wanderStatus.textContent = "Mabel has returned from her wandering.";
-  } catch (error) {
-    wanderStatus.textContent =
-      "Mabel’s paws paused at the edge of the hollow. The path beyond was tangled.";
-  } finally {
-    wanderButton.disabled = false;
-  }
-}
-
-function switchTab(tabName) {
-  tabButtons.forEach(button => {
-    if (button.dataset.tab === tabName) {
-      button.classList.add("active");
-    } else {
-      button.classList.remove("active");
-    }
-  });
-
-  tabPanels.forEach(panel => {
-    if (panel.id === tabName) {
-      panel.classList.add("active");
-    } else {
-      panel.classList.remove("active");
-    }
-  });
-}
-
-function startMabel() {
-  mabel = loadMabel() || createDefaultMabel();
-  conversation = loadConversation();
-  wanderings = loadWanderings();
-
-  if (!mabel.needs) {
-    mabel.needs = {
-      comfort: 0.7,
-      curiosity: 0.6,
-      connection: 0.4,
-      rest: 0.8,
-      wonder: 0.5
-    };
-  }
-
-  updatePage();
-
-  tabButtons.forEach(button => {
-    button.addEventListener("click", function () {
-      switchTab(button.dataset.tab);
-    });
-  });
-
-    if (sendButton) {
-    sendButton.addEventListener("click", handleVisitorMessage);
-  }
-
-  if (wanderButton) {
-    wanderButton.addEventListener("click", handleWander);
-  }
-
- // Mabel wakes every 45 seconds.
-  setInterval(function () {
-    if (mabel) {
-      chooseAction();
-    }
-  }, 45000);
-}
-
-startMabel();
+    "Mabel is following a little thread through
