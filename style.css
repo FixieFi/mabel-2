@@ -1,11 +1,14 @@
 :root {
-  --night: #101a1c;
-  --moss: #22382f;
-  --hawthorn: #d8e6d3;
-  --moon: #f4efe0;
-  --gold: #d9b36a;
-  --ink: #e9e4d6;
-  --soft-ink: #b9c3b4;
+  --moss: #6f7f58;
+  --deep-moss: #4d5a3d;
+  --cream: #fbf6ea;
+  --parchment: #fffaf0;
+  --bark: #6b4f3a;
+  --soft-brown: #8a6a51;
+  --blush: #dcae94;
+  --lavender: #b9a7c9;
+  --ink: #43382f;
+  --soft-shadow: rgba(94, 74, 52, 0.14);
 }
 
 * {
@@ -18,195 +21,163 @@ body {
   font-family: Georgia, "Times New Roman", serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 20% 10%, rgba(217, 179, 106, 0.12), transparent 35%),
-    radial-gradient(circle at 80% 80%, rgba(52, 96, 78, 0.35), transparent 45%),
-    linear-gradient(180deg, #0d1518, #16241f 55%, #101a1c);
-}
-
-.mist {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(244, 239, 224, 0.06), transparent 40%),
-    radial-gradient(circle at 70% 70%, rgba(216, 230, 211, 0.05), transparent 45%);
+    radial-gradient(circle at 12% 12%, rgba(220, 174, 148, 0.22), transparent 32%),
+    radial-gradient(circle at 88% 8%, rgba(185, 167, 201, 0.20), transparent 34%),
+    linear-gradient(160deg, #f7f1e2 0%, #eef0dd 48%, #e5ead6 100%);
 }
 
 main {
-  position: relative;
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 48px 22px 64px;
+  padding: 44px 20px 90px;
 }
 
 header {
   text-align: center;
-  margin-bottom: 36px;
-}
-
-.greeting {
-  font-style: italic;
-  color: var(--soft-ink);
-  margin: 0 0 8px;
+  margin-bottom: 30px;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(2rem, 6vw, 3.1rem);
+  font-size: clamp(2.1rem, 6vw, 3.2rem);
+  color: var(--deep-moss);
   letter-spacing: 0.02em;
-  color: var(--moon);
-  text-shadow: 0 0 24px rgba(217, 179, 106, 0.25);
 }
 
-.tagline {
-  margin: 10px 0 0;
-  color: var(--hawthorn);
+.mabel-subtitle {
+  margin: 8px 0 0;
+  font-style: italic;
+  color: var(--soft-brown);
+}
+
+.ornament {
+  display: block;
+  margin: 14px auto 0;
+  color: var(--blush);
+  font-size: 1.4rem;
 }
 
 section {
-  background: rgba(16, 26, 28, 0.72);
-  border: 1px solid rgba(216, 230, 211, 0.18);
-  border-radius: 20px;
-  padding: 26px;
-  margin-bottom: 22px;
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(6px);
+  position: relative;
+  background: var(--parchment);
+  border: 1px solid rgba(139, 106, 81, 0.25);
+  border-radius: 22px;
+  padding: 26px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 12px 30px var(--soft-shadow);
+}
+
+section::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed rgba(111, 127, 88, 0.35);
+  border-radius: 17px;
+  pointer-events: none;
 }
 
 h2 {
-  margin-top: 0;
-  font-size: 1.25rem;
-  letter-spacing: 0.04em;
-  color: var(--gold);
-}
-
-.mouse {
-  width: 120px;
-  height: 100px;
-  margin: 0 auto 18px;
-  border-radius: 50% 50% 45% 45%;
-  background:
-    radial-gradient(circle at 35% 30%, #8d7b64, #5c4c3c 65%),
-    #5c4c3c;
-  position: relative;
-  box-shadow: inset 0 -8px 18px rgba(0, 0, 0, 0.25);
-}
-
-.mouse::before,
-.mouse::after {
-  content: "";
-  position: absolute;
-  top: -22px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #6d5b48;
-}
-
-.mouse::before {
-  left: 8px;
-  transform: rotate(-18deg);
-}
-
-.mouse::after {
-  right: 8px;
-  transform: rotate(18deg);
+  margin: 0 0 14px;
+  font-size: 0.92rem;
+  font-weight: normal;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--moss);
 }
 
 #mood,
-#activity {
-  margin: 6px 0;
-  color: var(--hawthorn);
+#activity,
+#thought {
+  margin: 8px 0;
 }
 
-.thought {
-  margin: 14px 0 0;
+#thought {
   font-style: italic;
-  color: var(--soft-ink);
+  color: var(--soft-brown);
 }
 
-.small-note {
-  margin-top: 0;
-  color: var(--soft-ink);
-  font-size: 0.95rem;
-}
-
-textarea {
-  width: 100%;
-  min-height: 120px;
-  padding: 14px;
-  border: 1px solid rgba(216, 230, 211, 0.25);
-  border-radius: 12px;
-  background: rgba(244, 239, 224, 0.06);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 1rem;
-  resize: vertical;
-}
-
-textarea:focus {
-  outline: 2px solid rgba(217, 179, 106, 0.55);
-}
-
-button {
-  margin-top: 12px;
-  padding: 12px 22px;
-  border: 1px solid rgba(217, 179, 106, 0.45);
-  border-radius: 999px;
-  background: rgba(217, 179, 106, 0.14);
-  color: var(--moon);
-  font-family: inherit;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-button:hover {
-  background: rgba(217, 179, 106, 0.25);
-  transform: translateY(-1px);
-}
-
-.reply {
-  margin-top: 16px;
-  padding: 16px;
-  border-left: 3px solid var(--gold);
-  background: rgba(244, 239, 224, 0.06);
-  border-radius: 0 12px 12px 0;
-  min-height: 24px;
-}
-
-ul {
-  padding-left: 20px;
+#diary {
   margin: 0;
+  padding-left: 22px;
 }
 
-li {
-  margin-bottom: 12px;
+#diary li {
+  margin-bottom: 10px;
   line-height: 1.55;
 }
 
+#diary li::marker {
+  color: var(--blush);
+}
+
+.message-area {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+#message {
+  flex: 1;
+  padding: 14px 16px;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid rgba(139, 106, 81, 0.35);
+  border-radius: 16px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#message:focus {
+  border-color: var(--moss);
+  box-shadow: 0 0 0 4px rgba(111, 127, 88, 0.13);
+}
+
+#send {
+  padding: 14px 22px;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--cream);
+  background: var(--moss);
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+#send:hover {
+  background: var(--deep-moss);
+  transform: translateY(-1px);
+}
+
+#reply {
+  margin: 18px 0 0;
+  font-style: italic;
+  color: var(--bark);
+}
+
 footer {
+  margin-top: 34px;
   text-align: center;
-  color: var(--soft-ink);
   font-size: 0.85rem;
-  line-height: 1.6;
+  color: var(--soft-brown);
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-@media (max-width: 520px) {
+@media (max-width: 560px) {
   main {
-    padding: 28px 16px 48px;
+    padding: 26px 14px 70px;
   }
 
   section {
-    padding: 20px;
+    padding: 20px 16px;
+  }
+
+  .message-area {
+    flex-direction: column;
+  }
+
+  #send {
+    width: 100%;
   }
 }
