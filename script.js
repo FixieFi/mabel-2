@@ -608,7 +608,12 @@ async function handleVisitorMessage() {
 
     const data = await response.json();
 
-    replyElement.textContent = `Mabel whispers: “${data.reply}”`;
+    const cleanReply = data.reply
+      .replace(/^[“"]+/, "")
+      .replace(/[”"]+$/, "")
+      .trim();
+
+    replyElement.textContent = `Mabel whispers: ${cleanReply}`;
 
     conversation.push({
       role: "assistant",
@@ -696,7 +701,8 @@ async function handleVisitorMessage() {
 
 async function handleWander() {
   wanderButton.disabled = true;
-  wanderStatus.textContent = "Mabel is following a little thread through the moss...";
+  wanderStatus.textContent =
+    "Mabel is following a little thread through the moss...";
 
   if (musingElement) {
     musingElement.innerHTML = `
