@@ -589,16 +589,24 @@ async function handleVisitorMessage() {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
+           body: JSON.stringify({
         message,
         mood: mabel.now.mood,
         activity: mabel.now.doing,
         energy: mabel.now.energy,
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 8),
-        conversation: conversation.slice(-10)
+        conversation: conversation.slice(-10),
+        wanderings: wanderings.slice(0, 10).map(function (item) {
+          return {
+            title: item.title,
+            url: item.url,
+            musing: item.musing,
+            searchQuestion: item.searchQuestion
+          };
+        })
       })
-    });
+   
 
     if (!response.ok) {
       throw new Error(
@@ -613,7 +621,7 @@ async function handleVisitorMessage() {
       .replace(/[”"]+$/, "")
       .trim();
 
-    replyElement.textContent = `Mabel whispers: ${cleanReply}`;
+        replyElement.textContent = cleanReply;
 
     conversation.push({
       role: "assistant",
