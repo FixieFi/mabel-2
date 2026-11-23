@@ -7,7 +7,7 @@ const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
 
 // Replace this with your real Cloudflare Worker URL.
-const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/";
+const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 
 const storageKey = "mabel-autonomous-interests-v1";
 
