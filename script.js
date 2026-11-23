@@ -237,7 +237,18 @@ function updateInterest(interestId, change) {
     });
   }
 
-  if (interest.pull < 0.15 && interest.stage === "pursuing") {
+  if (interest.pull > 0.9 && interest.stage === "pursuing") {
+    interest.stage = "deepening";
+
+    addFeedEntry({
+      kind: "mind",
+      text: `Mabel’s thread, ${interest.title}, has become important to her.`,
+      why: "Some questions begin to feel like homes.",
+      interest: interest.id
+    });
+  }
+
+  if (interest.pull < 0.15 && interest.stage !== "dormant") {
     interest.stage = "dormant";
 
     addFeedEntry({
@@ -248,7 +259,6 @@ function updateInterest(interestId, change) {
     });
   }
 }
-
 function calculatePull(actionName) {
   let pull = 0.2 + Math.random() * 0.2;
 
@@ -349,12 +359,20 @@ async function handleVisitorMessage() {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        message,
-        mood: mabel.now.mood,
-        activity: mabel.now.doing,
-        memories: mabel.memories.slice(0, 5)
-      })
+    body: JSON.stringify({
+  message,
+  mood: mabel.now.mood,
+  activity: mabel.now.doing,
+  energy: mabel.now.energy,
+  interests: mabel.interests
+    .filter(interest => interest.stage === "pursuing")
+    .map(interest => ({
+      title: interest.title,
+      question: interest.question,
+      pull: interest.pull
+    })),
+  memories: mabel.memories.slice(0, 8)
+})
     });
 
     if (!response.ok) {
