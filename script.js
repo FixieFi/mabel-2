@@ -696,7 +696,19 @@ async function handleVisitorMessage() {
 
 async function handleWander() {
   wanderButton.disabled = true;
-  wanderStatus.textContent = "Mabel is following a thread...";
+  wanderStatus.textContent = "Mabel is following a little thread through the moss...";
+
+  if (musingElement) {
+    musingElement.innerHTML = `
+      <p class="musing-source">Mabel is wandering…</p>
+      <p class="musing-text">
+        Her small paws are quiet among the moss and fallen leaves.
+      </p>
+      <p class="mabel-thought">
+        “Perhaps something small and shining is waiting.”
+      </p>
+    `;
+  }
 
   try {
     const response = await fetch(MABEL_WANDER_URL, {
