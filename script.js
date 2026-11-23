@@ -1,4 +1,4 @@
-// MABEL SCRIPT VERSION 4
+// MABEL SCRIPT VERSION 5
 const moodElement = document.getElementById("mood");
 const activityElement = document.getElementById("activity");
 const thoughtElement = document.getElementById("thought");
