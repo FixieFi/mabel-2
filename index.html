@@ -1,105 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mabel of the Hawthorn Hollow</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
+<section id="musings" class="tab-panel">
+  <h2>Mabel’s Musings</h2>
 
-  <main>
-    <header>
-      <span class="ornament">❀ ✿ ❀</span>
+  <p class="musing-intro">
+    Mabel sometimes follows one of her own threads into the wider world.
+    She may find something unexpected, and it may change what she cares about.
+  </p>
 
-      <h1>Mabel of the Hawthorn Hollow</h1>
+  <button id="wander" class="wander-button">
+    Let Mabel wander
+  </button>
 
-      <p class="mabel-subtitle">
-        a small mouse, a mossy home, and a thousand quiet wonders
-      </p>
+  <p id="wander-status" class="wander-status"></p>
 
-      <span class="ornament">✿ ❀ ✿</span>
-    </header>
+  <div id="musing" class="musing">
+    <p class="musing-source">Mabel has not wandered yet.</p>
+    <p class="musing-text">
+      Her curiosity is still gathering beneath the hawthorn.
+    </p>
+    <p class="mabel-thought">
+      “Perhaps I will find something small and shining.”
+    </p>
+  </div>
 
-    <section>
-      <h2>Mabel Now</h2>
-
-      <p id="mood">Mabel is wondering.</p>
-      <p id="activity">Mabel is listening for the hush between raindrops.</p>
-      <p id="thought">“Every small thing remembers being part of something larger.”</p>
-    </section>
-
-    <section>
-      <h2>Mabel’s Needs</h2>
-
-      <div class="need">
-        <span>Comfort</span>
-        <progress id="need-comfort" max="1" value="0.7"></progress>
-      </div>
-
-      <div class="need">
-        <span>Curiosity</span>
-        <progress id="need-curiosity" max="1" value="0.6"></progress>
-      </div>
-
-      <div class="need">
-        <span>Connection</span>
-        <progress id="need-connection" max="1" value="0.4"></progress>
-      </div>
-
-      <div class="need">
-        <span>Rest</span>
-        <progress id="need-rest" max="1" value="0.8"></progress>
-      </div>
-
-      <div class="need">
-        <span>Wonder</span>
-        <progress id="need-wonder" max="1" value="0.5"></progress>
-      </div>
-    </section>
-
-    <section>
-      <h2>Mabel’s Wishes</h2>
-      <ul id="wishes" class="wishes"></ul>
-    </section>
-
-    <section>
-      <h2>Mabel’s Growing Interests</h2>
-      <ul id="interests" class="interest-list"></ul>
-    </section>
-
-    <section>
-      <h2>Mabel’s Changes</h2>
-      <ul id="changes" class="change-list"></ul>
-    </section>
-
-    <section>
-      <h2>Mabel’s Diary</h2>
-      <ul id="diary"></ul>
-    </section>
-
-    <section>
-      <h2>Whisper to Mabel</h2>
-
-      <div class="message-area">
-        <input
-          id="message"
-          type="text"
-          placeholder="Leave a small whisper for Mabel..."
-        >
-
-        <button id="send">Whisper</button>
-      </div>
-
-      <p id="reply"></p>
-    </section>
-
-    <footer>
-      <span class="ornament">✿ ❀ ✿</span>
-      <p>made beneath the hawthorn, where small things are remembered</p>
-    </footer>
-  </main>
-
-  <script src="script.js"></script>
-</body>
-</html>
+  <h2>Mabel’s Trail</h2>
+  <ul id="wanderings" class="wanderings"></ul>
+</section>
