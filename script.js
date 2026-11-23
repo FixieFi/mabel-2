@@ -29,11 +29,13 @@ const tabPanels = document.querySelectorAll(".tab-panel");
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 const MABEL_WANDER_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-wander";
 const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
+const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
 
 const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-v2";
 const wanderingsStorageKey = "mabel-wanderings-v1";
 const autonomousStorageKey = "mabel-autonomous-v1";
+const reflectionStorageKey = "mabel-last-reflection-date";
 
 const interestSeeds = [
   {
@@ -82,6 +84,9 @@ let mabel = null;
 let conversation = [];
 let wanderings = [];
 let lastAutonomousMoment = 0;
+
+let autonomousMomentCount = 0;
+let lastReflectionDate = "";
 
 function now() {
   return new Date().toISOString();
@@ -224,6 +229,15 @@ function addFeedEntry(entry) {
   if (mabel.feed.length > 80) {
     mabel.feed.length = 80;
   }
+}
+
+function addDiaryEntry(entry) {
+  addFeedEntry({
+    kind: entry.kind,
+    text: entry.text,
+    why: entry.title || "",
+    journalTitle: entry.title || ""
+  });
 }
 
 function updateInterest(interestId, change) {
@@ -555,7 +569,13 @@ function updateDiary() {
   diaryElement.innerHTML = "";
 
   const diaryEntries = mabel.feed.filter(function (entry) {
-    return entry.kind === "diary" || entry.kind === "noticed" || entry.kind === "mind";
+    return (
+      entry.kind === "diary" ||
+      entry.kind === "noticed" ||
+      entry.kind === "mind" ||
+      entry.kind === "journal" ||
+      entry.kind === "reflection"
+    );
   });
 
   if (diaryEntries.length === 0) {
@@ -572,7 +592,35 @@ function updateDiary() {
       minute: "2-digit"
     });
 
-    item.textContent = time + " - " + entry.text;
+    if (entry.kind === "journal") {
+      item.className = "journal-entry";
+    }
+
+    if (entry.kind === "reflection") {
+      item.className = "reflection-entry";
+    }
+
+    const title = document.createElement("strong");
+
+    if (entry.kind === "journal") {
+      title.textContent = time + " — Evening page";
+    } else if (entry.kind === "reflection") {
+      title.textContent = time + " — End-of-day reflection";
+    } else {
+      title.textContent = time + " — " + entry.text;
+    }
+
+    const text = document.createElement("p");
+
+    if (entry.kind === "journal" || entry.kind === "reflection") {
+      text.textContent = entry.text;
+    } else {
+      text.textContent = entry.why || "";
+    }
+
+    item.appendChild(title);
+    item.appendChild(text);
+
     diaryElement.appendChild(item);
   });
 }
@@ -584,14 +632,18 @@ function updateActivityLog() {
 
   activityLogElement.innerHTML = "";
 
-  if (mabel.feed.length === 0) {
+  const activityEntries = mabel.feed.filter(function (entry) {
+    return entry.kind !== "journal" && entry.kind !== "reflection";
+  });
+
+  if (activityEntries.length === 0) {
     const item = document.createElement("li");
     item.textContent = "Mabel's day has not begun yet.";
     activityLogElement.appendChild(item);
     return;
   }
 
-  mabel.feed.slice(0, 20).forEach(function (entry) {
+  activityEntries.slice(0, 20).forEach(function (entry) {
     const item = document.createElement("li");
     const time = new Date(entry.at).toLocaleTimeString([], {
       hour: "2-digit",
@@ -1046,8 +1098,222 @@ async function handleAutonomousMoment() {
 
     saveMabel();
     updatePage();
+
+    autonomousMomentCount = autonomousMomentCount + 1;
+
+    if (autonomousMomentCount % 3 === 0) {
+      writeEveningPage();
+    }
+
+    writeEndOfDayReflection();
   } catch (error) {
     chooseAction();
+  }
+}
+
+async function writeEveningPage() {
+  if (!mabel) {
+    return;
+  }
+
+  const recentMoments = mabel.feed
+    .slice(0, 6)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const recentWanderings = wanderings
+    .slice(0, 4)
+    .map(function (entry) {
+      return entry.title + ": " + entry.musing;
+    })
+    .join("\n");
+
+  const prompt = `
+Mabel is a small mouse living in the Hawthorn Hollow.
+
+These are the moments Mabel has already recorded in her Activity Log:
+${recentMoments || "Mabel has not recorded any moments yet."}
+
+These are some of Mabel's recent wanderings:
+${recentWanderings || "Mabel has not wandered recently."}
+
+Mabel's current mood is ${mabel.now.mood}.
+Mabel is currently ${mabel.now.doing}.
+Mabel's inner thought is: ${mabel.now.thought}
+
+Mabel's needs:
+Comfort: ${mabel.needs.comfort}
+Curiosity: ${mabel.needs.curiosity}
+Connection: ${mabel.needs.connection}
+Rest: ${mabel.needs.rest}
+Wonder: ${mabel.needs.wonder}
+Food: ${mabel.needs.food}
+Water: ${mabel.needs.water}
+
+Write ONE short evening-page journal entry for Mabel.
+
+It should describe a quiet, private thing that happened between the recorded moments.
+Do not repeat the Activity Log.
+Do not mention that you are an AI.
+Do not mention Wikipedia, the internet, or searching.
+Keep it gentle, curious, mossy, and a little mysterious.
+Use 2 to 4 sentences.
+Write in Mabel's voice.
+
+Return only JSON like this:
+{
+  "title": "Evening page",
+  "text": "Mabel's journal entry"
+}
+`;
+
+  try {
+    const response = await fetch(MABEL_JOURNAL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        kind: "evening-page"
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel could not write her evening page. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (!data.entry || !data.entry.text) {
+      return;
+    }
+
+    addDiaryEntry({
+      kind: "journal",
+      title: data.entry.title || "Evening page",
+      text: data.entry.text
+    });
+
+    saveMabel();
+    updatePage();
+  } catch (error) {
+    console.log("Mabel could not write her evening page.", error);
+  }
+}
+
+async function writeEndOfDayReflection() {
+  if (!mabel) {
+    return;
+  }
+
+  const today = new Date().toDateString();
+  const currentHour = new Date().getHours();
+
+  if (currentHour < 20) {
+    return;
+  }
+
+  if (lastReflectionDate === today) {
+    return;
+  }
+
+  lastReflectionDate = today;
+  localStorage.setItem(reflectionStorageKey, today);
+
+  const recentMoments = mabel.feed
+    .slice(0, 10)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const recentDiary = mabel.feed
+    .filter(function (entry) {
+      return entry.kind === "journal" || entry.kind === "reflection";
+    })
+    .slice(0, 5)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const prompt = `
+Mabel is a small mouse living in the Hawthorn Hollow.
+
+It is evening. Mabel is writing one longer reflection about her day.
+
+These are some moments from Mabel's Activity Log:
+${recentMoments || "Mabel has not recorded many moments today."}
+
+These are some of Mabel's recent journal pages:
+${recentDiary || "Mabel has not written in her journal yet."}
+
+Mabel's current mood is ${mabel.now.mood}.
+Mabel is currently ${mabel.now.doing}.
+Mabel's inner thought is: ${mabel.now.thought}
+
+Mabel's needs:
+Comfort: ${mabel.needs.comfort}
+Curiosity: ${mabel.needs.curiosity}
+Connection: ${mabel.needs.connection}
+Rest: ${mabel.needs.rest}
+Wonder: ${mabel.needs.wonder}
+Food: ${mabel.needs.food}
+Water: ${mabel.needs.water}
+
+Write ONE end-of-day reflection for Mabel.
+
+It should feel like Mabel looking back on the day from her mossy nest.
+Mention one or two small things that may not have appeared in the Activity Log.
+Include a gentle feeling, a small question, or something Mabel wants to remember tomorrow.
+Do not repeat the Activity Log word for word.
+Do not mention that you are an AI.
+Do not mention Wikipedia, the internet, or searching.
+Use 4 to 7 sentences.
+Write in Mabel's voice.
+
+Return only JSON like this:
+{
+  "title": "End-of-day reflection",
+  "text": "Mabel's reflection"
+}
+`;
+
+  try {
+    const response = await fetch(MABEL_JOURNAL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        kind: "end-of-day-reflection"
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel could not write her reflection. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (!data.entry || !data.entry.text) {
+      return;
+    }
+
+    addDiaryEntry({
+      kind: "reflection",
+      title: data.entry.title || "End-of-day reflection",
+      text: data.entry.text
+    });
+
+    saveMabel();
+    updatePage();
+  } catch (error) {
+    console.log("Mabel could not write her end-of-day reflection.", error);
   }
 }
 
@@ -1074,6 +1340,7 @@ function startMabel() {
   conversation = loadConversation();
   wanderings = loadWanderings();
   lastAutonomousMoment = loadLastAutonomousMoment();
+  lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
 
   if (!mabel.needs) {
     mabel.needs = {
@@ -1133,6 +1400,10 @@ function startMabel() {
       timeSinceLastMoment >= nextMomentDelay
     ) {
       handleAutonomousMoment();
+    }
+
+    if (mabel && document.visibilityState === "visible") {
+      writeEndOfDayReflection();
     }
   }, 15000);
 }
