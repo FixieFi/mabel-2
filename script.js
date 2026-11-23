@@ -12,88 +12,18 @@ const needRest = document.getElementById("need-rest");
 const needWonder = document.getElementById("need-wonder");
 const wishesElement = document.getElementById("wishes");
 const interestsElement = document.getElementById("interests");
-
-function updateNeeds() {
-  if (needComfort) needComfort.value = mabel.needs.comfort;
-  if (needCuriosity) needCuriosity.value = mabel.needs.curiosity;
-  if (needConnection) needConnection.value = mabel.needs.connection;
-  if (needRest) needRest.value = mabel.needs.rest;
-  if (needWonder) needWonder.value = mabel.needs.wonder;
-}
-
-function updateWishes() {
-  if (!wishesElement) return;
-
-  wishesElement.innerHTML = "";
-
-  const activeWishes = mabel.interests
-    .filter(interest => interest.stage !== "dormant")
-    .slice(0, 4);
-
-  if (activeWishes.length === 0) {
-    const item = document.createElement("li");
-    item.textContent = "Mabel is resting between little wonders.";
-    wishesElement.appendChild(item);
-    return;
-  }
-
-  activeWishes.forEach(interest => {
-    const item = document.createElement("li");
-    item.textContent = `Mabel wishes to ${interest.question
-      .toLowerCase()
-      .replace(/[?.!]$/, "")}.`;
-    wishesElement.appendChild(item);
-  });
-}
-
-function updateInterests() {
-  if (!interestsElement) return;
-
-  interestsElement.innerHTML = "";
-
-  const sorted = [...mabel.interests].sort(
-    (a, b) => b.pull - a.pull
-  );
-
-  sorted.forEach(interest => {
-    const item = document.createElement("li");
-    item.className = "interest-item";
-
-    const title = document.createElement("span");
-    title.className = "interest-title";
-    title.textContent = interest.title;
-
-    const question = document.createElement("span");
-    question.className = "interest-question";
-    question.textContent = interest.question;
-
-    const meter = document.createElement("progress");
-    meter.className = "interest-meter";
-    meter.max = 1;
-    meter.value = interest.pull;
-
-    const stage = document.createElement("span");
-    stage.className = "interest-stage";
-    stage.textContent = interest.stage;
-
-    item.appendChild(title);
-    item.appendChild(question);
-    item.appendChild(meter);
-    item.appendChild(stage);
-
-    interestsElement.appendChild(item);
-  });
-}
+const changesElement = document.getElementById("changes");
 
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 
-const storageKey = "mabel-autonomous-interests-v1";
+const mabelStorageKey = "mabel-character-v3";
+const conversationStorageKey = "mabel-conversation-v1";
 
 const interestSeeds = [
   {
     id: "silver-thread",
     title: "The Silver Thread",
-    kind: "wondering",
+    kind: "mystery",
     question: "Where does the silver thread beneath the hawthorn lead?",
     actions: ["follow_the_silver_thread", "tend_the_thread"],
     curiosity: 0.9,
@@ -103,7 +33,7 @@ const interestSeeds = [
   {
     id: "rain-listening",
     title: "The Language of Rain",
-    kind: "noticing",
+    kind: "wonder",
     question: "What does the rain say when it lands on hawthorn leaves?",
     actions: ["listen_to_rain"],
     curiosity: 0.5,
@@ -112,9 +42,9 @@ const interestSeeds = [
   },
   {
     id: "button-collecting",
-    title: "The Button Collection",
+    title: "The Museum of Small Lost Things",
     kind: "making",
-    question: "Can Mabel make a rainbow from the buttons she finds?",
+    question: "Can Mabel make a little museum from the things the world has dropped?",
     actions: ["find_a_treasure", "sort_buttons"],
     curiosity: 0.6,
     pull: 0.35,
@@ -122,9 +52,9 @@ const interestSeeds = [
   },
   {
     id: "old-lane",
-    title: "The Lane That Forgets Its Name",
-    kind: "wondering",
-    question: "Does the old lane remember the footsteps that once crossed it?",
+    title: "The Lane That Forgot Its Name",
+    kind: "wander",
+    question: "Does an old lane remember the footsteps that once crossed it?",
     actions: ["visit_the_old_lane"],
     curiosity: 0.7,
     pull: 0.45,
@@ -224,6 +154,7 @@ const actions = {
 };
 
 let mabel = null;
+let conversation = [];
 
 function now() {
   return new Date().toISOString();
@@ -235,15 +166,15 @@ function pickRandom(list) {
 
 function saveMabel() {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(mabel));
+    localStorage.setItem(mabelStorageKey, JSON.stringify(mabel));
   } catch (error) {
-    // Local storage may be unavailable in some browser settings.
+    // Local storage may be unavailable.
   }
 }
 
 function loadMabel() {
   try {
-    const saved = localStorage.getItem(storageKey);
+    const saved = localStorage.getItem(mabelStorageKey);
 
     if (saved) {
       return JSON.parse(saved);
@@ -255,22 +186,47 @@ function loadMabel() {
   return null;
 }
 
+function saveConversation() {
+  try {
+    localStorage.setItem(
+      conversationStorageKey,
+      JSON.stringify(conversation)
+    );
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function loadConversation() {
+  try {
+    const saved = localStorage.getItem(conversationStorageKey);
+
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    // Fall through to an empty conversation.
+  }
+
+  return [];
+}
+
 function createDefaultMabel() {
   return {
-    version: 2,
+    version: 3,
     character: {
       name: "Mabel",
       title: "Mabel of the Hawthorn Hollow",
       species: "mouse",
       home: "a mossy hollow beneath an old hawthorn tree"
     },
-needs: {
-  comfort: 0.7,
-  curiosity: 0.6,
-  connection: 0.4,
-  rest: 0.8,
-  wonder: 0.5
-},
+    needs: {
+      comfort: 0.7,
+      curiosity: 0.6,
+      connection: 0.4,
+      rest: 0.8,
+      wonder: 0.5
+    },
     now: {
       updatedAt: now(),
       doing: "listening for the hush between raindrops",
@@ -344,6 +300,7 @@ function updateInterest(interestId, change) {
     });
   }
 }
+
 function calculatePull(actionName) {
   let pull = 0.2 + Math.random() * 0.2;
 
@@ -386,39 +343,40 @@ function chooseAction() {
   mabel.now.thought = action.thought;
 
   mabel.needs.comfort = Math.max(
-  0,
-  Math.min(1, mabel.needs.comfort + (Math.random() - 0.45) * 0.08)
-);
+    0,
+    Math.min(1, mabel.needs.comfort + (Math.random() - 0.45) * 0.08)
+  );
 
-mabel.needs.curiosity = Math.max(
-  0,
-  Math.min(1, mabel.needs.curiosity + (Math.random() - 0.4) * 0.08)
-);
+  mabel.needs.curiosity = Math.max(
+    0,
+    Math.min(1, mabel.needs.curiosity + (Math.random() - 0.4) * 0.08)
+  );
 
-mabel.needs.connection = Math.max(
-  0,
-  Math.min(1, mabel.needs.connection - 0.03)
-);
+  mabel.needs.connection = Math.max(
+    0,
+    Math.min(1, mabel.needs.connection - 0.03)
+  );
 
-mabel.needs.rest = Math.max(
-  0,
-  Math.min(1, mabel.needs.rest + (Math.random() - 0.5) * 0.08)
-);
+  mabel.needs.rest = Math.max(
+    0,
+    Math.min(1, mabel.needs.rest + (Math.random() - 0.5) * 0.08)
+  );
 
-mabel.needs.wonder = Math.max(
-  0,
-  Math.min(1, mabel.needs.wonder + (Math.random() - 0.45) * 0.08)
-);
- mabel.now.energy = Math.max(
+  mabel.needs.wonder = Math.max(
+    0,
+    Math.min(1, mabel.needs.wonder + (Math.random() - 0.45) * 0.08)
+  );
+
+  mabel.now.energy = Math.max(
     0.15,
     Math.min(1, mabel.now.energy + (Math.random() - 0.45) * 0.12)
   );
 
   addFeedEntry(action.feed);
 
-if (action.interest) {
-  updateInterest(action.interest, 0.09);
-} else {
+  if (action.interest) {
+    updateInterest(action.interest, 0.09);
+  } else {
     mabel.interests.forEach(interest => {
       interest.pull = Math.max(0, interest.pull - 0.02);
     });
@@ -428,20 +386,104 @@ if (action.interest) {
   updatePage();
 }
 
-function updatePage() {
-  moodElement.textContent = `Mabel is ${mabel.now.mood}.`;
-  activityElement.textContent = `Mabel is ${mabel.now.doing}.`;
-  thoughtElement.textContent = `“${mabel.now.thought}”`;
+function updateNeeds() {
+  if (needComfort) needComfort.value = mabel.needs.comfort;
+  if (needCuriosity) needCuriosity.value = mabel.needs.curiosity;
+  if (needConnection) needConnection.value = mabel.needs.connection;
+  if (needRest) needRest.value = mabel.needs.rest;
+  if (needWonder) needWonder.value = mabel.needs.wonder;
+}
 
-  updateDiary();
+function updateWishes() {
+  if (!wishesElement) return;
 
-const needComfort = document.getElementById("need-comfort");
-const needCuriosity = document.getElementById("need-curiosity");
-const needConnection = document.getElementById("need-connection");
-const needRest = document.getElementById("need-rest");
-const needWonder = document.getElementById("need-wonder");
-const wishesElement = document.getElementById("wishes");
-const interestsElement = document.getElementById("interests");
+  wishesElement.innerHTML = "";
+
+  const activeWishes = mabel.interests
+    .filter(interest => interest.stage !== "dormant")
+    .slice(0, 4);
+
+  if (activeWishes.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel is resting between little wonders.";
+    wishesElement.appendChild(item);
+    return;
+  }
+
+  activeWishes.forEach(interest => {
+    const item = document.createElement("li");
+    item.textContent = `Mabel wishes to ${interest.question
+      .toLowerCase()
+      .replace(/[?.!]$/, "")}.`;
+    wishesElement.appendChild(item);
+  });
+}
+
+function updateInterests() {
+  if (!interestsElement) return;
+
+  interestsElement.innerHTML = "";
+
+  const sorted = [...mabel.interests].sort(
+    (a, b) => b.pull - a.pull
+  );
+
+  sorted.forEach(interest => {
+    const item = document.createElement("li");
+    item.className = "interest-item";
+
+    const title = document.createElement("span");
+    title.className = "interest-title";
+    title.textContent = interest.title;
+
+    const question = document.createElement("span");
+    question.className = "interest-question";
+    question.textContent = interest.question;
+
+    const meter = document.createElement("progress");
+    meter.className = "interest-meter";
+    meter.max = 1;
+    meter.value = interest.pull;
+
+    const stage = document.createElement("span");
+    stage.className = "interest-stage";
+    stage.textContent = interest.stage;
+
+    item.appendChild(title);
+    item.appendChild(question);
+    item.appendChild(meter);
+    item.appendChild(stage);
+
+    interestsElement.appendChild(item);
+  });
+}
+
+function updateChanges() {
+  if (!changesElement) return;
+
+  changesElement.innerHTML = "";
+
+  const changeEntries = mabel.feed.filter(
+    entry => entry.kind === "mind"
+  );
+
+  if (changeEntries.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel is still becoming herself.";
+    changesElement.appendChild(item);
+    return;
+  }
+
+  changeEntries.slice(0, 8).forEach(entry => {
+    const item = document.createElement("li");
+    const time = new Date(entry.at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    item.textContent = `${time} — ${entry.text}`;
+    changesElement.appendChild(item);
+  });
 }
 
 function updateDiary() {
@@ -459,6 +501,18 @@ function updateDiary() {
   });
 }
 
+function updatePage() {
+  moodElement.textContent = `Mabel is ${mabel.now.mood}.`;
+  activityElement.textContent = `Mabel is ${mabel.now.doing}.`;
+  thoughtElement.textContent = `“${mabel.now.thought}”`;
+
+  updateDiary();
+  updateNeeds();
+  updateWishes();
+  updateInterests();
+  updateChanges();
+}
+
 async function handleVisitorMessage() {
   const message = messageElement.value.trim();
 
@@ -470,64 +524,84 @@ async function handleVisitorMessage() {
 
   replyElement.textContent = "Mabel is listening...";
 
+  conversation.push({
+    role: "user",
+    content: message
+  });
+
   try {
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-    body: JSON.stringify({
-  message,
-  mood: mabel.now.mood,
-  activity: mabel.now.doing,
-  energy: mabel.now.energy,
-  interests: mabel.interests,
-  memories: mabel.memories.slice(0, 8)
-})
+      body: JSON.stringify({
+        message,
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        energy: mabel.now.energy,
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 8),
+        conversation: conversation.slice(-10)
+      })
     });
 
     if (!response.ok) {
-      throw new Error(`Mabel’s thoughts could not be reached. Status ${response.status}`);
+      throw new Error(
+        `Mabel’s thoughts could not be reached. Status ${response.status}`
+      );
     }
 
     const data = await response.json();
 
     replyElement.textContent = `Mabel whispers: “${data.reply}”`;
 
-if (data.interest) {
-  const existing = mabel.interests.find(
-    interest => interest.id === data.interest.id
-  );
+    conversation.push({
+      role: "assistant",
+      content: data.reply
+    });
 
-  if (existing) {
-    existing.pull = Math.max(
-      0,
-      Math.min(1, existing.pull + 0.15)
-    );
-
-    if (existing.pull > 0.65 && existing.stage === "dormant") {
-      existing.stage = "pursuing";
+    if (conversation.length > 20) {
+      conversation = conversation.slice(-20);
     }
-  } else {
-    mabel.interests.push({
-      id: data.interest.id,
-      title: data.interest.title,
-      kind: data.interest.kind || "wonder",
-      question: data.interest.question || "What does this mean to Mabel?",
-      actions: [],
-      curiosity: data.interest.curiosity || 0.6,
-      pull: data.interest.pull || 0.5,
-      stage: data.interest.stage || "pursuing"
-    });
 
-    addFeedEntry({
-      kind: "mind",
-      text: `Mabel began a new thread: ${data.interest.title}.`,
-      why: data.interest.question,
-      interest: data.interest.id
-    });
-  }
-}
+    saveConversation();
+
+    if (data.interest) {
+      const existing = mabel.interests.find(
+        interest => interest.id === data.interest.id
+      );
+
+      if (existing) {
+        existing.pull = Math.max(
+          0,
+          Math.min(1, existing.pull + 0.15)
+        );
+
+        if (existing.pull > 0.65 && existing.stage === "dormant") {
+          existing.stage = "pursuing";
+        }
+      } else {
+        mabel.interests.push({
+          id: data.interest.id,
+          title: data.interest.title,
+          kind: data.interest.kind || "wonder",
+          question:
+            data.interest.question || "What does this mean to Mabel?",
+          actions: [],
+          curiosity: data.interest.curiosity || 0.6,
+          pull: data.interest.pull || 0.5,
+          stage: data.interest.stage || "pursuing"
+        });
+
+        addFeedEntry({
+          kind: "mind",
+          text: `Mabel began a new thread: ${data.interest.title}.`,
+          why: data.interest.question,
+          interest: data.interest.id
+        });
+      }
+    }
 
     mabel.memories.unshift({
       at: now(),
@@ -535,58 +609,53 @@ if (data.interest) {
       text: `A visitor whispered: “${message}”`
     });
 
-const visitorWords = message.toLowerCase();
+    mabel.needs.connection = Math.max(
+      0,
+      Math.min(1, mabel.needs.connection + 0.18)
+    );
 
-const interestHints = [
-  { words: ["rain", "storm", "weather", "cloud"], interest: "rain-listening" },
-  { words: ["button", "treasure", "shine", "found"], interest: "button-collecting" },
-  { words: ["lane", "path", "walk", "road"], interest: "old-lane" },
-  { words: ["thread", "silver", "mystery", "secret"], interest: "silver-thread" }
-];
-
-const matchedInterest = interestHints.find(hint =>
-  hint.words.some(word => visitorWords.includes(word))
-);
-
-if (matchedInterest) {
-  updateInterest(matchedInterest.interest, 0.18);
-}
+    mabel.needs.curiosity = Math.max(
+      0,
+      Math.min(1, mabel.needs.curiosity + 0.08)
+    );
 
     if (mabel.memories.length > 20) {
       mabel.memories.length = 20;
     }
 
     const diaryVariations = [
-  {
-    text: "A visitor’s words settled among the moss like a fallen petal.",
-    why: "Mabel keeps small messages beside the moonlight."
-  },
-  {
-    text: "Mabel listened until the visitor’s voice became a small warm shape.",
-    why: "Some conversations leave a softness behind."
-  },
-  {
-    text: "A visitor left a question at the edge of the hollow.",
-    why: "Questions can be carried like little lanterns."
-  },
-  {
-    text: "Mabel added the visitor’s whisper to her collection of remembered things.",
-    why: "Not every treasure has to shine."
-  }
-];
+      {
+        text: "A visitor’s words settled among the moss like a fallen petal.",
+        why: "Mabel keeps small messages beside the moonlight."
+      },
+      {
+        text: "Mabel listened until the visitor’s voice became a small warm shape.",
+        why: "Some conversations leave a softness behind."
+      },
+      {
+        text: "A visitor left a question at the edge of the hollow.",
+        why: "Questions can be carried like little lanterns."
+      },
+      {
+        text: "Mabel added the visitor’s whisper to her collection of remembered things.",
+        why: "Not every treasure has to shine."
+      }
+    ];
 
-const diaryEntry = pickRandom(diaryVariations);
+    const diaryEntry = pickRandom(diaryVariations);
 
-addFeedEntry({
-  kind: "noticed",
-  text: diaryEntry.text,
-  why: diaryEntry.why
-});
+    addFeedEntry({
+      kind: "noticed",
+      text: diaryEntry.text,
+      why: diaryEntry.why
+    });
 
     saveMabel();
-    updateDiary();
+    updatePage();
     messageElement.value = "";
   } catch (error) {
+    conversation.pop();
+
     replyElement.textContent =
       "Mabel’s lantern flickers. “The path to my thoughts is tangled tonight. Try again in a moment.”";
   }
@@ -594,6 +663,17 @@ addFeedEntry({
 
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
+  conversation = loadConversation();
+
+  if (!mabel.needs) {
+    mabel.needs = {
+      comfort: 0.7,
+      curiosity: 0.6,
+      connection: 0.4,
+      rest: 0.8,
+      wonder: 0.5
+    };
+  }
 
   updatePage();
 
