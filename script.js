@@ -6,6 +6,9 @@ const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
 
+// Replace this with your real Cloudflare Worker URL.
+const MABEL_AI_URL = "https://mabel-ai.your-subdomain.workers.dev/mabel";
+
 const storageKey = "mabel-autonomous-interests-v1";
 
 const interestSeeds = [
@@ -141,15 +144,6 @@ const actions = {
     interest: null
   }
 };
-
-const replies = [
-  "Mabel folds your words carefully, as though they were a leaf that might blow away. “Thank you for leaving them at my hollow.”",
-  "Mabel listens, whiskers trembling with attention. “I will keep that beside the moonlight, where it will be safe.”",
-  "“Ah,” Mabel says softly, “the world leaves little messages for those who stop long enough to notice.”",
-  "Mabel tucks your words beneath a hawthorn leaf. “They will rest here until morning finds them again.”",
-  "“I cannot mend every sorrow,” Mabel whispers, “but I can sit beside it for a while.”",
-  "Mabel looks toward the dark lane. “Perhaps what you found was not lost. Perhaps it was waiting to be noticed.”"
-];
 
 let mabel = null;
 
@@ -338,7 +332,7 @@ function updateDiary() {
   });
 }
 
-function handleVisitorMessage() {
+async function handleVisitorMessage() {
   const message = messageElement.value.trim();
 
   if (!message) {
@@ -349,8 +343,27 @@ function handleVisitorMessage() {
 
   replyElement.textContent = "Mabel is listening...";
 
-  setTimeout(() => {
-    replyElement.textContent = pickRandom(replies);
+  try {
+    const response = await fetch(MABEL_AI_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message,
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        memories: mabel.memories.slice(0, 5)
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Mabel’s thoughts could not be reached. Status ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    replyElement.textContent = `Mabel whispers: “${data.reply}”`;
 
     mabel.memories.unshift({
       at: now(),
@@ -371,7 +384,10 @@ function handleVisitorMessage() {
     saveMabel();
     updateDiary();
     messageElement.value = "";
-  }, 1400);
+  } catch (error) {
+    replyElement.textContent =
+      "Mabel’s lantern flickers. “The path to my thoughts is tangled tonight. Try again in a moment.”";
+  }
 }
 
 function startMabel() {
