@@ -1481,6 +1481,170 @@ Return only JSON like this:
   }
 }
 
+async function handleWander() {
+  wanderButton.disabled = true;
+  wanderStatus.textContent = "Mabel is following a little thread through the moss...";
+
+  if (musingElement) {
+    musingElement.innerHTML = `
+      <p class="musing-source">Mabel is wandering...</p>
+      <p class="musing-text">
+        Her small paws are quiet among the moss and fallen leaves.
+      </p>
+      <p class="mabel-thought">
+        "Perhaps something small and shining is waiting."
+      </p>
+    `;
+  }
+
+  try {
+    const response = await fetch(MABEL_WANDER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 10),
+        conversation: conversation.slice(-10),
+        mood: mabel.now.mood,
+        energy: mabel.now.energy,
+        needs: mabel.needs,
+        wanderings: wanderings.slice(0, 10),
+        bindle: bindle
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel could not wander. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    const wandering = {
+      at: now(),
+      searchQuestion: data.searchQuestion,
+      title: data.title,
+      url: data.url,
+      musing: data.musing,
+      change: data.change || "",
+      interest: data.interest || null
+    };
+
+    wanderings.unshift(wandering);
+
+    if (wanderings.length > 30) {
+      wanderings.length = 30;
+    }
+
+    saveWanderings();
+
+    if (wandering.interest) {
+      const existing = mabel.interests.find(function (interest) {
+        return interest.id === wandering.interest.id;
+      });
+
+      if (existing) {
+        existing.pull = Math.max(0, Math.min(1, existing.pull + 0.12));
+
+        if (existing.pull > 0.65 && existing.stage === "dormant") {
+          existing.stage = "pursuing";
+        }
+      } else {
+        mabel.interests.push(wandering.interest);
+
+        addFeedEntry({
+          kind: "mind",
+          text: "Mabel began a new thread: " + wandering.interest.title + ".",
+          why: wandering.interest.question,
+          interest: wandering.interest.id
+        });
+      }
+    }
+
+    const finds = Array.isArray(data.finds) ? data.finds : [];
+
+    finds.forEach(function (found) {
+      const kind = found.kind || "treasure";
+      const name = found.name || "something small";
+      const note = found.note || "";
+
+      if (kind === "food") {
+        bindle.food.unshift({
+          name: name,
+          note: note
+        });
+
+        if (bindle.food.length > 8) {
+          bindle.food.length = 8;
+        }
+
+        mabel.needs.food = clampNeed(mabel.needs.food + 0.12);
+      }
+
+      if (kind === "water") {
+        bindle.water.unshift({
+          name: name,
+          note: note
+        });
+
+        if (bindle.water.length > 5) {
+          bindle.water.length = 5;
+        }
+
+        mabel.needs.water = clampNeed(mabel.needs.water + 0.15);
+      }
+
+      if (kind === "treasure") {
+        bindle.treasures.unshift({
+          name: name,
+          note: note
+        });
+
+        if (bindle.treasures.length > 12) {
+          bindle.treasures.length = 12;
+        }
+
+        mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
+      }
+    });
+
+    saveBindle();
+
+    mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.1);
+    mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
+
+    addFeedEntry({
+      kind: "noticed",
+      text: "Mabel encountered: " + wandering.title + ".",
+      why: wandering.musing
+    });
+
+    if (finds.length > 0) {
+      const foundNames = finds
+        .map(function (found) {
+          return found.name || "something small";
+        })
+        .join(", ");
+
+      addFeedEntry({
+        kind: "noticed",
+        text: "Mabel gathered: " + foundNames + ".",
+        why: "She tucked what she could carry into her bindle."
+      });
+    }
+
+    saveMabel();
+    updatePage();
+
+    wanderStatus.textContent = "Mabel has returned from her wandering.";
+  } catch (error) {
+    wanderStatus.textContent = "Mabel's paws paused at the edge of the hollow. The path beyond was tangled.";
+  } finally {
+    wanderButton.disabled = false;
+  }
+}
+
 function switchTab(tabName) {
   tabButtons.forEach(function (button) {
     if (button.dataset.tab === tabName) {
