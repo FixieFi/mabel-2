@@ -616,12 +616,7 @@ async function handleVisitorMessage() {
 
     const data = await response.json();
 
-    const cleanReply = data.reply
-      .replace(/^[“"]+/, "")
-      .replace(/[”"]+$/, "")
-      .trim();
-
-        replyElement.textContent = cleanReply;
+       replyElement.textContent = data.reply;
 
     conversation.push({
       role: "assistant",
