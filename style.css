@@ -343,3 +343,54 @@ footer {
     flex: 1 1 45%;
   }
 }
+
+.bindle-intro {
+  margin-top: 0;
+  color: var(--plum);
+  font-style: italic;
+}
+
+.bindle-card {
+  margin-top: 14px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(247, 200, 216, 0.3), transparent 35%),
+    rgba(255, 248, 238, 0.85);
+  border: 3px dashed rgba(107, 74, 143, 0.3);
+  border-radius: 20px;
+}
+
+.bindle-empty {
+  margin: 0;
+  color: var(--plum);
+  font-style: italic;
+}
+
+.bindle-group {
+  margin: 0 0 14px;
+}
+
+.bindle-group:last-child {
+  margin-bottom: 0;
+}
+
+.bindle-title {
+  margin: 0 0 8px;
+  color: var(--deep-plum);
+  font-weight: bold;
+}
+
+.bindle-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.bindle-item {
+  margin-bottom: 6px;
+}
+
+.bindle-note {
+  color: var(--plum);
+  font-size: 0.9rem;
+  font-style: italic;
+}

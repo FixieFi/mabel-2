@@ -36,6 +36,7 @@ const conversationStorageKey = "mabel-conversation-v2";
 const wanderingsStorageKey = "mabel-wanderings-v1";
 const autonomousStorageKey = "mabel-autonomous-v1";
 const reflectionStorageKey = "mabel-last-reflection-date";
+const bindleStorageKey = "mabel-bindle-v1";
 
 const interestSeeds = [
   {
@@ -87,6 +88,12 @@ let lastAutonomousMoment = 0;
 
 let autonomousMomentCount = 0;
 let lastReflectionDate = "";
+
+let bindle = {
+  food: [],
+  water: [],
+  treasures: []
+};
 
 function now() {
   return new Date().toISOString();
@@ -164,6 +171,32 @@ function saveLastAutonomousMoment() {
   } catch (error) {
     // Local storage may be unavailable.
   }
+}
+
+function saveBindle() {
+  try {
+    localStorage.setItem(bindleStorageKey, JSON.stringify(bindle));
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function loadBindle() {
+  try {
+    const saved = localStorage.getItem(bindleStorageKey);
+
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    // Fall through to an empty bindle.
+  }
+
+  return {
+    food: [],
+    water: [],
+    treasures: []
+  };
 }
 
 function loadLastAutonomousMoment() {
@@ -693,6 +726,121 @@ function updateMusing(wandering) {
   `;
 }
 
+function updateBindle() {
+  const bindleElement = document.getElementById("bindle");
+
+  if (!bindleElement) {
+    return;
+  }
+
+  bindleElement.innerHTML = "";
+
+  const hasFood = bindle.food.length > 0;
+  const hasWater = bindle.water.length > 0;
+  const hasTreasures = bindle.treasures.length > 0;
+
+  if (!hasFood && !hasWater && !hasTreasures) {
+    const empty = document.createElement("p");
+    empty.className = "bindle-empty";
+    empty.textContent = "Mabel’s bindle is light today.";
+    bindleElement.appendChild(empty);
+    return;
+  }
+
+  if (hasFood) {
+    const foodGroup = document.createElement("div");
+    foodGroup.className = "bindle-group";
+
+    const foodTitle = document.createElement("p");
+    foodTitle.className = "bindle-title";
+    foodTitle.textContent = "Food";
+
+    const foodList = document.createElement("ul");
+    foodList.className = "bindle-list";
+
+    bindle.food.forEach(function (item) {
+      const foodItem = document.createElement("li");
+      foodItem.className = "bindle-item";
+      foodItem.textContent = item.name;
+
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + item.note;
+        foodItem.appendChild(note);
+      }
+
+      foodList.appendChild(foodItem);
+    });
+
+    foodGroup.appendChild(foodTitle);
+    foodGroup.appendChild(foodList);
+    bindleElement.appendChild(foodGroup);
+  }
+
+  if (hasWater) {
+    const waterGroup = document.createElement("div");
+    waterGroup.className = "bindle-group";
+
+    const waterTitle = document.createElement("p");
+    waterTitle.className = "bindle-title";
+    waterTitle.textContent = "Water";
+
+    const waterList = document.createElement("ul");
+    waterList.className = "bindle-list";
+
+    bindle.water.forEach(function (item) {
+      const waterItem = document.createElement("li");
+      waterItem.className = "bindle-item";
+      waterItem.textContent = item.name;
+
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + item.note;
+        waterItem.appendChild(note);
+      }
+
+      waterList.appendChild(waterItem);
+    });
+
+    waterGroup.appendChild(waterTitle);
+    waterGroup.appendChild(waterList);
+    bindleElement.appendChild(waterGroup);
+  }
+
+  if (hasTreasures) {
+    const treasureGroup = document.createElement("div");
+    treasureGroup.className = "bindle-group";
+
+    const treasureTitle = document.createElement("p");
+    treasureTitle.className = "bindle-title";
+    treasureTitle.textContent = "Little treasures";
+
+    const treasureList = document.createElement("ul");
+    treasureList.className = "bindle-list";
+
+    bindle.treasures.forEach(function (item) {
+      const treasureItem = document.createElement("li");
+      treasureItem.className = "bindle-item";
+      treasureItem.textContent = item.name;
+
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + item.note;
+        treasureItem.appendChild(note);
+      }
+
+      treasureList.appendChild(treasureItem);
+    });
+
+    treasureGroup.appendChild(treasureTitle);
+    treasureGroup.appendChild(treasureList);
+    bindleElement.appendChild(treasureGroup);
+  }
+}
+
 function updateWanderings() {
   if (!wanderingsElement) {
     return;
@@ -757,6 +905,7 @@ function updatePage() {
   }
 
   updateWanderings();
+  updateBindle();
 }
 
 async function handleVisitorMessage() {
@@ -879,105 +1028,120 @@ async function handleVisitorMessage() {
   }
 }
 
-async function handleWander() {
-  wanderButton.disabled = true;
-  wanderStatus.textContent = "Mabel is following a little thread through the moss...";
+function updateBindle() {
+  const bindleElement = document.getElementById("bindle");
 
-  if (musingElement) {
-    musingElement.innerHTML = `
-      <p class="musing-source">Mabel is wandering...</p>
-      <p class="musing-text">
-        Her small paws are quiet among the moss and fallen leaves.
-      </p>
-      <p class="mabel-thought">
-        "Perhaps something small and shining is waiting."
-      </p>
-    `;
+  if (!bindleElement) {
+    return;
   }
 
-  try {
-    const response = await fetch(MABEL_WANDER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        interests: mabel.interests,
-        memories: mabel.memories.slice(0, 10),
-        conversation: conversation.slice(-10),
-        mood: mabel.now.mood,
-        energy: mabel.now.energy,
-        wanderings: wanderings.slice(0, 10)
-      })
-    });
+  bindleElement.innerHTML = "";
 
-    if (!response.ok) {
-      throw new Error("Mabel could not wander. Status " + response.status);
-    }
+  const hasFood = bindle.food.length > 0;
+  const hasWater = bindle.water.length > 0;
+  const hasTreasures = bindle.treasures.length > 0;
 
-    const data = await response.json();
+  if (!hasFood && !hasWater && !hasTreasures) {
+    const empty = document.createElement("p");
+    empty.className = "bindle-empty";
+    empty.textContent = "Mabel’s bindle is light today.";
+    bindleElement.appendChild(empty);
+    return;
+  }
 
-    const wandering = {
-      at: now(),
-      searchQuestion: data.searchQuestion,
-      title: data.title,
-      url: data.url,
-      musing: data.musing,
-      change: data.change || "",
-      interest: data.interest || null
-    };
+  if (hasFood) {
+    const foodGroup = document.createElement("div");
+    foodGroup.className = "bindle-group";
 
-    wanderings.unshift(wandering);
+    const foodTitle = document.createElement("p");
+    foodTitle.className = "bindle-title";
+    foodTitle.textContent = "Food";
 
-    if (wanderings.length > 30) {
-      wanderings.length = 30;
-    }
+    const foodList = document.createElement("ul");
+    foodList.className = "bindle-list";
 
-    saveWanderings();
+    bindle.food.forEach(function (item) {
+      const foodItem = document.createElement("li");
+      foodItem.className = "bindle-item";
+      foodItem.textContent = item.name;
 
-    if (wandering.interest) {
-      const existing = mabel.interests.find(function (interest) {
-        return interest.id === wandering.interest.id;
-      });
-
-      if (existing) {
-        existing.pull = Math.max(0, Math.min(1, existing.pull + 0.12));
-
-        if (existing.pull > 0.65 && existing.stage === "dormant") {
-          existing.stage = "pursuing";
-        }
-      } else {
-        mabel.interests.push(wandering.interest);
-
-        addFeedEntry({
-          kind: "mind",
-          text: "Mabel began a new thread: " + wandering.interest.title + ".",
-          why: wandering.interest.question,
-          interest: wandering.interest.id
-        });
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + item.note;
+        foodItem.appendChild(note);
       }
-    }
 
-    mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.1);
-    mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
-
-    addFeedEntry({
-      kind: "noticed",
-      text: "Mabel encountered: " + wandering.title + ".",
-      why: wandering.musing
+      foodList.appendChild(foodItem);
     });
 
-    saveMabel();
-    updatePage();
+    foodGroup.appendChild(foodTitle);
+    foodGroup.appendChild(foodList);
+    bindleElement.appendChild(foodGroup);
+  }
 
-    wanderStatus.textContent = "Mabel has returned from her wandering.";
-  } catch (error) {
-    wanderStatus.textContent = "Mabel's paws paused at the edge of the hollow. The path beyond was tangled.";
-  } finally {
-    wanderButton.disabled = false;
+  if (hasWater) {
+    const waterGroup = document.createElement("div");
+    waterGroup.className = "bindle-group";
+
+    const waterTitle = document.createElement("p");
+    waterTitle.className = "bindle-title";
+    waterTitle.textContent = "Water";
+
+    const waterList = document.createElement("ul");
+    waterList.className = "bindle-list";
+
+    bindle.water.forEach(function (item) {
+      const waterItem = document.createElement("li");
+      waterItem.className = "bindle-item";
+      waterItem.textContent = item.name;
+
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + item.note;
+        waterItem.appendChild(note);
+      }
+
+      waterList.appendChild(waterItem);
+    });
+
+    waterGroup.appendChild(waterTitle);
+    waterGroup.appendChild(waterList);
+    bindleElement.appendChild(waterGroup);
+  }
+
+  if (hasTreasures) {
+    const treasureGroup = document.createElement("div");
+    treasureGroup.className = "bindle-group";
+
+    const treasureTitle = document.createElement("p");
+    treasureTitle.className = "bindle-title";
+    treasureTitle.textContent = "Little treasures";
+
+    const treasureList = document.createElement("ul");
+    treasureList.className = "bindle-list";
+
+    bindle.treasures.forEach(function (item) {
+      const treasureItem = document.createElement("li");
+      treasureItem.className = "bindle-item";
+      treasureItem.textContent = item.name;
+
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + item.note;
+        treasureItem.appendChild(note);
+      }
+
+      treasureList.appendChild(treasureItem);
+    });
+
+    treasureGroup.appendChild(treasureTitle);
+    treasureGroup.appendChild(treasureList);
+    bindleElement.appendChild(treasureGroup);
   }
 }
-
 async function handleAutonomousMoment() {
   lastAutonomousMoment = Date.now();
   saveLastAutonomousMoment();
@@ -1341,6 +1505,7 @@ function startMabel() {
   wanderings = loadWanderings();
   lastAutonomousMoment = loadLastAutonomousMoment();
   lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
+  bindle = loadBindle();
 
   if (!mabel.needs) {
     mabel.needs = {
