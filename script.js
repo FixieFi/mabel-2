@@ -307,9 +307,9 @@ function chooseAction() {
 
   addFeedEntry(action.feed);
 
-  if (action.interest) {
-    updateInterest(action.interest, 0.08);
-  } else {
+if (action.interest) {
+  updateInterest(action.interest, 0.09);
+} else {
     mabel.interests.forEach(interest => {
       interest.pull = Math.max(0, interest.pull - 0.02);
     });
@@ -364,13 +364,7 @@ async function handleVisitorMessage() {
   mood: mabel.now.mood,
   activity: mabel.now.doing,
   energy: mabel.now.energy,
-  interests: mabel.interests
-    .filter(interest => interest.stage === "pursuing")
-    .map(interest => ({
-      title: interest.title,
-      question: interest.question,
-      pull: interest.pull
-    })),
+  interests: mabel.interests,
   memories: mabel.memories.slice(0, 8)
 })
     });
@@ -383,11 +377,63 @@ async function handleVisitorMessage() {
 
     replyElement.textContent = `Mabel whispers: “${data.reply}”`;
 
+if (data.interest) {
+  const existing = mabel.interests.find(
+    interest => interest.id === data.interest.id
+  );
+
+  if (existing) {
+    existing.pull = Math.max(
+      0,
+      Math.min(1, existing.pull + 0.15)
+    );
+
+    if (existing.pull > 0.65 && existing.stage === "dormant") {
+      existing.stage = "pursuing";
+    }
+  } else {
+    mabel.interests.push({
+      id: data.interest.id,
+      title: data.interest.title,
+      kind: data.interest.kind || "wonder",
+      question: data.interest.question || "What does this mean to Mabel?",
+      actions: [],
+      curiosity: data.interest.curiosity || 0.6,
+      pull: data.interest.pull || 0.5,
+      stage: data.interest.stage || "pursuing"
+    });
+
+    addFeedEntry({
+      kind: "mind",
+      text: `Mabel began a new thread: ${data.interest.title}.`,
+      why: data.interest.question,
+      interest: data.interest.id
+    });
+  }
+}
+
     mabel.memories.unshift({
       at: now(),
       kind: "visitor",
       text: `A visitor whispered: “${message}”`
     });
+
+const visitorWords = message.toLowerCase();
+
+const interestHints = [
+  { words: ["rain", "storm", "weather", "cloud"], interest: "rain-listening" },
+  { words: ["button", "treasure", "shine", "found"], interest: "button-collecting" },
+  { words: ["lane", "path", "walk", "road"], interest: "old-lane" },
+  { words: ["thread", "silver", "mystery", "secret"], interest: "silver-thread" }
+];
+
+const matchedInterest = interestHints.find(hint =>
+  hint.words.some(word => visitorWords.includes(word))
+);
+
+if (matchedInterest) {
+  updateInterest(matchedInterest.interest, 0.18);
+}
 
     if (mabel.memories.length > 20) {
       mabel.memories.length = 20;
