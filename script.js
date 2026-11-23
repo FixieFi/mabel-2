@@ -13,11 +13,21 @@ const needWonder = document.getElementById("need-wonder");
 const wishesElement = document.getElementById("wishes");
 const interestsElement = document.getElementById("interests");
 const changesElement = document.getElementById("changes");
+const wanderButton = document.getElementById("wander");
+const wanderStatus = document.getElementById("wander-status");
+const musingElement = document.getElementById("musing");
+const wanderingsElement = document.getElementById("wanderings");
+
+const tabButtons = document.querySelectorAll(".tab-button");
+const tabPanels = document.querySelectorAll(".tab-panel");
 
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
+const MABEL_WANDER_URL =
+  "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-wander";
 
-const mabelStorageKey = "mabel-character-v3";
-const conversationStorageKey = "mabel-conversation-v1";
+const mabelStorageKey = "mabel-character-v4";
+const conversationStorageKey = "mabel-conversation-v2";
+const wanderingsStorageKey = "mabel-wanderings-v1";
 
 const interestSeeds = [
   {
@@ -25,7 +35,7 @@ const interestSeeds = [
     title: "The Silver Thread",
     kind: "mystery",
     question: "Where does the silver thread beneath the hawthorn lead?",
-    actions: ["follow_the_silver_thread", "tend_the_thread"],
+    actions: [],
     curiosity: 0.9,
     pull: 0.8,
     stage: "pursuing"
@@ -35,7 +45,7 @@ const interestSeeds = [
     title: "The Language of Rain",
     kind: "wonder",
     question: "What does the rain say when it lands on hawthorn leaves?",
-    actions: ["listen_to_rain"],
+    actions: [],
     curiosity: 0.5,
     pull: 0.4,
     stage: "dormant"
@@ -44,8 +54,9 @@ const interestSeeds = [
     id: "button-collecting",
     title: "The Museum of Small Lost Things",
     kind: "making",
-    question: "Can Mabel make a little museum from the things the world has dropped?",
-    actions: ["find_a_treasure", "sort_buttons"],
+    question:
+      "Can Mabel make a little museum from the things the world has dropped?",
+    actions: [],
     curiosity: 0.6,
     pull: 0.35,
     stage: "dormant"
@@ -54,114 +65,21 @@ const interestSeeds = [
     id: "old-lane",
     title: "The Lane That Forgot Its Name",
     kind: "wander",
-    question: "Does an old lane remember the footsteps that once crossed it?",
-    actions: ["visit_the_old_lane"],
+    question:
+      "Does an old lane remember the footsteps that once crossed it?",
+    actions: [],
     curiosity: 0.7,
     pull: 0.45,
     stage: "dormant"
   }
 ];
 
-const actions = {
-  follow_the_silver_thread: {
-    activity: "following the silver thread beneath the hawthorn roots",
-    mood: "wondering",
-    thought: "The thread does not pull. It waits.",
-    feed: {
-      kind: "did",
-      text: "followed the silver thread beneath the hawthorn roots",
-      why: "It glimmered once, as though the night had dropped a stitch."
-    },
-    interest: "silver-thread"
-  },
-  tend_the_thread: {
-    activity: "adding a knot to the silver thread",
-    mood: "tender",
-    thought: "A thread becomes a path when someone keeps returning to it.",
-    feed: {
-      kind: "mind",
-      text: "Mabel added another knot to The Silver Thread.",
-      why: "She wants to learn where it leads."
-    },
-    interest: "silver-thread"
-  },
-  listen_to_rain: {
-    activity: "listening to rain gather on the hawthorn leaves",
-    mood: "quiet",
-    thought: "Rain is the sky remembering how to speak softly.",
-    feed: {
-      kind: "felt",
-      text: "The rain made the hollow feel like a held breath.",
-      why: null
-    },
-    interest: "rain-listening"
-  },
-  find_a_treasure: {
-    activity: "searching beneath the roots for something small and shining",
-    mood: "curious",
-    thought: "A lost thing is not always lost. Sometimes it is waiting to be noticed.",
-    feed: {
-      kind: "noticed",
-      text: "Mabel found a small brass button beneath the roots.",
-      why: "It shone like a tiny moon caught in the moss."
-    },
-    interest: "button-collecting"
-  },
-  sort_buttons: {
-    activity: "sorting her buttons by colour and shine",
-    mood: "content",
-    thought: "Every button holds a little circle of somebody’s day.",
-    feed: {
-      kind: "did",
-      text: "sorted buttons by colour and shine",
-      why: "She is trying to make a small rainbow."
-    },
-    interest: "button-collecting"
-  },
-  visit_the_old_lane: {
-    activity: "walking the old lane beyond the hawthorn",
-    mood: "brave",
-    thought: "Old paths deserve gentle footsteps.",
-    feed: {
-      kind: "did",
-      text: "walked a little way along the old lane",
-      why: "The wind had left a question in the grass."
-    },
-    interest: "old-lane"
-  },
-  rest_in_hollow: {
-    activity: "resting in her nest of moss and fallen blossom",
-    mood: "sleepy",
-    thought: "Even small creatures need a place where the world grows quiet.",
-    feed: {
-      kind: "did",
-      text: "curled up in her nest beneath the hawthorn",
-      why: "Her energy had grown low."
-    },
-    interest: null
-  },
-  write_in_diary: {
-    activity: "writing by the light of a thimble-lantern",
-    mood: "thoughtful",
-    thought: "A diary is a little boat for the day’s forgotten weather.",
-    feed: {
-      kind: "mind",
-      text: "Mabel wrote: “The lane was quiet, but it was not empty.”",
-      why: "Some days leave a shape behind them."
-    },
-    interest: null
-  }
-};
-
 let mabel = null;
 let conversation = [];
+let wanderings = [];
 
 function now() {
   return new Date().toISOString();
-}
-
-function pickRandom(list) {
-  return list[Math.floor(Math.random() * list.length)];
 }
 
 function saveMabel() {
@@ -211,9 +129,34 @@ function loadConversation() {
   return [];
 }
 
+function saveWanderings() {
+  try {
+    localStorage.setItem(
+      wanderingsStorageKey,
+      JSON.stringify(wanderings)
+    );
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function loadWanderings() {
+  try {
+    const saved = localStorage.getItem(wanderingsStorageKey);
+
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    // Fall through to an empty trail.
+  }
+
+  return [];
+}
+
 function createDefaultMabel() {
   return {
-    version: 3,
+    version: 4,
     character: {
       name: "Mabel",
       title: "Mabel of the Hawthorn Hollow",
@@ -261,7 +204,9 @@ function addFeedEntry(entry) {
 }
 
 function updateInterest(interestId, change) {
-  const interest = mabel.interests.find(item => item.id === interestId);
+  const interest = mabel.interests.find(
+    item => item.id === interestId
+  );
 
   if (!interest) return;
 
@@ -301,46 +246,63 @@ function updateInterest(interestId, change) {
   }
 }
 
-function calculatePull(actionName) {
-  let pull = 0.2 + Math.random() * 0.2;
-
-  const matchingInterest = mabel.interests.find(interest =>
-    interest.actions.includes(actionName)
-  );
-
-  if (matchingInterest) {
-    pull += matchingInterest.pull * 0.8;
-    pull += matchingInterest.curiosity * 0.2;
-  }
-
-  if (actionName === "rest_in_hollow") {
-    pull += (1 - mabel.now.energy) * 0.8;
-  }
-
-  if (actionName === "write_in_diary") {
-    pull += 0.15;
-  }
-
-  return pull;
-}
-
 function chooseAction() {
-  const actionNames = Object.keys(actions);
+  const actionNames = [
+    "follow_the_silver_thread",
+    "listen_to_rain",
+    "find_a_treasure",
+    "visit_the_old_lane",
+    "rest_in_hollow",
+    "write_in_diary"
+  ];
 
-  const scoredActions = actionNames.map(name => ({
-    name,
-    pull: calculatePull(name)
-  }));
+  const chosen = actionNames[
+    Math.floor(Math.random() * actionNames.length)
+  ];
 
-  scoredActions.sort((a, b) => b.pull - a.pull);
+  const actionText = {
+    follow_the_silver_thread:
+      "following the silver thread beneath the hawthorn roots",
+    listen_to_rain:
+      "listening to rain gather on the hawthorn leaves",
+    find_a_treasure:
+      "searching beneath the roots for something small and shining",
+    visit_the_old_lane:
+      "walking a little way along the old lane",
+    rest_in_hollow:
+      "resting in her nest of moss and fallen blossom",
+    write_in_diary:
+      "writing by the light of a thimble-lantern"
+  };
 
-  const chosen = scoredActions[0].name;
-  const action = actions[chosen];
+  const actionMood = {
+    follow_the_silver_thread: "wondering",
+    listen_to_rain: "quiet",
+    find_a_treasure: "curious",
+    visit_the_old_lane: "brave",
+    rest_in_hollow: "sleepy",
+    write_in_diary: "thoughtful"
+  };
+
+  const actionThought = {
+    follow_the_silver_thread:
+      "The thread does not pull. It waits.",
+    listen_to_rain:
+      "Rain is the sky remembering how to speak softly.",
+    find_a_treasure:
+      "A lost thing is not always lost. Sometimes it is waiting to be noticed.",
+    visit_the_old_lane:
+      "Old paths deserve gentle footsteps.",
+    rest_in_hollow:
+      "Even small creatures need a place where the world grows quiet.",
+    write_in_diary:
+      "A diary is a little boat for the day’s forgotten weather."
+  };
 
   mabel.now.updatedAt = now();
-  mabel.now.doing = action.activity;
-  mabel.now.mood = action.mood;
-  mabel.now.thought = action.thought;
+  mabel.now.doing = actionText[chosen];
+  mabel.now.mood = actionMood[chosen];
+  mabel.now.thought = actionThought[chosen];
 
   mabel.needs.comfort = Math.max(
     0,
@@ -372,14 +334,26 @@ function chooseAction() {
     Math.min(1, mabel.now.energy + (Math.random() - 0.45) * 0.12)
   );
 
-  addFeedEntry(action.feed);
+  addFeedEntry({
+    kind: "did",
+    text: `Mabel ${actionText[chosen]}.`,
+    why: actionThought[chosen]
+  });
 
-  if (action.interest) {
-    updateInterest(action.interest, 0.09);
-  } else {
-    mabel.interests.forEach(interest => {
-      interest.pull = Math.max(0, interest.pull - 0.02);
-    });
+  if (chosen === "follow_the_silver_thread") {
+    updateInterest("silver-thread", 0.09);
+  }
+
+  if (chosen === "listen_to_rain") {
+    updateInterest("rain-listening", 0.07);
+  }
+
+  if (chosen === "find_a_treasure") {
+    updateInterest("button-collecting", 0.08);
+  }
+
+  if (chosen === "visit_the_old_lane") {
+    updateInterest("old-lane", 0.08);
   }
 
   saveMabel();
@@ -487,6 +461,8 @@ function updateChanges() {
 }
 
 function updateDiary() {
+  if (!diaryElement) return;
+
   diaryElement.innerHTML = "";
 
   mabel.feed.slice(0, 10).forEach(entry => {
@@ -501,6 +477,77 @@ function updateDiary() {
   });
 }
 
+function updateMusing(wandering) {
+  if (!musingElement) return;
+
+  if (!wandering) {
+    musingElement.innerHTML = `
+      <p class="musing-source">Mabel has not wandered yet.</p>
+      <p class="musing-text">
+        Her curiosity is still gathering beneath the hawthorn.
+      </p>
+      <p class="mabel-thought">
+        “Perhaps I will find something small and shining.”
+      </p>
+    `;
+
+    return;
+  }
+
+  musingElement.innerHTML = `
+    <p class="musing-source">
+      Mabel followed: ${wandering.searchQuestion}
+    </p>
+    <p class="musing-text">
+      She found: <a href="${wandering.url}" target="_blank" rel="noopener">
+        ${wandering.title}
+      </a>
+    </p>
+    <p class="mabel-thought">
+      “${wandering.musing}”
+    </p>
+  `;
+}
+
+function updateWanderings() {
+  if (!wanderingsElement) return;
+
+  wanderingsElement.innerHTML = "";
+
+  if (wanderings.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel’s trail is still unwritten.";
+    wanderingsElement.appendChild(item);
+    return;
+  }
+
+  wanderings.slice(0, 10).forEach(wandering => {
+    const item = document.createElement("li");
+
+    const link = document.createElement("a");
+    link.href = wandering.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = wandering.title;
+
+    const thought = document.createElement("p");
+    thought.textContent = wandering.musing;
+
+    const change = document.createElement("p");
+    change.className = "wandering-change";
+    change.textContent = wandering.change || "";
+
+    item.appendChild(link);
+    item.appendChild(thought);
+
+    if (wandering.change) {
+      item.appendChild(change);
+    }
+
+    wanderingsElement.appendChild(item);
+  });
+}
+
 function updatePage() {
   moodElement.textContent = `Mabel is ${mabel.now.mood}.`;
   activityElement.textContent = `Mabel is ${mabel.now.doing}.`;
@@ -511,6 +558,12 @@ function updatePage() {
   updateWishes();
   updateInterests();
   updateChanges();
+
+  if (wanderings.length > 0) {
+    updateMusing(wanderings[0]);
+  }
+
+  updateWanderings();
 }
 
 async function handleVisitorMessage() {
@@ -623,31 +676,10 @@ async function handleVisitorMessage() {
       mabel.memories.length = 20;
     }
 
-    const diaryVariations = [
-      {
-        text: "A visitor’s words settled among the moss like a fallen petal.",
-        why: "Mabel keeps small messages beside the moonlight."
-      },
-      {
-        text: "Mabel listened until the visitor’s voice became a small warm shape.",
-        why: "Some conversations leave a softness behind."
-      },
-      {
-        text: "A visitor left a question at the edge of the hollow.",
-        why: "Questions can be carried like little lanterns."
-      },
-      {
-        text: "Mabel added the visitor’s whisper to her collection of remembered things.",
-        why: "Not every treasure has to shine."
-      }
-    ];
-
-    const diaryEntry = pickRandom(diaryVariations);
-
     addFeedEntry({
       kind: "noticed",
-      text: diaryEntry.text,
-      why: diaryEntry.why
+      text: "A visitor’s words settled among the moss like a fallen petal.",
+      why: "Mabel keeps small messages beside the moonlight."
     });
 
     saveMabel();
@@ -661,9 +693,127 @@ async function handleVisitorMessage() {
   }
 }
 
+async function handleWander() {
+  wanderButton.disabled = true;
+  wanderStatus.textContent = "Mabel is following a thread...";
+
+  try {
+    const response = await fetch(MABEL_WANDER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 10),
+        conversation: conversation.slice(-10),
+        mood: mabel.now.mood,
+        energy: mabel.now.energy
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Mabel could not wander. Status ${response.status}`
+      );
+    }
+
+    const data = await response.json();
+
+    const wandering = {
+      at: now(),
+      searchQuestion: data.searchQuestion,
+      title: data.title,
+      url: data.url,
+      musing: data.musing,
+      change: data.change || "",
+      interest: data.interest || null
+    };
+
+    wanderings.unshift(wandering);
+
+    if (wanderings.length > 30) {
+      wanderings.length = 30;
+    }
+
+    saveWanderings();
+
+    if (wandering.interest) {
+      const existing = mabel.interests.find(
+        interest => interest.id === wandering.interest.id
+      );
+
+      if (existing) {
+        existing.pull = Math.max(
+          0,
+          Math.min(1, existing.pull + 0.12)
+        );
+
+        if (existing.pull > 0.65 && existing.stage === "dormant") {
+          existing.stage = "pursuing";
+        }
+      } else {
+        mabel.interests.push(wandering.interest);
+
+        addFeedEntry({
+          kind: "mind",
+          text: `Mabel began a new thread: ${wandering.interest.title}.`,
+          why: wandering.interest.question,
+          interest: wandering.interest.id
+        });
+      }
+    }
+
+    mabel.needs.curiosity = Math.max(
+      0,
+      Math.min(1, mabel.needs.curiosity + 0.1)
+    );
+
+    mabel.needs.wonder = Math.max(
+      0,
+      Math.min(1, mabel.needs.wonder + 0.08)
+    );
+
+    addFeedEntry({
+      kind: "noticed",
+      text: `Mabel encountered: ${wandering.title}.`,
+      why: wandering.musing
+    });
+
+    saveMabel();
+    updatePage();
+
+    wanderStatus.textContent = "Mabel has returned from her wandering.";
+  } catch (error) {
+    wanderStatus.textContent =
+      "Mabel’s paws paused at the edge of the hollow. The path beyond was tangled.";
+  } finally {
+    wanderButton.disabled = false;
+  }
+}
+
+function switchTab(tabName) {
+  tabButtons.forEach(button => {
+    if (button.dataset.tab === tabName) {
+      button.classList.add("active");
+    } else {
+      button.classList.remove("active");
+    }
+  });
+
+  tabPanels.forEach(panel => {
+    if (panel.id === tabName) {
+      panel.classList.add("active");
+    } else {
+      panel.classList.remove("active");
+    }
+  });
+}
+
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
   conversation = loadConversation();
+  wanderings = loadWanderings();
 
   if (!mabel.needs) {
     mabel.needs = {
@@ -677,10 +827,17 @@ function startMabel() {
 
   updatePage();
 
+  tabButtons.forEach(button => {
+    button.addEventListener("click", function () {
+      switchTab(button.dataset.tab);
+    });
+  });
+
+  sendButton.addEventListener("click", handleVisitorMessage);
+  wanderButton.addEventListener("click", handleWander);
+
   // Mabel wakes every 45 seconds.
   setInterval(chooseAction, 45000);
 }
-
-sendButton.addEventListener("click", handleVisitorMessage);
 
 startMabel();
