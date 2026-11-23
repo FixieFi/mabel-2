@@ -1,0 +1,62 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f4efe6;
+  color: #33291f;
+}
+
+main {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 {
+  color: #6b4b2a;
+  margin-bottom: 4px;
+}
+
+.tagline {
+  color: #7a6a58;
+}
+
+section {
+  background: #fffdf8;
+  border: 1px solid #e3d8c6;
+  border-radius: 18px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #d8c9b3;
+  font-family: inherit;
+}
+
+button {
+  margin-top: 10px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: #7a5230;
+  color: white;
+  cursor: pointer;
+}
+
+#reply {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f2ead9;
+  min-height: 20px;
+}
+
+footer {
+  text-align: center;
+  color: #7a6a58;
+  font-size: 0.85rem;
+}
