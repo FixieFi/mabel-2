@@ -399,12 +399,6 @@ function chooseAction() {
 
   mabel.now.energy = clampNeed(mabel.now.energy + (Math.random() - 0.45) * 0.12);
 
-  addFeedEntry({
-    kind: "did",
-    text: "Mabel " + actionText[chosen] + ".",
-    why: actionThought[chosen]
-  });
-
   if (chosen === "follow_the_silver_thread") {
     updateInterest("silver-thread", 0.09);
   }
