@@ -3,128 +3,137 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mabel of the Hawthorn Hollow</title>
+  <title>Mabel’s Mousehole</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
   <main>
     <header>
-      <span class="ornament">❀ ✿ ❀</span>
-
-      <h1>Mabel of the Hawthorn Hollow</h1>
-
-      <p class="mabel-subtitle">
-        a small mouse, a mossy home, and a thousand quiet wonders
-      </p>
-
-      <span class="ornament">✿ ❀ ✿</span>
+      <h1>Mabel’s Mousehole</h1>
+      <p class="tagline">Your digital woodland companion.</p>
     </header>
 
-    <section class="chat-section">
-      <h2>Speak to Mabel</h2>
-
-      <div class="message-area">
-        <input
-          id="message"
-          type="text"
-          placeholder="Leave a small whisper for Mabel..."
-        >
-
-        <button id="send">Whisper</button>
-      </div>
-
-      <p id="reply"></p>
-    </section>
-
-    <nav class="tabs">
-      <button class="tab-button active" data-tab="world">
-        Her World
-      </button>
-
-      <button class="tab-button" data-tab="musings">
-        Mabel’s Musings
-      </button>
-    </nav>
-
-    <section id="world" class="tab-panel active">
-      <h2>Mabel Now</h2>
-
-      <p id="mood">Mabel is wondering.</p>
+    <section class="mabel-card">
+      <img src="images/mabel.png" alt="Mabel the mouse" width="220">
+      <h2>What Mabel is doing</h2>
+      <p id="mood">Mabel is feeling curious.</p>
       <p id="activity">Mabel is listening for the hush between raindrops.</p>
       <p id="thought">“Every small thing remembers being part of something larger.”</p>
-
-      <h2>Mabel’s Needs</h2>
-
-      <div class="need">
-        <span>Comfort</span>
-        <progress id="need-comfort" max="1" value="0.7"></progress>
-      </div>
-
-      <div class="need">
-        <span>Curiosity</span>
-        <progress id="need-curiosity" max="1" value="0.6"></progress>
-      </div>
-
-      <div class="need">
-        <span>Connection</span>
-        <progress id="need-connection" max="1" value="0.4"></progress>
-      </div>
-
-      <div class="need">
-        <span>Rest</span>
-        <progress id="need-rest" max="1" value="0.8"></progress>
-      </div>
-
-      <div class="need">
-        <span>Wonder</span>
-        <progress id="need-wonder" max="1" value="0.5"></progress>
-      </div>
-
-      <h2>Mabel’s Wishes</h2>
-      <ul id="wishes" class="wishes"></ul>
-
-      <h2>Mabel’s Growing Interests</h2>
-      <ul id="interests" class="interest-list"></ul>
-
-      <h2>Mabel’s Changes</h2>
-      <ul id="changes" class="change-list"></ul>
-
-      <h2>Mabel’s Diary</h2>
-      <ul id="diary"></ul>
     </section>
 
-    <section id="musings" class="tab-panel">
-      <h2>Mabel’s Musings</h2>
+    <section class="needs-card">
+      <h2>Mabel’s needs</h2>
 
-      <p class="musing-intro">
-        Mabel sometimes follows one of her own threads into the wider world.
-        She may find something unexpected, and it may change what she cares about.
-      </p>
+      <label>
+        Comfort
+        <progress id="need-comfort" max="1" value="0.7"></progress>
+      </label>
 
-      <button id="wander" class="wander-button">
-        Let Mabel wander
-      </button>
+      <label>
+        Curiosity
+        <progress id="need-curiosity" max="1" value="0.6"></progress>
+      </label>
 
-      <p id="wander-status" class="wander-status"></p>
+      <label>
+        Connection
+        <progress id="need-connection" max="1" value="0.4"></progress>
+      </label>
 
-      <div id="musing" class="musing">
-        <p class="musing-source">Mabel has not wandered yet.</p>
-        <p class="musing-text">
-          Her curiosity is still gathering beneath the hawthorn.
-        </p>
-        <p class="mabel-thought">
-          “Perhaps I will find something small and shining.”
-        </p>
+      <label>
+        Rest
+        <progress id="need-rest" max="1" value="0.8"></progress>
+      </label>
+
+      <label>
+        Wonder
+        <progress id="need-wonder" max="1" value="0.5"></progress>
+      </label>
+
+      <label>
+        Food
+        <progress id="need-food" max="1" value="0.7"></progress>
+      </label>
+
+      <label>
+        Water
+        <progress id="need-water" max="1" value="0.75"></progress>
+      </label>
+    </section>
+
+    <section class="tabs-card">
+      <div class="tab-buttons">
+        <button class="tab-button active" data-tab="chat">Chat</button>
+        <button class="tab-button" data-tab="musings">Musings</button>
+        <button class="tab-button" data-tab="day">Mabel’s Day</button>
+        <button class="tab-button" data-tab="inner-life">Inner Life</button>
       </div>
 
-      <h2>Mabel’s Trail</h2>
-      <ul id="wanderings" class="wanderings"></ul>
+      <section id="chat" class="tab-panel active">
+        <h2>Leave Mabel a message</h2>
+
+        <textarea
+          id="message"
+          rows="4"
+          placeholder="Say hello to Mabel..."
+        ></textarea>
+
+        <button id="send">Send</button>
+
+        <div id="reply" class="reply"></div>
+      </section>
+
+      <section id="musings" class="tab-panel">
+        <h2>Mabel’s Musings</h2>
+
+        <button id="wander">Let Mabel wander</button>
+
+        <p id="wander-status">
+          Mabel is resting between wanderings.
+        </p>
+
+        <div id="musing" class="musing-card">
+          <p class="musing-source">Mabel has not wandered yet.</p>
+          <p class="musing-text">
+            Her curiosity is still gathering beneath the hawthorn.
+          </p>
+          <p class="mabel-thought">
+            “Perhaps I will find something small and shining.”
+          </p>
+        </div>
+
+        <h3>Mabel’s wandering trail</h3>
+        <ul id="wanderings"></ul>
+      </section>
+
+      <section id="day" class="tab-panel">
+        <h2>Mabel’s Day</h2>
+
+        <p class="day-intro">
+          A quiet record of what Mabel has been doing in the Hollow.
+        </p>
+
+        <ul id="activity-log"></ul>
+      </section>
+
+      <section id="inner-life" class="tab-panel">
+        <h2>Mabel’s Inner Life</h2>
+
+        <h3>Mabel’s wishes</h3>
+        <ul id="wishes"></ul>
+
+        <h3>Mabel’s interests</h3>
+        <ul id="interests"></ul>
+
+        <h3>How Mabel is changing</h3>
+        <ul id="changes"></ul>
+
+        <h3>Mabel’s diary</h3>
+        <ul id="diary"></ul>
+      </section>
     </section>
 
     <footer>
-      <span class="ornament">✿ ❀ ✿</span>
-      <p>made beneath the hawthorn, where small things are remembered</p>
+      <p>Mabel is an AI character. Her messages are generated by AI.</p>
     </footer>
   </main>
 
