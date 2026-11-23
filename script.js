@@ -856,11 +856,20 @@ function startMabel() {
     });
   });
 
-  sendButton.addEventListener("click", handleVisitorMessage);
-  wanderButton.addEventListener("click", handleWander);
+    if (sendButton) {
+    sendButton.addEventListener("click", handleVisitorMessage);
+  }
 
-  // Mabel wakes every 45 seconds.
-  setInterval(chooseAction, 45000);
+  if (wanderButton) {
+    wanderButton.addEventListener("click", handleWander);
+  }
+
+ // Mabel wakes every 45 seconds.
+  setInterval(function () {
+    if (mabel) {
+      chooseAction();
+    }
+  }, 45000);
 }
 
 startMabel();
