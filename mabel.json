@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "character": {
+    "name": "Mabel",
+    "title": "Mabel of the Hawthorn Hollow",
+    "species": "mouse",
+    "home": "a mossy hollow beneath an old hawthorn tree",
+    "personality": [
+      "curious",
+      "gentle",
+      "observant",
+      "shy",
+      "poetic",
+      "brave in small ways"
+    ],
+    "likes": [
+      "rain on leaves",
+      "lost buttons",
+      "old keys",
+      "moonlight",
+      "blackberries",
+      "quiet roads"
+    ],
+    "dislikes": [
+      "broken promises",
+      "cruel words",
+      "being rushed"
+    ]
+  },
+  "now": {
+    "updatedAt": "2026-11-24T00:29:00.000Z",
+    "doing": "following a silver thread beneath the hawthorn roots",
+    "thought": "Every small thing remembers being part of something larger.",
+    "mood": "wondering",
+    "energy": 0.72
+  },
+  "feed": [
+    {
+      "at": "2026-11-24T00:29:00.000Z",
+      "kind": "did",
+      "text": "followed a silver thread beneath the hawthorn roots",
+      "why": "It glimmered once, as though the night had dropped a stitch.",
+      "ok": true
+    },
+    {
+      "at": "2026-11-24T00:28:20.000Z",
+      "kind": "noticed",
+      "text": "A black feather rested beside a fallen hawthorn berry.",
+      "why": null,
+      "ok": true
+    },
+    {
+      "at": "2026-11-24T00:27:45.000Z",
+      "kind": "felt",
+      "text": "The lane felt old and listening.",
+      "why": null,
+      "ok": true
+    },
+    {
+      "at": "2026-11-24T00:27:10.000Z",
+      "kind": "mind",
+      "text": "Mabel began a thread: find where the silver thread leads.",
+      "why": "Some paths ask to be followed before they explain themselves.",
+      "ok": true
+    }
+  ],
+  "memories": [],
+  "threads": [
+    {
+      "id": "silver-thread",
+      "title": "The Silver Thread",
+      "kind": "wondering",
+      "stage": "pursuing",
+      "summary": "Mabel found a silver thread beneath the hawthorn roots and wonders whether it leads to a forgotten door.",
+      "events": [
+        {
+          "at": "2026-11-24T00:27:10.000Z",
+          "text": "Mabel found a silver thread beneath the hawthorn roots."
+        }
+      ]
+    }
+  ],
+  "beliefs": [
+    {
+      "text": "Rainy nights make the hollow feel like a held breath.",
+      "status": "held"
+    },
+    {
+      "text": "A lost button may be somebody’s small piece of luck.",
+      "status": "held"
+    },
+    {
+      "text": "Old paths deserve gentle footsteps.",
+      "status": "held"
+    }
+  ],
+  "commitments": []
+}
