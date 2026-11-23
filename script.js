@@ -5,7 +5,85 @@ const diaryElement = document.getElementById("diary");
 const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
+const needComfort = document.getElementById("need-comfort");
+const needCuriosity = document.getElementById("need-curiosity");
+const needConnection = document.getElementById("need-connection");
+const needRest = document.getElementById("need-rest");
+const needWonder = document.getElementById("need-wonder");
+const wishesElement = document.getElementById("wishes");
+const interestsElement = document.getElementById("interests");
 
+function updateNeeds() {
+  if (needComfort) needComfort.value = mabel.needs.comfort;
+  if (needCuriosity) needCuriosity.value = mabel.needs.curiosity;
+  if (needConnection) needConnection.value = mabel.needs.connection;
+  if (needRest) needRest.value = mabel.needs.rest;
+  if (needWonder) needWonder.value = mabel.needs.wonder;
+}
+
+function updateWishes() {
+  if (!wishesElement) return;
+
+  wishesElement.innerHTML = "";
+
+  const activeWishes = mabel.interests
+    .filter(interest => interest.stage !== "dormant")
+    .slice(0, 4);
+
+  if (activeWishes.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel is resting between little wonders.";
+    wishesElement.appendChild(item);
+    return;
+  }
+
+  activeWishes.forEach(interest => {
+    const item = document.createElement("li");
+    item.textContent = `Mabel wishes to ${interest.question
+      .toLowerCase()
+      .replace(/[?.!]$/, "")}.`;
+    wishesElement.appendChild(item);
+  });
+}
+
+function updateInterests() {
+  if (!interestsElement) return;
+
+  interestsElement.innerHTML = "";
+
+  const sorted = [...mabel.interests].sort(
+    (a, b) => b.pull - a.pull
+  );
+
+  sorted.forEach(interest => {
+    const item = document.createElement("li");
+    item.className = "interest-item";
+
+    const title = document.createElement("span");
+    title.className = "interest-title";
+    title.textContent = interest.title;
+
+    const question = document.createElement("span");
+    question.className = "interest-question";
+    question.textContent = interest.question;
+
+    const meter = document.createElement("progress");
+    meter.className = "interest-meter";
+    meter.max = 1;
+    meter.value = interest.pull;
+
+    const stage = document.createElement("span");
+    stage.className = "interest-stage";
+    stage.textContent = interest.stage;
+
+    item.appendChild(title);
+    item.appendChild(question);
+    item.appendChild(meter);
+    item.appendChild(stage);
+
+    interestsElement.appendChild(item);
+  });
+}
 
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 
@@ -186,6 +264,13 @@ function createDefaultMabel() {
       species: "mouse",
       home: "a mossy hollow beneath an old hawthorn tree"
     },
+needs: {
+  comfort: 0.7,
+  curiosity: 0.6,
+  connection: 0.4,
+  rest: 0.8,
+  wonder: 0.5
+},
     now: {
       updatedAt: now(),
       doing: "listening for the hush between raindrops",
@@ -300,7 +385,31 @@ function chooseAction() {
   mabel.now.mood = action.mood;
   mabel.now.thought = action.thought;
 
-  mabel.now.energy = Math.max(
+  mabel.needs.comfort = Math.max(
+  0,
+  Math.min(1, mabel.needs.comfort + (Math.random() - 0.45) * 0.08)
+);
+
+mabel.needs.curiosity = Math.max(
+  0,
+  Math.min(1, mabel.needs.curiosity + (Math.random() - 0.4) * 0.08)
+);
+
+mabel.needs.connection = Math.max(
+  0,
+  Math.min(1, mabel.needs.connection - 0.03)
+);
+
+mabel.needs.rest = Math.max(
+  0,
+  Math.min(1, mabel.needs.rest + (Math.random() - 0.5) * 0.08)
+);
+
+mabel.needs.wonder = Math.max(
+  0,
+  Math.min(1, mabel.needs.wonder + (Math.random() - 0.45) * 0.08)
+);
+ mabel.now.energy = Math.max(
     0.15,
     Math.min(1, mabel.now.energy + (Math.random() - 0.45) * 0.12)
   );
@@ -325,6 +434,14 @@ function updatePage() {
   thoughtElement.textContent = `“${mabel.now.thought}”`;
 
   updateDiary();
+
+const needComfort = document.getElementById("need-comfort");
+const needCuriosity = document.getElementById("need-curiosity");
+const needConnection = document.getElementById("need-connection");
+const needRest = document.getElementById("need-rest");
+const needWonder = document.getElementById("need-wonder");
+const wishesElement = document.getElementById("wishes");
+const interestsElement = document.getElementById("interests");
 }
 
 function updateDiary() {
@@ -439,11 +556,32 @@ if (matchedInterest) {
       mabel.memories.length = 20;
     }
 
-    addFeedEntry({
-      kind: "noticed",
-      text: "A visitor left a whisper at the hollow.",
-      why: "Mabel keeps small messages beside the moonlight."
-    });
+    const diaryVariations = [
+  {
+    text: "A visitor’s words settled among the moss like a fallen petal.",
+    why: "Mabel keeps small messages beside the moonlight."
+  },
+  {
+    text: "Mabel listened until the visitor’s voice became a small warm shape.",
+    why: "Some conversations leave a softness behind."
+  },
+  {
+    text: "A visitor left a question at the edge of the hollow.",
+    why: "Questions can be carried like little lanterns."
+  },
+  {
+    text: "Mabel added the visitor’s whisper to her collection of remembered things.",
+    why: "Not every treasure has to shine."
+  }
+];
+
+const diaryEntry = pickRandom(diaryVariations);
+
+addFeedEntry({
+  kind: "noticed",
+  text: diaryEntry.text,
+  why: diaryEntry.why
+});
 
     saveMabel();
     updateDiary();
