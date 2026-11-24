@@ -880,7 +880,12 @@ function chooseAction() {
     const find = diversifyWanderFinds([null])[0];
     if (find) {
       applyExplorationFinds([find]);
-      activityOverride = "finding " + find.name + " beneath the hawthorn";
+      const outing = { kind: "exploration", at: now(), title: "A wander beneath the hawthorn", finds: [find] };
+      wanderings.unshift(outing);
+      wanderings = wanderings.slice(0, 30);
+      saveWanderings();
+      addFeedEntry({ kind: "noticed", text: "Mabel found " + find.name + " while on her own.", why: find.note || "It caught her eye beneath the hawthorn." });
+      activityOverride = "looking over " + find.name + " beneath the hawthorn";
       thoughtOverride = find.note || "What journey brought this little thing here?";
     }
   }
@@ -2221,10 +2226,12 @@ async function noticeNextVisitorBoardNote() {
 
 function researchWords(value) {
   const stopWords = new Set([
-    "about", "after", "again", "also", "from", "have", "into", "just", "mabel",
-    "might", "more", "other", "over", "she", "that", "their", "them", "there",
-    "these", "they", "this", "those", "what", "when", "where", "which", "while",
-    "with", "would", "your", "hers", "found", "finds", "thing", "things"
+    "about", "after", "again", "also", "because", "board", "connected", "could",
+    "distinctive", "directly", "from", "have", "into", "just", "mabel", "message",
+    "might", "more", "other", "over", "phrase", "read", "research", "saw", "she",
+    "subject", "that", "their", "them", "there", "these", "they", "this", "those",
+    "what", "when", "where", "which", "while", "with", "would", "your", "hers",
+    "found", "finds", "thing", "things", "note", "visitor", "visitors"
   ]);
   return normalizeInterestTitle(value).split(" ").filter(function (word) {
     return word.length > 3 && !stopWords.has(word);
@@ -2243,10 +2250,11 @@ function researchMatchesFocus(text, focusInterest) {
 function chooseAutonomousResearchFocus(boardNote) {
   const candidates = [];
   if (boardNote) {
+    const topic = researchWords(boardNote.message).slice(0, 4).join(" ");
     candidates.push({
       id: "board-note-" + boardNote.id,
-      title: boardNote.message,
-      question: "Mabel read this note from " + boardNote.name + " on the Visitors’ board. Research a subject or distinctive phrase in the note, and keep the question directly connected to it.",
+      title: topic || boardNote.message.slice(0, 60),
+      question: "Mabel read this note from " + boardNote.name + " on the Visitors’ board. Research only the subject named in the note.",
       source: "visitor-board"
     });
   }
@@ -2595,7 +2603,8 @@ async function writeEveningPage() {
   const recentWanderings = wanderings
     .slice(0, 4)
     .map(function (entry) {
-      return entry.title + ": " + entry.musing;
+      const finds = (entry.finds || []).map(function (find) { return find.name; }).join(", ");
+      return entry.title + (finds ? ": Mabel found " + finds : "");
     })
     .join("\n");
 
@@ -2790,7 +2799,7 @@ async function handleWander(options) {
       body: JSON.stringify({
         focusInterest: focusInterest,
         interests: [focusInterest],
-        researchInstruction: "Research only the exact subject in focusInterest.title. Keep the search question, sources, and summary directly related to that subject. Do not switch to another object or topic.",
+        researchInstruction: "Research only the exact subject in focusInterest.title. Keep the search query, sources, and summary directly related to that subject. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
         memories: [],
         mood: mabel.now.mood,
         energy: mabel.now.energy,
@@ -2805,9 +2814,7 @@ async function handleWander(options) {
     const returnedText = [
       data.searchQuestion,
       data.title,
-      data.sourceTitle,
-      data.researchSummary,
-      data.musing
+      data.sourceTitle
     ].filter(Boolean).join(" ");
     const relevant = researchMatchesFocus(returnedText, focusInterest);
     const research = {
@@ -2825,7 +2832,9 @@ async function handleWander(options) {
         : "",
       url: relevant ? (safeExternalUrl(data.url) || "") : "",
       musing: relevant
-        ? String(data.musing || "").slice(0, 700)
+        ? /\b(?:found|picked up|came across)\s+(?:a|an|the)\s+(?:coin|button|toy|lid|shell|stone|key|cap|figure|flower|fossil|marble|bead)\b/i.test(String(data.musing || ""))
+          ? "Mabel stayed with the question about " + focusInterest.title + " and kept a note from the source."
+          : String(data.musing || "").slice(0, 700)
         : "Mabel could not find a page connected to " + focusInterest.title + " this time. She keeps the question for another visit.",
       researchMethod: researchMethod,
       related: relevant
