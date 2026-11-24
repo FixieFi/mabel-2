@@ -2758,237 +2758,136 @@ function diversifyWanderFinds(findResults) {
 }
 
 async function handleWander(options) {
-  const autonomous = options && options.autonomous === true;
-  const boardNote = options && options.boardNote && options.boardNote.message
-    ? {
-        message: String(options.boardNote.message).trim().slice(0, 280),
-        name: String(options.boardNote.name || "a visitor").trim().slice(0, 40)
-      }
-    : null;
-  const researchTarget = options && options.researchTarget && options.researchTarget.title
-    ? {
-        title: String(options.researchTarget.title).trim().slice(0, 100),
-        question: String(options.researchTarget.question || "").trim().slice(0, 180),
-        source: String(options.researchTarget.source || "exploration").slice(0, 40)
-      }
-    : null;
-  const activeInterest = options && options.interestId && mabel
-    ? mabel.interests.find(function (item) { return item.id === options.interestId; }) || null
-    : null;
-  const focusInterest = boardNote
-    ? {
-        id: "visitor-note-" + Date.now(),
-        title: "A note left by a visitor: " + boardNote.message.slice(0, 100),
-        question: "Mabel read this note from " + boardNote.name + " on the Visitors’ noticeboard. What could she learn or wonder about from it?",
-        source: "Visitors’ noticeboard"
-      }
-    : researchTarget
-      ? {
-          id: "exploration-find-" + Date.now(),
-          title: researchTarget.title,
-          question: researchTarget.question || "Mabel found " + researchTarget.title + " while exploring. What might it be, and what can she discover about it?",
-          source: researchTarget.source
-        }
-      : activeInterest;
-  if (!mabel || (wanderButton && wanderButton.disabled)) return;
-  if ((boardNote || researchTarget) && !autonomous) switchTab("research");
-  if (wanderButton) wanderButton.disabled = true;
-  if (wanderStatus) {
-    wanderStatus.textContent = boardNote
-      ? "Mabel is following a note from the Visitors’ board."
-      : researchTarget
-        ? "Mabel is looking into something she found."
-        : autonomous
-          ? "Mabel has gone to look something up."
-          : "Mabel is setting out to investigate a question.";
-  }
+  if (!mabel) return;
+  const focusInterest = options && options.focusInterest;
+  if (!focusInterest || !focusInterest.title) return;
 
+  if (wanderStatus) wanderStatus.textContent = "Mabel is following a question that caught her attention.";
   if (musingElement) {
     musingElement.replaceChildren();
     const waiting = document.createElement("p");
     waiting.className = "musing-source";
-    waiting.textContent = boardNote ? "Mabel is following a note from the Visitors’ board." : researchTarget ? "Mabel is looking into something she found." : "Mabel is following a question through the world.";
+    waiting.textContent = "Mabel is settling in at the library.";
     musingElement.appendChild(waiting);
   }
+
+  const libraryMethods = [
+    "She searched for it on a public computer by the window.",
+    "She checked the well-thumbed encyclopedia shelves.",
+    "She found a recent magazine with a dog-eared page.",
+    "She followed a reference in an old field guide.",
+    "She compared notes in a library journal."
+  ];
+  const researchMethod = libraryMethods[Math.floor(Math.random() * libraryMethods.length)];
 
   try {
     const response = await fetch(MABEL_WANDER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        interests: focusInterest
-          ? [focusInterest].concat(mabel.interests.filter(function (item) { return item.id !== focusInterest.id; }))
-          : mabel.interests,
         focusInterest: focusInterest,
-        memories: mabel.memories.slice(0, 10),
+        interests: [focusInterest],
+        researchInstruction: "Research only the exact subject in focusInterest.title. Keep the search question, sources, and summary directly related to that subject. Do not switch to another object or topic.",
+        memories: [],
         mood: mabel.now.mood,
         energy: mabel.now.energy,
         needs: mabel.needs,
-        wanderings: wanderings.slice(0, 10),
-        bindle: bindle,
-        recentFinds: []
-          .concat(bindle.food || [], bindle.water || [], bindle.treasures || [])
-          .concat((mabel.world && mabel.world.objects) || [])
-          .map(function (item) { return typeof item === "string" ? item : item.name; })
-          .filter(Boolean)
-          .slice(0, 24)
+        wanderings: [],
+        recentFinds: [focusInterest.title]
       })
     });
-    if (!response.ok) throw new Error("Mabel could not wander. Status " + response.status);
+    if (!response.ok) throw new Error("Mabel could not reach the library. Status " + response.status);
 
     const data = await response.json();
-    const wandering = {
+    const returnedText = [
+      data.searchQuestion,
+      data.title,
+      data.sourceTitle,
+      data.researchSummary,
+      data.musing
+    ].filter(Boolean).join(" ");
+    const relevant = researchMatchesFocus(returnedText, focusInterest);
+    const research = {
+      kind: "research",
       at: now(),
-      searchQuestion: data.searchQuestion || "",
-      title: data.title || "A question Mabel followed",
-      sourceTitle: data.sourceTitle || "",
-      researchSummary: data.researchSummary || "",
-      url: data.url || "",
-      musing: data.musing || "",
-      change: data.change || "",
-      interest: data.interest || focusInterest,
-      goalProgress: data.goalProgress || null,
-      finds: diversifyWanderFinds(data.finds),
-      boardNote: boardNote
+      focusTitle: focusInterest.title,
+      focusSource: focusInterest.source || "",
+      searchQuestion: relevant
+        ? (data.searchQuestion || focusInterest.question || "What might Mabel discover about " + focusInterest.title + "?")
+        : (focusInterest.question || "What might Mabel discover about " + focusInterest.title + "?"),
+      title: relevant ? (data.title || focusInterest.title) : "A question left on the library table",
+      sourceTitle: relevant ? (data.sourceTitle || "") : "",
+      researchSummary: relevant
+        ? String(data.researchSummary || "").slice(0, 1200)
+        : "",
+      url: relevant ? (safeExternalUrl(data.url) || "") : "",
+      musing: relevant
+        ? String(data.musing || "").slice(0, 700)
+        : "Mabel could not find a page connected to " + focusInterest.title + " this time. She keeps the question for another visit.",
+      researchMethod: researchMethod,
+      related: relevant
     };
-    wanderings.unshift(wandering);
-    if (wanderings.length > 30) wanderings.length = 30;
-    saveWanderings();
 
-    if (wandering.interest) {
-      const interest = mabel.interests.find(function (item) {
-        return item.id === wandering.interest.id ||
-          normalizeInterestTitle(item.title) === normalizeInterestTitle(wandering.interest.title);
+    researchLog.unshift(research);
+    researchLog = researchLog.slice(0, 30);
+    saveResearchLog();
+
+    const existing = mabel.interests.find(function (item) {
+      return normalizeInterestTitle(item.title) === normalizeInterestTitle(focusInterest.title);
+    });
+    if (existing && relevant) {
+      existing.pull = clampNeed((existing.pull || 0.35) + 0.08);
+      existing.lastPursuedAt = now();
+      existing.stage = existing.pull > 0.65 ? "pursuing" : "growing";
+    }
+
+    if (data.interest && relevant && researchMatchesFocus(data.interest.title, focusInterest)) {
+      const priorCount = mabel.interests.length;
+      recordSpark(data.interest);
+      if (mabel.interests.length > priorCount) showSparkNotice();
+    }
+
+    if (data.goalProgress && relevant) {
+      const goal = mabel.interests.find(function (item) {
+        return normalizeInterestTitle(item.title) === normalizeInterestTitle(focusInterest.title);
       });
-      if (interest) {
-        interest.pull = clampNeed((interest.pull || 0.4) + 0.12);
-        interest.question = wandering.interest.question || interest.question;
-        if (interest.pull > 0.65) interest.stage = "pursuing";
-      } else {
-        mabel.interests.push(wandering.interest);
-        addFeedEntry({
-          kind: "mind",
-          text: "A question from Mabel’s wandering stayed with her: " + wandering.interest.title + ".",
-          why: wandering.interest.question,
-          interest: wandering.interest.id
-        });
+      if (goal) {
+        goal.steps = Array.isArray(goal.steps) ? goal.steps : [];
+        const step = String(data.goalProgress.step || research.researchSummary || "").slice(0, 260);
+        if (step) {
+          goal.steps.unshift({ at: now(), text: step, source: research.sourceTitle, url: research.url });
+          goal.steps.length = Math.min(goal.steps.length, 12);
+          goal.progress = goal.steps.length;
+          goal.lastStep = step;
+          goal.lastSource = { title: research.sourceTitle, url: research.url };
+          goal.nextQuestion = data.goalProgress.nextQuestion || goal.question;
+          goal.question = goal.nextQuestion;
+          goal.stage = "pursuing";
+        }
       }
     }
 
-    const activeGoal = wandering.goalProgress && mabel.interests.find(function (item) {
-      return item.id === wandering.goalProgress.id;
-    });
-    if (activeGoal) {
-      activeGoal.steps = Array.isArray(activeGoal.steps) ? activeGoal.steps : [];
-      const step = String(wandering.goalProgress.step || wandering.researchSummary || "").slice(0, 260);
-      if (step) {
-        activeGoal.steps.unshift({ at: now(), text: step, source: wandering.sourceTitle || "", url: wandering.url || "" });
-        activeGoal.steps.length = Math.min(activeGoal.steps.length, 12);
-        activeGoal.progress = activeGoal.steps.length;
-        activeGoal.lastStep = step;
-        activeGoal.lastPursuedAt = now();
-        activeGoal.lastSource = { title: wandering.sourceTitle || "", url: wandering.url || "" };
-        activeGoal.nextQuestion = wandering.goalProgress.nextQuestion || activeGoal.question;
-        activeGoal.question = activeGoal.nextQuestion;
-        activeGoal.stage = "pursuing";
-        addFeedEntry({
-          kind: "mind",
-          text: "Mabel made a step in " + activeGoal.title + ": " + step,
-          why: wandering.researchSummary || "She followed a source and kept a note.",
-          interest: activeGoal.id
-        });
-      }
-    }
-
-    ensureHollowWorld();
-    mabel.needs.food = clampNeed(mabel.needs.food - 0.025);
-    mabel.needs.water = clampNeed(mabel.needs.water - 0.035);
-    mabel.needs.rest = clampNeed(mabel.needs.rest - 0.04);
-
-    const finds = Array.isArray(wandering.finds) ? wandering.finds : [];
-    finds.forEach(function (found) {
-      const kind = ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure";
-      const name = String(found.name || "something small").slice(0, 80);
-      const note = String(found.note || "").slice(0, 160);
-
-      if (kind === "food") {
-        if (mabel.needs.food < 0.58) {
-          mabel.needs.food = clampNeed(mabel.needs.food + 0.24);
-          addFeedEntry({ kind: "did", text: "Mabel found and ate " + name + ".", why: note || "She was hungry." });
-        } else {
-          bindle.food.unshift({ name: name, note: note });
-          bindle.food.length = Math.min(bindle.food.length, 8);
-        }
-      } else if (kind === "water") {
-        if (mabel.needs.water < 0.58) {
-          mabel.needs.water = clampNeed(mabel.needs.water + 0.26);
-          addFeedEntry({ kind: "did", text: "Mabel found water and had a drink.", why: note || name });
-        } else {
-          bindle.water.unshift({ name: name, note: note });
-          bindle.water.length = Math.min(bindle.water.length, 5);
-        }
-      } else {
-        bindle.treasures.unshift({ name: name, note: note });
-        bindle.treasures.length = Math.min(bindle.treasures.length, 12);
-        mabel.world.objects.unshift({
-          name: name,
-          at: now(),
-          source: "wandering",
-          note: note,
-          reaction: ""
-        });
-        mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
-        mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
-      }
-    });
-
-    saveBindle();
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.1);
-    mabel.now.doing = wandering.searchQuestion
-      ? "looking up " + wandering.searchQuestion
-      : "following a question from her wandering";
-    mabel.now.thought = wandering.musing || wandering.researchSummary || mabel.now.thought;
+    mabel.needs.rest = clampNeed(mabel.needs.rest - 0.015);
+    mabel.now.doing = "researching " + focusInterest.title;
+    mabel.now.thought = research.musing || research.researchSummary || focusInterest.question || mabel.now.thought;
     mabel.now.mood = "curious";
     mabel.now.updatedAt = now();
-    mabel.now.energy = clampNeed(
-      0.18 + mabel.needs.rest * 0.5 + Math.min(mabel.needs.food, mabel.needs.water) * 0.32
-    );
-
     addFeedEntry({
       kind: "noticed",
-      text: "Mabel pondered: " + (wandering.searchQuestion || wandering.title) + ".",
-      why: [wandering.boardNote ? "A visitor’s noticeboard note led her here." : "", wandering.researchSummary, wandering.musing].filter(Boolean).join(" ")
+      text: "Mabel researched: " + research.searchQuestion + ".",
+      why: [research.researchMethod, research.researchSummary].filter(Boolean).join(" ")
     });
-
-    if (wandering.boardNote) {
-      addFeedEntry({
-        kind: "noticed",
-        text: "Mabel read a note left by " + wandering.boardNote.name + " on the Visitors’ board.",
-        why: wandering.boardNote.message
-      });
-    }
-    if (finds.length > 0) {
-      addFeedEntry({
-        kind: "noticed",
-        text: "Mabel found: " + finds.map(function (found) { return found.name || "something small"; }).join(", ") + ".",
-        why: "She decided what to eat, save, or bring home."
-      });
-    }
 
     saveMabel();
     updatePage();
-    updateHomeObjects();
     if (wanderStatus) {
-      wanderStatus.textContent = autonomous
-        ? "Mabel has come home with something to think about."
-        : "Mabel has come back with a question and a few things she found.";
+      wanderStatus.textContent = relevant
+        ? "Mabel finished looking into " + focusInterest.title + "."
+        : "Mabel kept the question, but did not find a useful page about it this time.";
     }
   } catch (error) {
-    if (wanderStatus) {
-      wanderStatus.textContent = "Mabel could not finish this wandering just now. Her home and needs are unchanged.";
-    }
-  } finally {
-    if (wanderButton) wanderButton.disabled = false;
+    if (wanderStatus) wanderStatus.textContent = "The library connection is quiet for now. Mabel will try again later.";
   }
 }
 
