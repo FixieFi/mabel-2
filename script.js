@@ -212,64 +212,115 @@ function renderMabelCard(artwork) {
   title.textContent = artwork.title;
 
   let seed = 0;
-  const seedText = (artwork.title || "") + (artwork.note || "");
+  const seedText = (artwork.title || "") + (artwork.note || "") + (artwork.motif || "");
 
   for (let i = 0; i < seedText.length; i += 1) {
     seed = (seed * 31 + seedText.charCodeAt(i)) % 100000;
   }
 
-  const palette = {
-    lavender: "#b9a7d9",
-    moss: "#7d9b76",
-    cream: "#f3e7cf",
-    dusk: "#6f6a8f",
-    berry: "#8d4f63",
-    rain: "#7f9bb3",
-    lantern: "#e0b45c"
-  };
+  function nextRandom() {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  }
 
-  const colours = Array.isArray(artwork.colours) && artwork.colours.length
-    ? artwork.colours
-    : ["lavender", "moss", "cream"];
+  const fallbackPalette = ["#7d9b76", "#2f3b52", "#e8dcc3"];
+  const palette = Array.isArray(artwork.palette) && artwork.palette.length >= 2
+    ? artwork.palette
+    : fallbackPalette;
 
-  const artworkColours = colours.map(function (colour) {
-    return palette[colour.toLowerCase()] || "#c9c2b4";
-  });
-
-  const gridSize = 7;
-  const cellSize = 16;
+  const motif = artwork.motif || "mist";
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 112 112");
+  svg.setAttribute("viewBox", "0 0 160 160");
   svg.setAttribute("class", "mabel-artwork-svg");
 
-  for (let row = 0; row < gridSize; row += 1) {
-    for (let column = 0; column < gridSize; column += 1) {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
+  const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  background.setAttribute("width", "160");
+  background.setAttribute("height", "160");
+  background.setAttribute("fill", palette[0]);
+  svg.appendChild(background);
 
-      const cell = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      cell.setAttribute("x", column * cellSize);
-      cell.setAttribute("y", row * cellSize);
-      cell.setAttribute("width", cellSize);
-      cell.setAttribute("height", cellSize);
-      cell.setAttribute("fill", artworkColours[seed % artworkColours.length]);
-      cell.setAttribute("opacity", 0.25 + ((seed % 70) / 100));
+  function addCircle(x, y, radius, colour, opacity) {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", radius);
+    circle.setAttribute("fill", colour);
+    circle.setAttribute("opacity", opacity);
+    svg.appendChild(circle);
+  }
 
-      svg.appendChild(cell);
+  function addLine(x1, y1, x2, y2, colour, width, opacity) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1);
+    line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2);
+    line.setAttribute("y2", y2);
+    line.setAttribute("stroke", colour);
+    line.setAttribute("stroke-width", width);
+    line.setAttribute("opacity", opacity);
+    svg.appendChild(line);
+  }
+
+  if (motif === "rain") {
+    for (let i = 0; i < 22; i += 1) {
+      const x = nextRandom() * 160;
+      const y = nextRandom() * 120;
+      addLine(x, y, x - 4, y + 18, palette[2], 1.5, 0.35 + nextRandom() * 0.4);
+    }
+    addCircle(110, 35, 14, palette[1], 0.55);
+  }
+
+  if (motif === "night") {
+    for (let i = 0; i < 28; i += 1) {
+      addCircle(nextRandom() * 160, nextRandom() * 160, nextRandom() * 2 + 0.5, palette[2], 0.4 + nextRandom() * 0.5);
+    }
+    addCircle(115, 40, 18, palette[2], 0.75);
+  }
+
+  if (motif === "bloom") {
+    for (let i = 0; i < 9; i += 1) {
+      const angle = (i / 9) * Math.PI * 2;
+      const x = 80 + Math.cos(angle) * 34;
+      const y = 80 + Math.sin(angle) * 34;
+      addCircle(x, y, 12 + nextRandom() * 8, palette[i % palette.length], 0.45);
+    }
+    addCircle(80, 80, 10, palette[2], 0.85);
+  }
+
+  if (motif === "threads") {
+    for (let i = 0; i < 7; i += 1) {
+      const y = 20 + i * 20;
+      addLine(0, y, 160, y + (nextRandom() * 40 - 20), palette[i % palette.length], 1.5, 0.5);
+    }
+    addCircle(nextRandom() * 120 + 20, nextRandom() * 120 + 20, 6, palette[2], 0.8);
+  }
+
+  if (motif === "roots") {
+    for (let i = 0; i < 9; i += 1) {
+      const x = 20 + i * 15;
+      addLine(x, 160, x + (nextRandom() * 30 - 15), 60 + nextRandom() * 50, palette[1], 2, 0.55);
+    }
+    addCircle(80, 45, 20, palette[2], 0.5);
+  }
+
+  if (motif === "mist") {
+    for (let i = 0; i < 14; i += 1) {
+      addCircle(nextRandom() * 160, nextRandom() * 160, 16 + nextRandom() * 24, palette[i % palette.length], 0.16 + nextRandom() * 0.2);
     }
   }
 
-  for (let mark = 0; mark < 4; mark += 1) {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
+  if (motif === "embers") {
+    for (let i = 0; i < 20; i += 1) {
+      addCircle(nextRandom() * 160, nextRandom() * 160, 2 + nextRandom() * 5, palette[1 + (i % 2)], 0.4 + nextRandom() * 0.5);
+    }
+  }
 
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", 8 + (seed % 96));
-    circle.setAttribute("cy", 8 + ((seed * 7) % 96));
-    circle.setAttribute("r", 3 + (seed % 4));
-    circle.setAttribute("fill", artworkColours[(seed + 1) % artworkColours.length]);
-    circle.setAttribute("opacity", 0.75);
-
-    svg.appendChild(circle);
+  if (motif === "stars") {
+    for (let i = 0; i < 35; i += 1) {
+      addCircle(nextRandom() * 160, nextRandom() * 160, nextRandom() * 1.8 + 0.4, palette[2], 0.35 + nextRandom() * 0.55);
+    }
+    addCircle(120, 35, 10, palette[1], 0.7);
   }
 
   const drawing = document.createElement("div");
