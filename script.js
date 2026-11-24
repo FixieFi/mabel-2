@@ -209,43 +209,79 @@ function renderMabelCard(artwork) {
 
   const title = document.createElement("p");
   title.className = "mabel-artwork-title";
-  title.textContent = "✿ " + artwork.title + " ✿";
+  title.textContent = artwork.title;
+
+  const seedText = (artwork.title || "") + (artwork.note || "");
+  let seed = 0;
+
+  for (let i = 0; i < seedText.length; i += 1) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) % 100000;
+  }
+
+  const colours = Array.isArray(artwork.colours) && artwork.colours.length
+    ? artwork.colours
+    : ["lavender", "moss", "cream"];
+
+  const palette = {
+    lavender: "#b9a7d9",
+    moss: "#7d9b76",
+    cream: "#f3e7cf",
+    dusk: "#6f6a8f",
+    berry: "#8d4f63",
+    rain: "#7f9bb3",
+    lantern: "#e0b45c"
+  };
+
+  const artworkColours = colours.map(function (colour) {
+    return palette[colour.toLowerCase()] || "#c9c2b4";
+  });
+
+  const gridSize = 7;
+  const cellSize = 16;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 112 112");
+  svg.setAttribute("class", "mabel-artwork-svg");
+
+  for (let row = 0; row < gridSize; row += 1) {
+    for (let column = 0; column < gridSize; column += 1) {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+
+      const colour = artworkColours[seed % artworkColours.length];
+      const opacity = 0.25 + ((seed % 70) / 100);
+
+      const cell = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      cell.setAttribute("x", column * cellSize);
+      cell.setAttribute("y", row * cellSize);
+      cell.setAttribute("width", cellSize);
+      cell.setAttribute("height", cellSize);
+      cell.setAttribute("fill", colour);
+      cell.setAttribute("opacity", opacity);
+
+      svg.appendChild(cell);
+    }
+  }
+
+  for (let mark = 0; mark < 4; mark += 1) {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+
+    const x = 8 + (seed % 96);
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    const y = 8 + (seed % 96);
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", 3 + (seed % 4));
+    circle.setAttribute("fill", artworkColours[(seed + 1) % artworkColours.length]);
+    circle.setAttribute("opacity", 0.75);
+
+    svg.appendChild(circle);
+  }
 
   const drawing = document.createElement("div");
   drawing.className = "mabel-artwork-drawing";
-
-  const symbolMap = {
-    mouse: "🐭",
-    lantern: "🏮",
-    flower: "✿",
-    leaf: "🍃",
-    rain: "☔",
-    moon: "☾",
-    star: "✦",
-    nest: "🪹",
-    bramble: "🌿",
-    blackberry: "🫐",
-    shell: "🐚",
-    feather: "🪶",
-    light: "✧",
-    heart: "♡"
-  };
-
-  const symbols = Array.isArray(artwork.symbols) ? artwork.symbols : [];
-
-  symbols.forEach(function (symbol) {
-    const symbolElement = document.createElement("span");
-    symbolElement.className = "mabel-artwork-symbol";
-    symbolElement.textContent = symbolMap[symbol] || "✿";
-    drawing.appendChild(symbolElement);
-  });
-
-  if (symbols.length === 0) {
-    const symbolElement = document.createElement("span");
-    symbolElement.className = "mabel-artwork-symbol";
-    symbolElement.textContent = "✿";
-    drawing.appendChild(symbolElement);
-  }
+  drawing.appendChild(svg);
 
   const note = document.createElement("p");
   note.className = "mabel-artwork-note";

@@ -465,3 +465,14 @@ footer {
   font-size: 0.9rem;
   font-style: italic;
 }
+
+.mabel-artwork-svg {
+  width: 140px;
+  height: 140px;
+  border-radius: 10px;
+  display: block;
+}
+
+.mabel-artwork-drawing {
+  margin: 10px 0;
+}
