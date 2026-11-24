@@ -1661,7 +1661,7 @@ function chooseGift(event) {
   const gifts = {
     food: ["a blackberry", "three sunflower seeds", "a fallen hazelnut", "a little oat crumb"],
     water: ["a sip of clean rainwater in a curled leaf", "a bead of dew", "a small cup of fresh water"],
-    surprise: ["a red toy dinosaur", "a Sharpie cap", "a tiny paper party hat", "a shiny bottle cap", "a little plastic horse", "one bright button"]
+    surprise: ["a dried flower tied with thread", "a smooth shell", "a little brass bell", "a pale green glass pebble", "a scrap of soft blue cloth", "a tiny wooden bead"]
   };
   const options = gifts[kind] || gifts.surprise;
   queueHomeGift(options[Math.floor(Math.random() * options.length)], kind);
@@ -2234,7 +2234,13 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
     const reflection = await response.json();
 
     addVisitorProfileNote("facts", reflection.visitorNote);
-    addVisitorProfileNote("moments", reflection.sharedMoment);
+    if (reflection.sharedMoment) {
+      addFeedEntry({
+        kind: "mind",
+        text: reflection.sharedMoment,
+        why: "A moment from Mabel’s side of the conversation."
+      });
+    }
 
 if (reflection.spark && reflection.spark.title && !sparkCandidate) {
       recordSpark(reflection.spark);
