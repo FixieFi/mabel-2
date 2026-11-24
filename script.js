@@ -1434,6 +1434,39 @@ async function handleVisitorMessage() {
 
     const data = await response.json();
 
+if (data.spark && data.spark.title) {
+  const existingSpark = sparks.find(function (spark) {
+    return spark.id === data.spark.id;
+  });
+
+  if (existingSpark) {
+    existingSpark.pull = Math.min(
+      1,
+      (existingSpark.pull || 0.4) + 0.1
+    );
+  } else {
+    sparks.unshift({
+      id: data.spark.id || "spark-" + Date.now(),
+      title: data.spark.title,
+      question: data.spark.question || "",
+      reason: data.spark.reason || "",
+      source: "conversation",
+      pull: data.spark.pull || 0.5,
+      stage: "spark",
+      createdAt: now()
+    });
+  }
+
+  saveSparks();
+
+  replyElement.append(document.createElement("br"));
+
+  const sparkNotice = document.createElement("p");
+  sparkNotice.className = "spark-notice";
+  sparkNotice.textContent = "This has piqued Mabel’s interest.";
+  replyElement.appendChild(sparkNotice);
+}
+
     replyElement.textContent = data.reply;
 
     reflectOnConversation(message, data.reply);
