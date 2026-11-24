@@ -386,6 +386,44 @@ function renderMabelCard(artwork) {
       const y = cy + (random() - 0.5) * 78;
       ellipse(x, y, 1 + random() * 4, 2 + random() * 7, palette[1 + (i % 2)], 0.3 + random() * 0.55, -45 + random() * 90);
     }
+  } else if (motif === "memory") {
+    const cx = 35 + random() * 90;
+    const cy = 35 + random() * 90;
+    for (let i = 0; i < 4; i += 1) {
+      ellipse(cx + (random() - 0.5) * 16, cy + (random() - 0.5) * 16,
+        12 + i * 5, 8 + i * 4, "none", 0.55 - i * 0.08, random() * 35 - 18);
+      path("M " + (cx - 12 - i * 3) + " " + (cy + 13 + i * 4) +
+        " Q " + cx + " " + (cy + 20 + i * 5) + " " + (cx + 18 + i * 3) + " " + (cy + 8 + i * 3),
+        palette[(i + 1) % 3], 1 + random() * 1.2, 0.4);
+    }
+  } else if (motif === "moss") {
+    for (let i = 0; i < 24 + Math.floor(random() * 20); i += 1) {
+      const x = random() * 160;
+      const y = 95 + random() * 70;
+      softBlob(x, y, 4 + random() * 12, 3 + random() * 8,
+        palette[1 + Math.floor(random() * 2)], 0.2 + random() * 0.38);
+    }
+  } else if (motif === "path") {
+    const startX = 25 + random() * 100;
+    const endX = 25 + random() * 100;
+    path("M " + startX + " 165 C " + (startX - 24 + random() * 48) + " 125, " +
+      (endX - 28 + random() * 56) + " 70, " + endX + " -5",
+      palette[2], 5 + random() * 6, 0.38);
+    path("M " + startX + " 165 C " + (startX - 24 + random() * 48) + " 125, " +
+      (endX - 28 + random() * 56) + " 70, " + endX + " -5",
+      palette[1], 1 + random() * 1.4, 0.72);
+    for (let i = 0; i < 8; i += 1) {
+      ellipse(20 + random() * 120, 20 + random() * 125, 1 + random() * 3, 1 + random() * 3,
+        palette[2], 0.6, 0);
+    }
+  } else if (motif === "echo") {
+    const cx = 35 + random() * 90;
+    const cy = 35 + random() * 90;
+    for (let i = 0; i < 7; i += 1) {
+      path("M " + (cx - i * 6) + " " + cy + " A " + (8 + i * 6) + " " +
+        (5 + i * 5) + " 0 1 0 " + (cx + i * 6) + " " + (cy + random() * 8),
+        palette[1 + (i % 2)], 0.8 + random() * 1.6, 0.25 + random() * 0.35);
+    }
   } else {
     const drift = 15 + random() * 50;
     for (let i = 0; i < 6 + Math.floor(random() * 8); i += 1) {
@@ -429,6 +467,39 @@ function renderMabelCard(artwork) {
       ellipse(x + size * 0.25, y - size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
       ellipse(x - size * 0.25, y + size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
       ellipse(x + size * 0.25, y + size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
+    },
+    seed: function (x, y, size) {
+      ellipse(x, y, size * 0.5, size, palette[1], 0.8, -35);
+      path("M " + x + " " + (y + size * 0.7) + " Q " + (x - 3) + " " + (y - size) +
+        " " + (x + size) + " " + (y - size * 1.5), palette[2], 0.9, 0.75);
+    },
+    raindrop: function (x, y, size) {
+      path("M " + x + " " + (y - size) + " Q " + (x + size) + " " + y + " " + x + " " +
+        (y + size) + " Q " + (x - size) + " " + y + " " + x + " " + (y - size),
+        palette[2], 1, 0.76, palette[1]);
+    },
+    stone: function (x, y, size) {
+      softBlob(x, y, size * 1.4, size, palette[1], 0.74);
+      path("M " + (x - size * 0.5) + " " + y + " Q " + x + " " + (y - size * 0.6) +
+        " " + (x + size * 0.5) + " " + (y - size * 0.35), palette[2], 0.8, 0.6);
+    },
+    doorway: function (x, y, size) {
+      path("M " + (x - size) + " " + (y + size) + " L " + (x - size) + " " + y +
+        " Q " + x + " " + (y - size * 1.7) + " " + (x + size) + " " + y +
+        " L " + (x + size) + " " + (y + size), palette[2], 1.5, 0.78);
+      ellipse(x + size * 0.45, y, 0.8, 0.8, palette[1], 0.9, 0);
+    },
+    shell: function (x, y, size) {
+      path("M " + x + " " + y + " C " + (x + size * 2) + " " + (y - size * 2) +
+        ", " + (x + size * 2) + " " + (y + size * 2) + ", " + x + " " + y +
+        " C " + (x + size) + " " + (y - size) + ", " + (x + size) + " " + (y + size) +
+        ", " + x + " " + y, palette[1], 1.1, 0.75);
+    },
+    twig: function (x, y, size) {
+      path("M " + (x - size) + " " + (y + size) + " Q " + x + " " + y + " " +
+        (x + size) + " " + (y - size), palette[1], 1.5, 0.8);
+      path("M " + x + " " + y + " Q " + (x - size) + " " + (y - size) + " " +
+        (x - size * 0.8) + " " + (y - size * 1.3), palette[2], 0.9, 0.7);
     }
   };
 
