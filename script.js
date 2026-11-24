@@ -231,6 +231,7 @@ function renderMabelCard(artwork) {
   }
 
   const motif = typeof artwork.motif === "string" ? artwork.motif : "memory";
+  const subject = typeof artwork.subject === "string" ? artwork.subject.toLowerCase() : (artwork.selfPortrait ? "mabel" : "");
   const symbols = Array.isArray(artwork.symbols) ? artwork.symbols.slice(0, 3) : [];
   const namespace = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(namespace, "svg");
@@ -516,6 +517,48 @@ function renderMabelCard(artwork) {
       drawer(25 + random() * 100, 25 + random() * 100, 4 + random() * 8);
     }
   });
+
+  if (subject === "mabel") {
+    node("image", {
+      href: new URL("images/mabel.png", window.location.href).href,
+      x: "37", y: "25", width: "86", height: "105",
+      preserveAspectRatio: "xMidYMid meet", opacity: "0.72"
+    });
+  } else if (subject === "cat") {
+    const cx = 78 + random() * 8;
+    const cy = 82 + random() * 8;
+    path("M " + (cx - 27) + " " + (cy - 14) + " L " + (cx - 31) + " " + (cy - 42) +
+      " Q " + (cx - 18) + " " + (cy - 35) + " " + (cx - 10) + " " + (cy - 29) +
+      " Q " + cx + " " + (cy - 34) + " " + (cx + 10) + " " + (cy - 29) +
+      " Q " + (cx + 22) + " " + (cy - 36) + " " + (cx + 30) + " " + (cy - 42) +
+      " L " + (cx + 27) + " " + (cy - 12) + " Q " + (cx + 34) + " " + cy + " " +
+      (cx + 28) + " " + (cy + 20) + " Q " + cx + " " + (cy + 42) + " " +
+      (cx - 28) + " " + (cy + 20) + " Q " + (cx - 36) + " " + cy + " " +
+      (cx - 27) + " " + (cy - 14) + " Z", palette[1], 2, 0.84, palette[1]);
+    ellipse(cx - 12, cy - 4, 2.2, 3, "#432a5e", 0.9, 0);
+    ellipse(cx + 12, cy - 4, 2.2, 3, "#432a5e", 0.9, 0);
+    path("M " + (cx - 4) + " " + (cy + 7) + " Q " + cx + " " + (cy + 12) + " " + (cx + 4) + " " + (cy + 7),
+      "#432a5e", 1.3, 0.8);
+    path("M " + (cx - 4) + " " + (cy + 8) + " L " + cx + " " + (cy + 12) + " L " + (cx + 4) + " " + (cy + 8),
+      palette[2], 1.2, 0.95, palette[2]);
+    path("M " + (cx - 18) + " " + (cy + 9) + " Q " + (cx - 32) + " " + (cy + 7) + " " + (cx - 39) + " " + (cy + 5) +
+      " M " + (cx - 18) + " " + (cy + 13) + " Q " + (cx - 32) + " " + (cy + 15) + " " + (cx - 38) + " " + (cy + 17) +
+      " M " + (cx + 18) + " " + (cy + 9) + " Q " + (cx + 32) + " " + (cy + 7) + " " + (cx + 39) + " " + (cy + 5) +
+      " M " + (cx + 18) + " " + (cy + 13) + " Q " + (cx + 32) + " " + (cy + 15) + " " + (cx + 38) + " " + (cy + 17),
+      palette[2], 0.9, 0.7);
+  } else if (subject === "fossil") {
+    const cx = 80 + random() * 8;
+    const cy = 82 + random() * 8;
+    softBlob(cx, cy, 35, 27, palette[1], 0.68);
+    path("M " + (cx + 4) + " " + (cy + 16) + " C " + (cx - 20) + " " + (cy + 16) + " " +
+      (cx - 18) + " " + (cy - 10) + " " + (cx + 1) + " " + (cy - 10) +
+      " C " + (cx + 18) + " " + (cy - 10) + " " + (cx + 17) + " " + (cy + 7) + " " +
+      (cx + 4) + " " + (cy + 7) + " C " + (cx - 5) + " " + (cy + 7) + " " +
+      (cx - 4) + " " + (cy - 1) + " " + (cx + 3) + " " + (cy - 1),
+      palette[2], 2, 0.88);
+  } else if (subject === "button") {
+    symbolMarks.button(80, 80, 22);
+  }
 
   for (let i = 0; i < 45; i += 1) {
     ellipse(random() * 160, random() * 160, 0.3 + random() * 0.8, 0.3 + random() * 0.8,
@@ -1440,6 +1483,25 @@ function addVisitorProfileNote(listName, value) {
   saveVisitorProfile();
 }
 
+function captureVisitorFacts(message) {
+  const beforeCount = visitorProfile.facts.length;
+  const text = String(message || "");
+  const nameMatch = text.match(/\b(?:my name is|my name's|call me)\s+([A-Za-zÀ-ÖØ-öø-ÿ'-]{2,32})\b/i);
+  if (nameMatch && !/^(not|just|anonymous|visitor|mabel)$/i.test(nameMatch[1])) {
+    addVisitorProfileNote("facts", "Their name is " + nameMatch[1].trim() + ".");
+  }
+  const favoriteMatch = text.match(/\bmy favorite\s+([a-z ]{2,24})\s+is\s+([^.!?\n]{2,100})/i);
+  if (favoriteMatch) {
+    addVisitorProfileNote("facts", "Their favorite " + favoriteMatch[1].trim() + " is " + favoriteMatch[2].trim() + ".");
+  }
+  const preferenceMatch = text.match(/\bI\s+(?:really\s+)?(like|love|enjoy|adore|am interested in)\s+([^.!?\n]{2,120})/i);
+  if (preferenceMatch) {
+    const verb = preferenceMatch[1].toLowerCase() === "am interested in" ? "are interested in" : preferenceMatch[1].toLowerCase() + " ";
+    addVisitorProfileNote("facts", "They " + verb + preferenceMatch[2].trim().replace(/[,;:]$/, "") + ".");
+  }
+  if (visitorProfile.facts.length !== beforeCount) updateVisitorProfile();
+}
+
 function updateVisitorProfile() {
   const factList = document.getElementById("visitor-profile-facts");
   const momentList = document.getElementById("visitor-profile-moments");
@@ -1546,7 +1608,7 @@ function updateHomeObjects() {
     item.appendChild(name);
     if (object.status === "waiting") {
       const waiting = document.createElement("p");
-      waiting.textContent = "Waiting for Mabel to notice.";
+      waiting.textContent = "Waiting for one of Mabel’s quiet moments.";
       item.appendChild(waiting);
     }
     if (object.reaction) {
@@ -1594,7 +1656,7 @@ async function queueHomeGift(objectName, giftKind) {
   saveMabel();
   updateHomeObjects();
   const status = document.getElementById("hollow-status");
-  if (status) status.textContent = "Your gift is at home. Mabel will notice it when she gets around to it.";
+  if (status) status.textContent = "Your gift is at home. Mabel may notice it during her next quiet moment while this page is open.";
 }
 
 function chooseGift(event) {
@@ -1622,6 +1684,22 @@ function handleIntroducedObject(event) {
 }
 
 
+function requestedArtworkSubject(message) {
+  const text = String(message || "").toLowerCase();
+  if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:yourself|mabel)|picture of (?:you|mabel))\b/.test(text)) return "mabel";
+  const subjects = [
+    ["power ranger", "power ranger"], ["cat|kitten", "cat"], ["dog|puppy", "dog"],
+    ["rabbit|bunny", "rabbit"], ["fox", "fox"], ["bird|robin|sparrow", "bird"],
+    ["flower|bouquet", "flower"], ["mushroom|toadstool", "mushroom"],
+    ["fossil", "fossil"], ["button", "button"], ["shell", "shell"],
+    ["moon", "moon"], ["star", "star"], ["fish", "fish"], ["house|cottage", "house"]
+  ];
+  for (const [pattern, subject] of subjects) {
+    if (new RegExp("\\b(?:" + pattern + ")\\b", "i").test(text)) return subject;
+  }
+  return "";
+}
+
 function makeMabelFallbackArtwork(context) {
   const palettes = [
     ["#718778", "#b77769", "#e9d8b7"],
@@ -1634,22 +1712,33 @@ function makeMabelFallbackArtwork(context) {
   const symbols = ["leaf", "moon", "berry", "feather", "button", "seed", "raindrop", "stone", "doorway", "shell", "twig"];
   const activity = context.activity || mabel.now.doing || "listening beneath the hawthorn";
   const mood = context.mood || mabel.now.mood || "quiet";
+  const subject = requestedArtworkSubject(context.message);
   const hint = ((context.message || "") + " " + activity + " " + mood).toLowerCase();
-  const motif = hint.includes("rain") || hint.includes("water")
-    ? "rain"
-    : hint.includes("flower") || hint.includes("bloom")
-      ? "bloom"
+  const motif = subject === "flower" || hint.includes("flower") || hint.includes("bloom")
+    ? "bloom"
+    : hint.includes("rain") || hint.includes("water")
+      ? "rain"
       : hint.includes("night") || hint.includes("moon")
         ? "night"
         : motifs[Math.floor(Math.random() * motifs.length)];
 
   return {
-    title: "Mabel's " + mood + " marks",
+    title: subject === "mabel"
+      ? "Mabel, as Mabel remembers herself"
+      : subject
+        ? "Mabel's little study of a " + subject
+        : "Mabel's " + mood + " marks",
     kind: "moment",
     palette: palettes[Math.floor(Math.random() * palettes.length)],
     motif: motif,
-    symbols: [symbols[Math.floor(Math.random() * symbols.length)]],
-    note: "She kept a small piece of " + activity + ".",
+    subject: subject,
+    selfPortrait: subject === "mabel",
+    symbols: [subject === "button" ? "button" : symbols[Math.floor(Math.random() * symbols.length)]],
+    note: subject === "mabel"
+      ? "She used the picture by her nest as a starting point, then let the colours wander."
+      : subject
+        ? "She let the shape of a " + subject + " lead the marks somewhere unexpected."
+        : "She kept a small piece of " + activity + ".",
     seed: (Date.now() ^ Math.floor(Math.random() * 2147483647)) >>> 0
   };
 }
@@ -1666,18 +1755,14 @@ async function requestMabelArtwork(context, targetElement) {
       body: JSON.stringify({
         source: source,
         message: context.message || "",
+        requestedSubject: requestedArtworkSubject(context.message),
+        selfPortrait: requestedArtworkSubject(context.message) === "mabel",
+        referenceImageUrl: new URL("images/mabel.png", window.location.href).href,
         mood: context.mood || mabel.now.mood,
         activity: context.activity || mabel.now.doing,
         thought: context.thought || mabel.now.thought,
         needs: mabel.needs,
-        interests: boardNote
-          ? mabel.interests.concat([{
-              id: "visitor-note-" + Date.now(),
-              title: "A note left by a visitor: " + boardNote.message.slice(0, 100),
-              question: "Mabel read this note from " + boardNote.name + " on the Visitors’ noticeboard. What could she learn or wonder about from it?",
-              source: "Visitors’ noticeboard"
-            }])
-          : mabel.interests,
+        interests: mabel.interests,
         memories: mabel.memories.slice(0, 8),
         wanderings: wanderings.slice(0, 5),
         recentArtworks: gallery.slice(0, 6).map(function (item) {
@@ -1697,7 +1782,7 @@ async function requestMabelArtwork(context, targetElement) {
 
   const explicitRequest = source === "visitor" &&
     /\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(context.message || "");
-  if (!artwork && explicitRequest && !declined) {
+  if (!artwork && explicitRequest) {
     artwork = makeMabelFallbackArtwork(context);
   }
   if (!artwork) return null;
@@ -1719,6 +1804,7 @@ async function handleVisitorMessage() {
     return;
   }
 
+  captureVisitorFacts(message);
   replyElement.textContent = "Mabel is listening...";
 
   try {
@@ -1761,11 +1847,12 @@ async function handleVisitorMessage() {
 
     reflectOnConversation(message, data.reply, data.spark || null);
 
+    let requestedArtwork = null;
     if (/\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(message)) {
-      await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
+      requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
     }
 
-    if (data.artwork) {
+    if (data.artwork && !requestedArtwork) {
       const artworkCard = renderMabelCard(data.artwork);
 
       if (artworkCard) {
@@ -2746,6 +2833,15 @@ function startMabel() {
 
   if (sendButton) {
     sendButton.addEventListener("click", handleVisitorMessage);
+  }
+
+  if (messageElement) {
+    messageElement.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        handleVisitorMessage();
+      }
+    });
   }
 
   if (wanderButton) {
