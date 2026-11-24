@@ -2149,11 +2149,155 @@ async function noticeNextVisitorGift() {
   }
 }
 
+function visitorBoardNoteKey(note) {
+  return [
+    String(note && (note.id || note.createdAt) || ""),
+    String(note && note.name || "a visitor").trim(),
+    String(note && note.message || "").trim()
+  ].join("|").slice(0, 420);
+}
+
+async function noticeNextVisitorBoardNote() {
+  try {
+    const response = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const notes = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
+    const next = notes.find(function (note) {
+      return note && String(note.message || "").trim() &&
+        !boardReadKeys.includes(visitorBoardNoteKey(note));
+    });
+    if (!next) return null;
+
+    const key = visitorBoardNoteKey(next);
+    const message = String(next.message || "").trim().slice(0, 280);
+    const name = String(next.name || "a visitor").trim().slice(0, 40);
+
+    const reflection = await fetch(MABEL_AI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: "Mabel has taken a quiet moment to check the shared Visitors’ noticeboard. She reads the visitor’s note and responds to what it actually says.",
+        eventDetails: {
+          kind: "visitor-board-reading",
+          note: message,
+          author: name
+        },
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        interests: mabel.interests.slice(0, 8),
+        memories: mabel.memories.slice(0, 6)
+      })
+    });
+    if (!reflection.ok) return null;
+    const result = await reflection.json();
+
+    boardReadKeys.unshift(key);
+    boardReadKeys = boardReadKeys.slice(0, 100);
+    saveBoardReadKeys();
+
+    const reaction = String(result.reply || "").trim();
+    mabel.memories.unshift({
+      at: now(),
+      kind: "noticeboard",
+      text: "A visitor called " + name + " left this note: " + message
+    });
+    if (mabel.memories.length > 20) mabel.memories.length = 20;
+    addFeedEntry({
+      kind: "noticed",
+      text: "Mabel checked the Visitors’ board and noticed a note from " + name + ".",
+      why: reaction || message
+    });
+    if (reaction) showHollowSpeech(reaction);
+    saveMabel();
+    updatePage();
+    return { id: key, message: message, name: name };
+  } catch (error) {
+    // Mabel will check again at a later quiet moment.
+    return null;
+  }
+}
+
+function researchWords(value) {
+  const stopWords = new Set([
+    "about", "after", "again", "also", "from", "have", "into", "just", "mabel",
+    "might", "more", "other", "over", "she", "that", "their", "them", "there",
+    "these", "they", "this", "those", "what", "when", "where", "which", "while",
+    "with", "would", "your", "hers", "found", "finds", "thing", "things"
+  ]);
+  return normalizeInterestTitle(value).split(" ").filter(function (word) {
+    return word.length > 3 && !stopWords.has(word);
+  }).map(function (word) {
+    return word.endsWith("s") ? word.slice(0, -1) : word;
+  });
+}
+
+function researchMatchesFocus(text, focusInterest) {
+  if (!focusInterest) return true;
+  const focusWords = researchWords(focusInterest.title + " " + focusInterest.question);
+  const resultWords = new Set(researchWords(text));
+  return focusWords.some(function (word) { return resultWords.has(word); });
+}
+
+function chooseAutonomousResearchFocus(boardNote) {
+  const candidates = [];
+  if (boardNote) {
+    candidates.push({
+      id: "board-note-" + boardNote.id,
+      title: boardNote.message,
+      question: "Mabel read this note from " + boardNote.name + " on the Visitors’ board. Research a subject or distinctive phrase in the note, and keep the question directly connected to it.",
+      source: "visitor-board"
+    });
+  }
+
+  mabel.interests.forEach(function (interest) {
+    if (interest && interest.title) candidates.push(interest);
+  });
+
+  wanderings.slice(0, 8).forEach(function (outing) {
+    (Array.isArray(outing.finds) ? outing.finds : []).forEach(function (find) {
+      if (find && find.name) {
+        candidates.push({
+          id: "found-" + normalizeInterestTitle(find.name),
+          title: find.name,
+          question: "Mabel found " + find.name + " while exploring. Research what this exact object is, why it might be made or used, or what its history could be.",
+          source: "exploration"
+        });
+      }
+    });
+  });
+
+  ensureHollowWorld();
+  mabel.world.objects.slice(0, 10).forEach(function (object) {
+    if (object && object.name) {
+      candidates.push({
+        id: "world-" + normalizeInterestTitle(object.name),
+        title: object.name,
+        question: "Mabel came across " + object.name + " in her home world. Research this exact object and what makes it interesting.",
+        source: object.source || "hollow"
+      });
+    }
+  });
+
+  const recentFocus = new Set(researchLog.slice(0, 6).map(function (entry) {
+    return normalizeInterestTitle(entry.focusTitle || entry.searchQuestion);
+  }));
+  const fresh = candidates.filter(function (item, index) {
+    const key = normalizeInterestTitle(item.title);
+    return key && !recentFocus.has(key) &&
+      candidates.findIndex(function (other) { return normalizeInterestTitle(other.title) === key; }) === index;
+  });
+  const pool = fresh.length ? fresh : candidates;
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 async function handleAutonomousMoment() {
   lastAutonomousMoment = Date.now();
   saveLastAutonomousMoment();
 
   try {
+    const newBoardNote = await noticeNextVisitorBoardNote();
     await noticeNextVisitorGift();
     const response = await fetch(MABEL_DAY_URL, {
       method: "POST",
@@ -2166,9 +2310,6 @@ async function handleAutonomousMoment() {
         energy: mabel.now.energy,
         needs: mabel.needs,
         interests: mabel.interests,
-        focusInterest: options && options.interestId
-          ? mabel.interests.find(function (interest) { return interest.id === options.interestId; }) || null
-          : null,
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
         feed: mabel.feed.slice(0, 15),
@@ -2244,16 +2385,10 @@ async function handleAutonomousMoment() {
     saveMabel();
     updatePage();
 
-    const activeGoals = mabel.interests
-      .filter(function (interest) { return interest.stage === "growing" || interest.stage === "pursuing"; })
-      .sort(function (a, b) {
-        return new Date(a.lastPursuedAt || 0).getTime() - new Date(b.lastPursuedAt || 0).getTime();
-      });
     const canResearch = mabel.needs.food > 0.2 && mabel.needs.water > 0.2 && mabel.needs.rest > 0.2;
-    if (activeGoals.length && canResearch) {
-      await handleWander({ autonomous: true, interestId: activeGoals[0].id });
-    } else if (Math.random() < 0.35) {
-      await handleWander({ autonomous: true });
+    const researchFocus = chooseAutonomousResearchFocus(newBoardNote);
+    if (canResearch && researchFocus && Math.random() < 0.55) {
+      await handleWander({ autonomous: true, focusInterest: researchFocus });
     }
 
     autonomousMomentCount = autonomousMomentCount + 1;
