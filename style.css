@@ -394,3 +394,74 @@ footer {
   font-size: 0.9rem;
   font-style: italic;
 }
+
+.site-footer {
+  margin-top: 40px;
+  padding: 18px;
+  text-align: center;
+  color: var(--plum);
+  font-size: 0.9rem;
+  font-style: italic;
+  border-top: 1px solid rgba(107, 74, 143, 0.18);
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.gallery-intro {
+  margin-top: 0;
+  color: var(--plum);
+  font-style: italic;
+}
+
+.gallery-item {
+  padding: 14px;
+  background: rgba(243, 234, 255, 0.55);
+  border-left: 4px solid var(--soft-purple);
+  border-radius: 12px;
+}
+
+.gallery-item strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--deep-plum);
+}
+
+.mabel-artwork-card {
+  margin-top: 14px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(247, 200, 216, 0.35), transparent 35%),
+    rgba(255, 248, 238, 0.9);
+  border: 3px dashed rgba(107, 74, 143, 0.3);
+  border-radius: 18px;
+  text-align: center;
+}
+
+.mabel-artwork-title {
+  margin: 0 0 10px;
+  color: var(--deep-plum);
+  font-weight: bold;
+}
+
+.mabel-artwork-drawing {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(227, 209, 255, 0.45);
+  border-radius: 14px;
+  font-size: 1.8rem;
+}
+
+.mabel-artwork-symbol {
+  display: inline-block;
+}
+
+.mabel-artwork-note {
+  margin: 10px 0 0;
+  color: var(--plum);
+  font-size: 0.9rem;
+  font-style: italic;
+}

@@ -37,6 +37,7 @@ const wanderingsStorageKey = "mabel-wanderings-v1";
 const autonomousStorageKey = "mabel-autonomous-v1";
 const reflectionStorageKey = "mabel-last-reflection-date";
 const bindleStorageKey = "mabel-bindle-v1";
+const galleryStorageKey = "mabel-gallery-v1";
 
 const interestSeeds = [
   {
@@ -94,6 +95,7 @@ let bindle = {
   water: [],
   treasures: []
 };
+let gallery = [];
 
 function now() {
   return new Date().toISOString();
@@ -171,6 +173,144 @@ function saveLastAutonomousMoment() {
   } catch (error) {
     // Local storage may be unavailable.
   }
+}
+
+function saveGallery() {
+  try {
+    localStorage.setItem(galleryStorageKey, JSON.stringify(gallery));
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function loadGallery() {
+  try {
+    const saved = localStorage.getItem(galleryStorageKey);
+
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    // Fall through to an empty gallery.
+  }
+
+  return [];
+}
+
+function renderMabelCard(artwork) {
+  if (!artwork || !artwork.title) {
+    return null;
+  }
+
+  const card = document.createElement("div");
+  card.className = "mabel-artwork-card";
+
+  const title = document.createElement("p");
+  title.className = "mabel-artwork-title";
+  title.textContent = "✿ " + artwork.title + " ✿";
+
+  const drawing = document.createElement("div");
+  drawing.className = "mabel-artwork-drawing";
+
+  const symbolMap = {
+    mouse: "🐭",
+    lantern: "🏮",
+    flower: "✿",
+    leaf: "🍃",
+    rain: "☔",
+    moon: "☾",
+    star: "✦",
+    nest: "🪹",
+    bramble: "🌿",
+    blackberry: "🫐",
+    shell: "🐚",
+    feather: "🪶",
+    light: "✧",
+    heart: "♡"
+  };
+
+  const symbols = Array.isArray(artwork.symbols) ? artwork.symbols : [];
+
+  symbols.forEach(function (symbol) {
+    const symbolElement = document.createElement("span");
+    symbolElement.className = "mabel-artwork-symbol";
+    symbolElement.textContent = symbolMap[symbol] || "✿";
+    drawing.appendChild(symbolElement);
+  });
+
+  if (symbols.length === 0) {
+    const symbolElement = document.createElement("span");
+    symbolElement.className = "mabel-artwork-symbol";
+    symbolElement.textContent = "✿";
+    drawing.appendChild(symbolElement);
+  }
+
+  const note = document.createElement("p");
+  note.className = "mabel-artwork-note";
+  note.textContent = artwork.note || "Mabel made a little drawing to remember this.";
+
+  card.appendChild(title);
+  card.appendChild(drawing);
+  card.appendChild(note);
+
+  return card;
+}
+
+function saveToMabelGallery(artwork) {
+  if (!artwork || !artwork.title) {
+    return;
+  }
+
+  gallery.unshift({
+    at: now(),
+    ...artwork
+  });
+
+  if (gallery.length > 30) {
+    gallery.length = 30;
+  }
+
+  saveGallery();
+  updateGallery();
+}
+
+function updateGallery() {
+  const galleryElement = document.getElementById("gallery");
+
+  if (!galleryElement) {
+    return;
+  }
+
+  galleryElement.innerHTML = "";
+
+  if (gallery.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "Mabel has not made any little drawings yet.";
+    galleryElement.appendChild(item);
+    return;
+  }
+
+  gallery.forEach(function (artwork) {
+    const item = document.createElement("li");
+    item.className = "gallery-item";
+
+    const title = document.createElement("strong");
+    title.textContent = formatTime(artwork.at) + " — " + artwork.title;
+
+    const note = document.createElement("p");
+    note.textContent = artwork.note || "A little drawing Mabel made.";
+
+    item.appendChild(title);
+    item.appendChild(note);
+
+    const drawing = renderMabelCard(artwork);
+
+    if (drawing) {
+      item.appendChild(drawing);
+    }
+
+    galleryElement.appendChild(item);
+  });
 }
 
 function saveBindle() {
@@ -905,7 +1045,8 @@ function updatePage() {
   }
 
   updateWanderings();
-  updateBindle();
+    updateBindle();
+  updateGallery();
 }
 
 async function handleVisitorMessage() {
@@ -955,6 +1096,17 @@ async function handleVisitorMessage() {
     const data = await response.json();
 
     replyElement.textContent = data.reply;
+
+    if (data.artwork) {
+      const artworkCard = renderMabelCard(data.artwork);
+
+      if (artworkCard) {
+        replyElement.appendChild(document.createElement("br"));
+        replyElement.appendChild(artworkCard);
+      }
+
+      saveToMabelGallery(data.artwork);
+    }
 
     conversation.push({
       role: "assistant",
@@ -1556,6 +1708,7 @@ function startMabel() {
   lastAutonomousMoment = loadLastAutonomousMoment();
   lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
   bindle = loadBindle();
+  gallery = loadGallery();
 
   if (!mabel.needs) {
     mabel.needs = {
