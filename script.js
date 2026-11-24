@@ -33,7 +33,7 @@ const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
 
 const mabelStorageKey = "mabel-character-v5";
-const conversationStorageKey = "mabel-conversation-v2";
+const conversationStorageKey = "mabel-conversation-session-v3";
 const wanderingsStorageKey = "mabel-wanderings-v1";
 const sparksStorageKey = "mabel-sparks-v1";
 const autonomousStorageKey = "mabel-autonomous-v1";
@@ -93,18 +93,19 @@ function loadMabel() {
 
 function saveConversation() {
   try {
-    localStorage.setItem(conversationStorageKey, JSON.stringify(conversation));
+    sessionStorage.setItem(conversationStorageKey, JSON.stringify(conversation));
   } catch (error) {
-    // Local storage may be unavailable.
+    // Session storage may be unavailable.
   }
 }
 
 function loadConversation() {
   try {
-    const saved = localStorage.getItem(conversationStorageKey);
+    const saved = sessionStorage.getItem(conversationStorageKey);
 
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.slice(-12) : [];
     }
   } catch (error) {
     // Fall through to an empty conversation.
@@ -734,6 +735,11 @@ function chooseAction() {
     actionNames.push("sit_by_the_path");
   }
 
+  const activeInterests = mabel.interests.filter(function (interest) {
+    return interest.stage === "growing" || interest.stage === "pursuing";
+  });
+  const pursueInterest = activeInterests.length > 0 &&
+    Math.random() < Math.min(0.6, 0.2 + activeInterests[0].pull * 0.35);
   const chosen = actionNames[Math.floor(Math.random() * actionNames.length)];
 
   const actionText = {
@@ -782,9 +788,18 @@ function chooseAction() {
   };
 
   mabel.now.updatedAt = now();
-  mabel.now.doing = actionText[chosen];
-  mabel.now.mood = actionMood[chosen];
-  mabel.now.thought = actionThought[chosen];
+  mabel.now.doing = pursueInterest
+    ? "following her curiosity about " + activeInterests[0].title
+    : actionText[chosen];
+  mabel.now.mood = pursueInterest ? "absorbed" : actionMood[chosen];
+  mabel.now.thought = pursueInterest
+    ? activeInterests[0].question
+    : actionThought[chosen];
+
+  if (pursueInterest) {
+    activeInterests[0].pull = clampNeed(activeInterests[0].pull + 0.035);
+    activeInterests[0].lastPursuedAt = now();
+  }
 
   mabel.needs.comfort = clampNeed(mabel.needs.comfort + (Math.random() - 0.45) * 0.08);
   mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + (Math.random() - 0.4) * 0.08);
@@ -1384,6 +1399,8 @@ async function handleHollowAction(action) {
   saveMabel();
   updateHollowScene();
 
+  if (!eventText) return;
+
   if (status) {
     status.textContent = "Mabel notices something in the hollow...";
   }
@@ -1575,11 +1592,6 @@ async function handleVisitorMessage() {
 
   replyElement.textContent = "Mabel is listening...";
 
-  conversation.push({
-    role: "user",
-    content: message
-  });
-
   try {
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
@@ -1614,6 +1626,10 @@ async function handleVisitorMessage() {
 
     replyElement.textContent = data.reply;
 
+    if (data.spark) {
+      recordSpark(data.spark);
+    }
+
     reflectOnConversation(message, data.reply, data.spark || null);
 
     if (/\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(message)) {
@@ -1632,6 +1648,10 @@ async function handleVisitorMessage() {
     }
 
     conversation.push({
+      role: "user",
+      content: message
+    });
+    conversation.push({
       role: "assistant",
       content: data.reply
     });
@@ -1644,7 +1664,8 @@ async function handleVisitorMessage() {
 
     if (data.interest) {
       const existing = mabel.interests.find(function (interest) {
-        return interest.id === data.interest.id;
+        return interest.id === data.interest.id ||
+          normalizeInterestTitle(interest.title) === normalizeInterestTitle(data.interest.title);
       });
 
       if (existing) {
@@ -1687,8 +1708,6 @@ async function handleVisitorMessage() {
 
     messageElement.value = "";
   } catch (error) {
-    conversation.pop();
-
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
   }
 }
@@ -1833,6 +1852,90 @@ async function handleAutonomousMoment() {
   }
 }
 
+function normalizeInterestTitle(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function recordSpark(candidate) {
+  if (!candidate || !candidate.title) return;
+
+  const title = String(candidate.title).trim().slice(0, 90);
+  const question = String(candidate.question || "What might Mabel discover about this?").trim().slice(0, 180);
+  const key = normalizeInterestTitle(title);
+  if (!key) return;
+
+  let spark = sparks.find(function (item) {
+    return item.id === candidate.id || normalizeInterestTitle(item.title) === key;
+  });
+
+  if (spark) {
+    spark.evidence = (spark.evidence || 1) + 1;
+    spark.pull = clampNeed((spark.pull || 0.32) + 0.14);
+    spark.lastSeenAt = now();
+    spark.stage = spark.evidence >= 3 ? "pursuing" : "growing";
+    spark.question = question || spark.question;
+  } else {
+    spark = {
+      id: candidate.id || "spark-" + Date.now(),
+      title: title,
+      question: question,
+      reason: String(candidate.reason || "A thought kept catching at Mabel’s attention.").slice(0, 220),
+      source: "conversation",
+      pull: 0.34,
+      evidence: 1,
+      stage: "noticed",
+      createdAt: now(),
+      lastSeenAt: now()
+    };
+    sparks.unshift(spark);
+  }
+
+  let interest = mabel.interests.find(function (item) {
+    return item.id === spark.id || normalizeInterestTitle(item.title) === key;
+  });
+
+  if (interest) {
+    interest.evidence = Math.max(interest.evidence || 0, spark.evidence);
+    interest.pull = spark.pull;
+    interest.stage = spark.stage;
+    interest.question = spark.question || interest.question;
+  } else {
+    interest = {
+      id: spark.id,
+      title: spark.title,
+      kind: candidate.kind || "wonder",
+      question: spark.question,
+      curiosity: 0.55,
+      pull: spark.pull,
+      evidence: spark.evidence,
+      stage: spark.stage,
+      source: "conversation",
+      createdAt: spark.createdAt
+    };
+    mabel.interests.unshift(interest);
+    addFeedEntry({
+      kind: "mind",
+      text: "A small question caught Mabel’s attention: " + spark.title + ".",
+      why: spark.question,
+      interest: spark.id
+    });
+  }
+
+  if (sparks.length > 30) sparks.length = 30;
+  if (mabel.interests.length > 30) mabel.interests.length = 30;
+  saveSparks();
+  saveMabel();
+  updatePage();
+
+  if (replyElement && document.querySelector(".spark-notice") === null) {
+    replyElement.append(document.createElement("br"));
+    const notice = document.createElement("p");
+    notice.className = "spark-notice";
+    notice.textContent = "A small question has stayed with Mabel.";
+    replyElement.appendChild(notice);
+  }
+}
+
 async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
   try {
     const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
@@ -1857,38 +1960,9 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
 
     const reflection = await response.json();
 
-if (reflection.spark && reflection.spark.title) {
-  const existingSpark = sparks.find(function (spark) {
-    return spark.id === reflection.spark.id;
-  });
-
-  if (existingSpark) {
-    existingSpark.pull = Math.min(
-      1,
-      (existingSpark.pull || 0.4) + 0.1
-    );
-  } else {
-    sparks.unshift({
-      id: reflection.spark.id || "spark-" + Date.now(),
-      title: reflection.spark.title,
-      question: reflection.spark.question || "",
-      reason: reflection.spark.reason || "",
-      source: "conversation",
-      pull: reflection.spark.pull || 0.5,
-      stage: "spark",
-      createdAt: now()
-    });
-  }
-
-  saveSparks();
-
-  replyElement.append(document.createElement("br"));
-
-  const sparkNotice = document.createElement("p");
-  sparkNotice.className = "spark-notice";
-  sparkNotice.textContent = "This has piqued Mabel’s interest.";
-  replyElement.appendChild(sparkNotice);
-}
+if (reflection.spark && reflection.spark.title && !sparkCandidate) {
+      recordSpark(reflection.spark);
+    }
 
 
 
@@ -2389,6 +2463,24 @@ function startMabel() {
 
   if (wanderButton) {
     wanderButton.addEventListener("click", handleWander);
+  }
+
+  const hollowScene = document.querySelector(".hollow-svg");
+  if (hollowScene) {
+    hollowScene.querySelectorAll("[data-hollow-action]").forEach(function (hotspot) {
+      hotspot.setAttribute("tabindex", "0");
+      hotspot.setAttribute("role", "button");
+      hotspot.addEventListener("click", function () {
+        handleHollowAction(hotspot.dataset.hollowAction);
+      });
+      hotspot.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleHollowAction(hotspot.dataset.hollowAction);
+        }
+      });
+    });
+    updateHollowScene();
   }
 
   // Mabel's ordinary life continues every 45 seconds.
