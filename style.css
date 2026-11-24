@@ -630,3 +630,33 @@ footer {
   border-left: 3px solid var(--soft-purple);
   padding-left: 0.65rem;
 }
+
+
+/* Personal notes Mabel chooses to keep about a visitor */
+.visitor-profile-list {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+}
+.visitor-profile-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 0.65rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--lavender-mist);
+}
+.visitor-profile-list p {
+  margin: 0;
+}
+.visitor-profile-list time {
+  display: block;
+  margin-top: 0.4rem;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+.visitor-profile-empty {
+  opacity: 0.75;
+}
