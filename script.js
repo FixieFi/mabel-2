@@ -1166,7 +1166,7 @@ function updateMusing(wandering) {
 
   const source = document.createElement("p");
   source.className = "musing-text";
-  source.appendChild(document.createTextNode("She read: "));
+  source.appendChild(document.createTextNode("She found in her research: "));
   const sourceUrl = safeExternalUrl(wandering.url);
   if (sourceUrl) {
     const link = document.createElement("a");
@@ -1680,6 +1680,17 @@ function handleIntroducedObject(event) {
 }
 
 
+function isArtworkRequest(message) {
+  const text = String(message || "").trim();
+  const selfPortrait = /\bself[ -]?portrait\b|\bportrait of (?:yourself|mabel)\b|\bdraw (?:yourself|mabel)\b|\bpicture of (?:you|mabel)\b/i.test(text);
+  const directDraw = /^(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
+    /\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text);
+  const pictureRequest = /\b(?:make|create|give|show)\s+(?:me\s+)?(?:a|an|some)?\s*(?:picture|image|art|artwork|drawing|portrait|illustration)\b/i.test(text);
+  const requestedSubject = requestedArtworkSubject(text);
+  const makeSubject = /\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:make|create|do)\b/i.test(text) && Boolean(requestedSubject);
+  return selfPortrait || directDraw || pictureRequest || makeSubject;
+}
+
 function requestedArtworkSubject(message) {
   const text = String(message || "").toLowerCase();
   if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:yourself|mabel)|picture of (?:you|mabel))\b/.test(text)) return "mabel";
@@ -1776,8 +1787,7 @@ async function requestMabelArtwork(context, targetElement) {
     // An explicit drawing request can still use Mabel's local drawing hand.
   }
 
-  const explicitRequest = source === "visitor" &&
-    /\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(context.message || "");
+  const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   if (!artwork && explicitRequest) {
     artwork = makeMabelFallbackArtwork(context);
   }
@@ -1844,7 +1854,7 @@ async function handleVisitorMessage() {
     reflectOnConversation(message, data.reply, data.spark || null);
 
     let requestedArtwork = null;
-    if (/\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(message)) {
+    if (isArtworkRequest(message)) {
       requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
     }
 
@@ -1921,6 +1931,9 @@ async function handleVisitorMessage() {
     messageElement.value = "";
   } catch (error) {
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
+    if (isArtworkRequest(message)) {
+      await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
+    }
   }
 }
 
