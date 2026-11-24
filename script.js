@@ -44,6 +44,7 @@ const autonomousStorageKey = "mabel-autonomous-v1";
 const reflectionStorageKey = "mabel-last-reflection-date";
 const bindleStorageKey = "mabel-bindle-v1";
 const galleryStorageKey = "mabel-gallery-v1";
+const visitorProfileStorageKey = "mabel-visitor-profile-v1";
 
 const legacySeedInterestIds = new Set([
   "silver-thread",
@@ -68,6 +69,7 @@ let bindle = {
 };
 
 let gallery = [];
+let visitorProfile = { facts: [], moments: [] };
 
 function now() {
   return new Date().toISOString();
@@ -556,6 +558,7 @@ function saveToMabelGallery(artwork) {
 
   saveGallery();
   updateGallery();
+  updateVisitorProfile();
 }
 
 function formatArtworkTime(isoTime) {
@@ -1384,6 +1387,97 @@ async function submitVisitorBoardMessage(event) {
   }
 }
 
+function loadVisitorProfile() {
+  try {
+    const saved = localStorage.getItem(visitorProfileStorageKey);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        facts: Array.isArray(parsed.facts) ? parsed.facts.slice(0, 25) : [],
+        moments: Array.isArray(parsed.moments) ? parsed.moments.slice(0, 25) : []
+      };
+    }
+  } catch (error) {
+    // Use an empty local profile if storage is unavailable.
+  }
+  return { facts: [], moments: [] };
+}
+
+function saveVisitorProfile() {
+  try {
+    localStorage.setItem(visitorProfileStorageKey, JSON.stringify(visitorProfile));
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function addVisitorProfileNote(listName, value) {
+  const text = String(value || "").trim().slice(0, 240);
+  if (!text || !["facts", "moments"].includes(listName)) return;
+  const existing = visitorProfile[listName].some(function (item) {
+    return item.text.toLowerCase() === text.toLowerCase();
+  });
+  if (existing) return;
+  visitorProfile[listName].unshift({
+    id: "visitor-note-" + Date.now() + "-" + Math.floor(Math.random() * 10000),
+    text: text,
+    at: now()
+  });
+  visitorProfile[listName].length = Math.min(visitorProfile[listName].length, 25);
+  saveVisitorProfile();
+}
+
+function updateVisitorProfile() {
+  const factList = document.getElementById("visitor-profile-facts");
+  const momentList = document.getElementById("visitor-profile-moments");
+  const emptyNotice = document.getElementById("visitor-profile-empty");
+  const forgetButton = document.getElementById("forget-visitor-profile");
+
+  function renderList(list, key) {
+    if (!list) return;
+    list.replaceChildren();
+    visitorProfile[key].forEach(function (note) {
+      const item = document.createElement("li");
+      const details = document.createElement("div");
+      const text = document.createElement("p");
+      text.textContent = note.text;
+      details.appendChild(text);
+      if (note.at) {
+        const time = document.createElement("time");
+        time.dateTime = note.at;
+        time.textContent = new Date(note.at).toLocaleDateString();
+        details.appendChild(time);
+      }
+      item.appendChild(details);
+      const forget = document.createElement("button");
+      forget.type = "button";
+      forget.textContent = "Forget";
+      forget.setAttribute("aria-label", "Forget this note");
+      forget.addEventListener("click", function () {
+        visitorProfile[key] = visitorProfile[key].filter(function (entry) {
+          return entry.id !== note.id;
+        });
+        saveVisitorProfile();
+        updateVisitorProfile();
+      });
+      item.appendChild(forget);
+      list.appendChild(item);
+    });
+  }
+
+  renderList(factList, "facts");
+  renderList(momentList, "moments");
+  const hasNotes = visitorProfile.facts.length + visitorProfile.moments.length > 0;
+  if (emptyNotice) emptyNotice.hidden = hasNotes;
+  if (forgetButton) forgetButton.disabled = !hasNotes;
+}
+
+function forgetVisitorProfile() {
+  visitorProfile = { facts: [], moments: [] };
+  saveVisitorProfile();
+  updateVisitorProfile();
+}
+
 function updatePage() {
   moodElement.textContent = "Mabel is " + mabel.now.mood + ".";
   activityElement.textContent = "Mabel is " + mabel.now.doing + ".";
@@ -2020,6 +2114,7 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
         activity: mabel.now.doing,
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
+        visitorProfile: visitorProfile,
         world: mabel.world
       })
     });
@@ -2027,6 +2122,9 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
     if (!response.ok) return;
 
     const reflection = await response.json();
+
+    addVisitorProfileNote("facts", reflection.visitorNote);
+    addVisitorProfileNote("moments", reflection.sharedMoment);
 
 if (reflection.spark && reflection.spark.title && !sparkCandidate) {
       recordSpark(reflection.spark);
@@ -2506,6 +2604,7 @@ function startMabel() {
   lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
   bindle = loadBindle();
   gallery = loadGallery();
+  visitorProfile = loadVisitorProfile();
 
   if (!mabel.needs) {
     mabel.needs = {
@@ -2545,9 +2644,18 @@ function startMabel() {
   }
 
   const introducedObjectForm = document.getElementById("introduce-object-form");
-  if (introducedObjectForm) {
-    introducedObjectForm.addEventListener("submit", handleIntroducedObject);
-  }
+  if (introducedObjectForm) introducedObjectForm.addEventListener("submit", handleIntroducedObject);
+  document.querySelectorAll("[data-gift-kind]").forEach(function (button) {
+    button.addEventListener("click", chooseGift);
+  });
+  if (visitorBoardForm) visitorBoardForm.addEventListener("submit", submitVisitorBoardMessage);
+  const forgetProfileButton = document.getElementById("forget-visitor-profile");
+  if (forgetProfileButton) forgetProfileButton.addEventListener("click", forgetVisitorProfile);
+  loadVisitorBoard();
+  setInterval(function () {
+    const boardPanel = document.getElementById("visitor-board");
+    if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
+  }, 30000);
 
   // Mabel's ordinary life continues every 45 seconds.
   setInterval(function () {
