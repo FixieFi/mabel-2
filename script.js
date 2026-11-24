@@ -8,8 +8,6 @@ const activityLogElement = document.getElementById("activity-log");
 const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
-const sparkUpdateElement = document.getElementById("spark-update");
-const sparkInnerLifeButton = document.getElementById("spark-inner-life");
 const needComfort = document.getElementById("need-comfort");
 const needCuriosity = document.getElementById("need-curiosity");
 const needConnection = document.getElementById("need-connection");
@@ -2020,12 +2018,6 @@ function normalizeInterestTitle(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function showNewSparkNotice() {
-  if (sparkUpdateElement) {
-    sparkUpdateElement.classList.remove("hidden");
-  }
-}
-
 function recordSpark(candidate) {
   if (!candidate || !candidate.title) return;
 
@@ -2037,7 +2029,6 @@ function recordSpark(candidate) {
   let spark = sparks.find(function (item) {
     return item.id === candidate.id || normalizeInterestTitle(item.title) === key;
   });
-  const isNewSpark = !spark;
 
   if (spark) {
     spark.evidence = (spark.evidence || 1) + 1;
@@ -2098,7 +2089,6 @@ function recordSpark(candidate) {
   saveMabel();
   updatePage();
 
-  if (isNewSpark) showNewSparkNotice();
 }
 
 async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
@@ -2272,6 +2262,80 @@ Return only JSON like this:
   }
 }
 
+const diverseWanderFinds = [
+  { kind: "treasure", name: "a tiny red Power Ranger figure with one missing boot", note: "It looked ready to defend a crumb from enormous danger." },
+  { kind: "treasure", name: "the chewed cap of a blue felt-tip pen", note: "Its teeth marks made it look like a very small beaver had been writing." },
+  { kind: "treasure", name: "a paper star from a forgotten piñata", note: "A little crease down the middle made it look as if it had flown here." },
+  { kind: "treasure", name: "a bottle-cap with a faded lemon on it", note: "It was almost a moon, if Mabel squinted." },
+  { kind: "treasure", name: "a single jigsaw piece showing half a lighthouse", note: "Somewhere, perhaps, the other half was waiting." },
+  { kind: "treasure", name: "a tiny plastic dinosaur", note: "It seemed to have been guarding the path for years." },
+  { kind: "treasure", name: "a bent paper clip shaped like a swan", note: "Mabel wondered who had taught it to swim." },
+  { kind: "treasure", name: "a green marble with a cloudy middle", note: "It held a small storm that never moved." },
+  { kind: "treasure", name: "a brass button shaped like a tiny anchor", note: "It felt like something a very small sailor might lose." },
+  { kind: "treasure", name: "a strip of shiny sweet wrapper", note: "It caught the light like a travelling puddle." },
+  { kind: "treasure", name: "a lost Lego wheel", note: "It was clearly in a hurry to get somewhere." },
+  { kind: "treasure", name: "a cracked plastic bead shaped like a strawberry", note: "A toy fruit, perhaps, for a toy picnic." },
+  { kind: "treasure", name: "a little wooden peg", note: "It could be a stool, a signpost, or a very stern person." },
+  { kind: "treasure", name: "a postage stamp with a crooked ship", note: "Mabel imagined it had sailed a long way before landing here." },
+  { kind: "treasure", name: "a tiny folded note with no writing inside", note: "The blankness felt like a secret still being kept." },
+  { kind: "treasure", name: "a silver sequin caught in a root", note: "It looked like the smallest possible medal." },
+  { kind: "treasure", name: "a red thread tangled around a twig", note: "It might have escaped from a scarf or a very small parade." },
+  { kind: "treasure", name: "a broken toy spoon", note: "Just the right size for serving one important pea." },
+  { kind: "treasure", name: "a tiny plastic crown", note: "Mabel tried it on a pebble, which seemed pleased." },
+  { kind: "treasure", name: "a smooth pebble painted with a crooked smile", note: "It looked as if it knew a joke but would not tell." },
+  { kind: "food", name: "a crumb of oat biscuit", note: "A useful little bite for the road." },
+  { kind: "food", name: "half a dried cranberry", note: "Tart, chewy, and a very good travelling snack." },
+  { kind: "food", name: "a sesame seed", note: "Small enough to save, if she could keep track of it." },
+  { kind: "food", name: "a sliver of apple", note: "It still smelled faintly sweet." },
+  { kind: "food", name: "a crumb of cheese", note: "A rich little mouthful wrapped in no wrapper at all." },
+  { kind: "food", name: "a fallen sunflower seed", note: "A proper seed with a satisfying shell." },
+  { kind: "food", name: "a corner of plain cracker", note: "Crisp enough to make a tiny sound." },
+  { kind: "food", name: "one oat flake", note: "A modest snack with grand ambitions." },
+  { kind: "water", name: "a clean bead of rain gathered in a curled leaf", note: "A small drink sheltered from the wind." },
+  { kind: "water", name: "a drop of dew on a clover leaf", note: "It trembled but did not spill." },
+  { kind: "water", name: "a shallow puddle in a shell", note: "A little pool with a very useful edge." }
+];
+
+function diversifyWanderFinds(findResults) {
+  const recentNames = []
+    .concat(bindle.food || [], bindle.water || [], bindle.treasures || [])
+    .concat((mabel.world && mabel.world.objects) || [])
+    .concat(wanderings.slice(0, 8).flatMap(function (wandering) {
+      return Array.isArray(wandering.finds) ? wandering.finds : [];
+    }))
+    .map(function (item) {
+      return normalizeInterestTitle(typeof item === "string" ? item : item.name);
+    })
+    .filter(Boolean);
+
+  const used = new Set();
+  const candidates = Array.isArray(findResults) ? findResults.slice(0, 2) : [];
+  return candidates.map(function (found) {
+    const name = String(found && found.name || "").trim();
+    const normalizedName = normalizeInterestTitle(name);
+    const repeatsBlueButton = /blue button/i.test(name);
+    if (normalizedName && !repeatsBlueButton && !recentNames.includes(normalizedName) && !used.has(normalizedName)) {
+      used.add(normalizedName);
+      return {
+        kind: ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure",
+        name: name.slice(0, 80),
+        note: String(found.note || "").slice(0, 160)
+      };
+    }
+
+    const fresh = diverseWanderFinds
+      .filter(function (item) {
+        const key = normalizeInterestTitle(item.name);
+        return !recentNames.includes(key) && !used.has(key);
+      });
+    const pool = fresh.length ? fresh : diverseWanderFinds.filter(function (item) { return !used.has(normalizeInterestTitle(item.name)); });
+    if (!pool.length) return null;
+    const replacement = pool[Math.floor(Math.random() * pool.length)];
+    used.add(normalizeInterestTitle(replacement.name));
+    return { kind: replacement.kind, name: replacement.name, note: replacement.note };
+  }).filter(Boolean);
+}
+
 async function handleWander(options) {
   const autonomous = options && options.autonomous === true;
   if (!mabel || (wanderButton && wanderButton.disabled)) return;
@@ -2301,7 +2365,13 @@ async function handleWander(options) {
         energy: mabel.now.energy,
         needs: mabel.needs,
         wanderings: wanderings.slice(0, 10),
-        bindle: bindle
+        bindle: bindle,
+        recentFinds: []
+          .concat(bindle.food || [], bindle.water || [], bindle.treasures || [])
+          .concat((mabel.world && mabel.world.objects) || [])
+          .map(function (item) { return typeof item === "string" ? item : item.name; })
+          .filter(Boolean)
+          .slice(0, 24)
       })
     });
     if (!response.ok) throw new Error("Mabel could not wander. Status " + response.status);
@@ -2317,7 +2387,8 @@ async function handleWander(options) {
       musing: data.musing || "",
       change: data.change || "",
       interest: data.interest || null,
-      goalProgress: data.goalProgress || null
+      goalProgress: data.goalProgress || null,
+      finds: diversifyWanderFinds(data.finds)
     };
     wanderings.unshift(wandering);
     if (wanderings.length > 30) wanderings.length = 30;
@@ -2373,7 +2444,7 @@ async function handleWander(options) {
     mabel.needs.water = clampNeed(mabel.needs.water - 0.035);
     mabel.needs.rest = clampNeed(mabel.needs.rest - 0.04);
 
-    const finds = Array.isArray(data.finds) ? data.finds.slice(0, 2) : [];
+    const finds = Array.isArray(wandering.finds) ? wandering.finds : [];
     finds.forEach(function (found) {
       const kind = ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure";
       const name = String(found.name || "something small").slice(0, 80);
@@ -2637,12 +2708,6 @@ function startMabel() {
       switchTab(button.dataset.tab);
     });
   });
-
-  if (sparkInnerLifeButton) {
-    sparkInnerLifeButton.addEventListener("click", function () {
-      switchTab("inner-life");
-    });
-  }
 
   if (sendButton) {
     sendButton.addEventListener("click", handleVisitorMessage);
