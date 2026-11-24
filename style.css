@@ -798,3 +798,136 @@ footer {
   background: linear-gradient(120deg, rgba(255, 248, 220, 0.96), rgba(238, 229, 255, 0.96));
   border-color: rgba(180, 145, 76, 0.35);
 }
+
+
+/* A soft little threshold for Mabel's wanderings. */
+.explore-scene {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.32fr) 1fr;
+  gap: 18px;
+  align-items: center;
+  margin: 18px 0 22px;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 18% 35%, rgba(247, 200, 216, 0.65), transparent 34%),
+    linear-gradient(135deg, rgba(255, 248, 238, 0.94), rgba(229, 240, 218, 0.86));
+  border: 2px solid rgba(127, 155, 109, 0.3);
+  border-radius: 24px;
+  box-shadow: 0 8px 20px rgba(67, 42, 94, 0.1);
+}
+
+.explore-scene-mark {
+  display: grid;
+  min-height: 112px;
+  place-items: center;
+  color: var(--moss);
+  font-size: 1.75rem;
+  line-height: 1.8;
+  text-align: center;
+  background: rgba(255, 248, 238, 0.72);
+  border: 1px dashed rgba(127, 155, 109, 0.5);
+  border-radius: 20px;
+}
+
+.explore-scene-copy h3 {
+  margin: 0 0 6px;
+  color: #526f50;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.35rem;
+}
+
+.explore-scene-copy > p:first-of-type {
+  margin: 0 0 14px;
+  color: #5c5963;
+}
+
+button#explore.explore-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  color: #fffaf0;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  background: linear-gradient(135deg, #72936c, #8f759f 80%);
+  border: 2px solid rgba(255, 248, 238, 0.92);
+  border-radius: 999px;
+  box-shadow: 0 5px 0 rgba(76, 99, 70, 0.22), 0 8px 16px rgba(67, 42, 94, 0.14);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+button#explore.explore-button span {
+  color: #ffe6ad;
+  font-size: 1.1rem;
+}
+
+button#explore.explore-button:hover {
+  filter: saturate(1.1) brightness(1.04);
+  transform: translateY(-2px);
+  box-shadow: 0 7px 0 rgba(76, 99, 70, 0.18), 0 12px 20px rgba(67, 42, 94, 0.17);
+}
+
+button#explore.explore-button:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(76, 99, 70, 0.22);
+}
+
+button#explore.explore-button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+  transform: none;
+}
+
+#explore-status {
+  min-height: 1.4em;
+  margin: 10px 0 0;
+  color: #667b5f;
+  font-style: italic;
+}
+
+.explore-trail-card {
+  padding: 18px 20px;
+  background: rgba(255, 248, 238, 0.68);
+  border: 1px solid rgba(107, 74, 143, 0.14);
+  border-radius: 22px;
+}
+
+.explore-trail-card h3 {
+  margin-top: 0;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.explore-trail-card .day-intro {
+  margin: 0 0 12px;
+}
+
+.wandering-trail {
+  max-height: 250px;
+  margin: 0;
+  padding: 8px 14px 8px 28px;
+  background: rgba(243, 234, 255, 0.45);
+  border: 1px solid rgba(107, 74, 143, 0.12);
+  border-radius: 16px;
+}
+
+.wandering-trail > li {
+  padding: 11px 10px 13px;
+  border-bottom: 1px dashed rgba(127, 155, 109, 0.32);
+}
+
+.wandering-trail > li:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 560px) {
+  .explore-scene {
+    grid-template-columns: 1fr;
+  }
+
+  .explore-scene-mark {
+    min-height: 70px;
+  }
+}
