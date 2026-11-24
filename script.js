@@ -1563,7 +1563,7 @@ async function handleVisitorMessage() {
 
     replyElement.textContent = data.reply;
 
-    reflectOnConversation(message, data.reply);
+    reflectOnConversation(message, data.reply, data.spark || null);
 
     if (/\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(message)) {
       await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
@@ -1782,7 +1782,7 @@ async function handleAutonomousMoment() {
   }
 }
 
-async function reflectOnConversation(visitorMessage, mabelReply) {
+async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
   try {
     const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
       method: "POST",
@@ -1792,6 +1792,7 @@ async function reflectOnConversation(visitorMessage, mabelReply) {
       body: JSON.stringify({
         visitorMessage: visitorMessage,
         mabelReply: mabelReply,
+        sparkCandidate: sparkCandidate,
         needs: mabel.needs,
         mood: mabel.now.mood,
         activity: mabel.now.doing,
@@ -1840,7 +1841,7 @@ if (reflection.spark && reflection.spark.title) {
 
 
 
-    if (reflection.memory && (reflection.spark || reflection.interestUpdate || reflection.desire)) {
+    if (reflection.remember === true && reflection.memory) {
       mabel.memories.unshift({
         at: now(),
         kind: "reflection",
