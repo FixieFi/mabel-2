@@ -8,6 +8,8 @@ const activityLogElement = document.getElementById("activity-log");
 const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
+const sparkUpdateElement = document.getElementById("spark-update");
+const sparkInnerLifeButton = document.getElementById("spark-inner-life");
 const needComfort = document.getElementById("need-comfort");
 const needCuriosity = document.getElementById("need-curiosity");
 const needConnection = document.getElementById("need-connection");
@@ -2018,6 +2020,12 @@ function normalizeInterestTitle(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function showNewSparkNotice() {
+  if (sparkUpdateElement) {
+    sparkUpdateElement.classList.remove("hidden");
+  }
+}
+
 function recordSpark(candidate) {
   if (!candidate || !candidate.title) return;
 
@@ -2029,6 +2037,7 @@ function recordSpark(candidate) {
   let spark = sparks.find(function (item) {
     return item.id === candidate.id || normalizeInterestTitle(item.title) === key;
   });
+  const isNewSpark = !spark;
 
   if (spark) {
     spark.evidence = (spark.evidence || 1) + 1;
@@ -2089,13 +2098,7 @@ function recordSpark(candidate) {
   saveMabel();
   updatePage();
 
-  if (replyElement && document.querySelector(".spark-notice") === null) {
-    replyElement.append(document.createElement("br"));
-    const notice = document.createElement("p");
-    notice.className = "spark-notice";
-    notice.textContent = "A small question has stayed with Mabel.";
-    replyElement.appendChild(notice);
-  }
+  if (isNewSpark) showNewSparkNotice();
 }
 
 async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
@@ -2634,6 +2637,12 @@ function startMabel() {
       switchTab(button.dataset.tab);
     });
   });
+
+  if (sparkInnerLifeButton) {
+    sparkInnerLifeButton.addEventListener("click", function () {
+      switchTab("inner-life");
+    });
+  }
 
   if (sendButton) {
     sendButton.addEventListener("click", handleVisitorMessage);
