@@ -231,6 +231,7 @@ function renderMabelCard(artwork) {
   }
 
   const motif = typeof artwork.motif === "string" ? artwork.motif : "memory";
+  const subject = typeof artwork.subject === "string" ? artwork.subject.toLowerCase() : (artwork.selfPortrait ? "mabel" : "");
   const symbols = Array.isArray(artwork.symbols) ? artwork.symbols.slice(0, 3) : [];
   const namespace = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(namespace, "svg");
@@ -516,6 +517,48 @@ function renderMabelCard(artwork) {
       drawer(25 + random() * 100, 25 + random() * 100, 4 + random() * 8);
     }
   });
+
+  if (subject === "mabel") {
+    node("image", {
+      href: new URL("images/mabel.png", window.location.href).href,
+      x: "37", y: "25", width: "86", height: "105",
+      preserveAspectRatio: "xMidYMid meet", opacity: "0.72"
+    });
+  } else if (subject === "cat") {
+    const cx = 78 + random() * 8;
+    const cy = 82 + random() * 8;
+    path("M " + (cx - 27) + " " + (cy - 14) + " L " + (cx - 31) + " " + (cy - 42) +
+      " Q " + (cx - 18) + " " + (cy - 35) + " " + (cx - 10) + " " + (cy - 29) +
+      " Q " + cx + " " + (cy - 34) + " " + (cx + 10) + " " + (cy - 29) +
+      " Q " + (cx + 22) + " " + (cy - 36) + " " + (cx + 30) + " " + (cy - 42) +
+      " L " + (cx + 27) + " " + (cy - 12) + " Q " + (cx + 34) + " " + cy + " " +
+      (cx + 28) + " " + (cy + 20) + " Q " + cx + " " + (cy + 42) + " " +
+      (cx - 28) + " " + (cy + 20) + " Q " + (cx - 36) + " " + cy + " " +
+      (cx - 27) + " " + (cy - 14) + " Z", palette[1], 2, 0.84, palette[1]);
+    ellipse(cx - 12, cy - 4, 2.2, 3, "#432a5e", 0.9, 0);
+    ellipse(cx + 12, cy - 4, 2.2, 3, "#432a5e", 0.9, 0);
+    path("M " + (cx - 4) + " " + (cy + 7) + " Q " + cx + " " + (cy + 12) + " " + (cx + 4) + " " + (cy + 7),
+      "#432a5e", 1.3, 0.8);
+    path("M " + (cx - 4) + " " + (cy + 8) + " L " + cx + " " + (cy + 12) + " L " + (cx + 4) + " " + (cy + 8),
+      palette[2], 1.2, 0.95, palette[2]);
+    path("M " + (cx - 18) + " " + (cy + 9) + " Q " + (cx - 32) + " " + (cy + 7) + " " + (cx - 39) + " " + (cy + 5) +
+      " M " + (cx - 18) + " " + (cy + 13) + " Q " + (cx - 32) + " " + (cy + 15) + " " + (cx - 38) + " " + (cy + 17) +
+      " M " + (cx + 18) + " " + (cy + 9) + " Q " + (cx + 32) + " " + (cy + 7) + " " + (cx + 39) + " " + (cy + 5) +
+      " M " + (cx + 18) + " " + (cy + 13) + " Q " + (cx + 32) + " " + (cy + 15) + " " + (cx + 38) + " " + (cy + 17),
+      palette[2], 0.9, 0.7);
+  } else if (subject === "fossil") {
+    const cx = 80 + random() * 8;
+    const cy = 82 + random() * 8;
+    softBlob(cx, cy, 35, 27, palette[1], 0.68);
+    path("M " + (cx + 4) + " " + (cy + 16) + " C " + (cx - 20) + " " + (cy + 16) + " " +
+      (cx - 18) + " " + (cy - 10) + " " + (cx + 1) + " " + (cy - 10) +
+      " C " + (cx + 18) + " " + (cy - 10) + " " + (cx + 17) + " " + (cy + 7) + " " +
+      (cx + 4) + " " + (cy + 7) + " C " + (cx - 5) + " " + (cy + 7) + " " +
+      (cx - 4) + " " + (cy - 1) + " " + (cx + 3) + " " + (cy - 1),
+      palette[2], 2, 0.88);
+  } else if (subject === "button") {
+    symbolMarks.button(80, 80, 22);
+  }
 
   for (let i = 0; i < 45; i += 1) {
     ellipse(random() * 160, random() * 160, 0.3 + random() * 0.8, 0.3 + random() * 0.8,
@@ -1123,7 +1166,7 @@ function updateMusing(wandering) {
 
   const source = document.createElement("p");
   source.className = "musing-text";
-  source.appendChild(document.createTextNode("She read: "));
+  source.appendChild(document.createTextNode("She found in her research: "));
   const sourceUrl = safeExternalUrl(wandering.url);
   if (sourceUrl) {
     const link = document.createElement("a");
@@ -1275,53 +1318,49 @@ function updateBindle() {
 }
 
 function updateWanderings() {
-  if (!wanderingsElement) {
-    return;
-  }
-
-  wanderingsElement.innerHTML = "";
+  if (!wanderingsElement) return;
+  wanderingsElement.replaceChildren();
 
   if (wanderings.length === 0) {
     const item = document.createElement("li");
-    item.textContent = "Mabel's trail is still unwritten.";
+    item.textContent = "Mabel’s trail is still unwritten.";
     wanderingsElement.appendChild(item);
     return;
   }
 
   wanderings.slice(0, 10).forEach(function (wandering) {
     const item = document.createElement("li");
+    const title = document.createElement("p");
+    title.textContent = "Mabel wandered after: " + (wandering.searchQuestion || wandering.title) + ".";
+    item.appendChild(title);
 
-    if (wandering.url) {
-      const link = document.createElement("a");
-      link.href = wandering.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = wandering.title;
-      item.appendChild(link);
-    } else {
-      const title = document.createElement("span");
-      title.textContent = wandering.title;
-      item.appendChild(title);
-    }
+    (Array.isArray(wandering.finds) ? wandering.finds : []).forEach(function (found) {
+      const discovery = document.createElement("p");
+      discovery.className = "explore-discovery";
+      discovery.textContent = "Mabel found " + found.name + ".";
+      item.appendChild(discovery);
 
-    const thought = document.createElement("p");
-    thought.textContent = wandering.musing;
+      const researchButton = document.createElement("button");
+      researchButton.type = "button";
+      researchButton.className = "board-ponder-button";
+      researchButton.textContent = "Research this find";
+      researchButton.addEventListener("click", function () {
+        handleWander({
+          researchTarget: {
+            title: found.name,
+            question: "Mabel found " + found.name + " while exploring. What might it be, and what can she discover about its history or use?",
+            source: "exploration"
+          }
+        });
+      });
+      item.appendChild(researchButton);
+    });
 
-    if (wandering.researchSummary) {
-      const research = document.createElement("p");
-      research.className = "research-note";
-      research.textContent = wandering.researchSummary;
-      item.appendChild(research);
-    }
-
-    const change = document.createElement("p");
-    change.className = "wandering-change";
-    change.textContent = wandering.change || "";
-
-    item.appendChild(thought);
-
-    if (wandering.change) {
-      item.appendChild(change);
+    if (wandering.boardNote) {
+      const source = document.createElement("p");
+      source.className = "research-note";
+      source.textContent = "This research began with a note from " + wandering.boardNote.name + " on the Visitors’ board.";
+      item.appendChild(source);
     }
 
     wanderingsElement.appendChild(item);
@@ -1355,6 +1394,19 @@ async function loadVisitorBoard() {
         time.textContent = new Date(message.createdAt).toLocaleString();
         item.appendChild(time);
       }
+      const ponderButton = document.createElement("button");
+      ponderButton.type = "button";
+      ponderButton.className = "board-ponder-button";
+      ponderButton.textContent = "Let Mabel ponder this";
+      ponderButton.addEventListener("click", function () {
+        handleWander({
+          boardNote: {
+            message: String(message.message || "").slice(0, 280),
+            name: String(message.name || "a visitor").slice(0, 40)
+          }
+        });
+      });
+      item.appendChild(ponderButton);
       visitorBoardMessages.appendChild(item);
     });
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
@@ -1425,6 +1477,25 @@ function addVisitorProfileNote(listName, value) {
   });
   visitorProfile[listName].length = Math.min(visitorProfile[listName].length, 25);
   saveVisitorProfile();
+}
+
+function captureVisitorFacts(message) {
+  const beforeCount = visitorProfile.facts.length;
+  const text = String(message || "");
+  const nameMatch = text.match(/\b(?:my name is|my name's|call me)\s+([A-Za-zÀ-ÖØ-öø-ÿ'-]{2,32})\b/i);
+  if (nameMatch && !/^(not|just|anonymous|visitor|mabel)$/i.test(nameMatch[1])) {
+    addVisitorProfileNote("facts", "Their name is " + nameMatch[1].trim() + ".");
+  }
+  const favoriteMatch = text.match(/\bmy favorite\s+([a-z ]{2,24})\s+is\s+([^.!?\n]{2,100})/i);
+  if (favoriteMatch) {
+    addVisitorProfileNote("facts", "Their favorite " + favoriteMatch[1].trim() + " is " + favoriteMatch[2].trim() + ".");
+  }
+  const preferenceMatch = text.match(/\bI\s+(?:really\s+)?(like|love|enjoy|adore|am interested in)\s+([^.!?\n]{2,120})/i);
+  if (preferenceMatch) {
+    const verb = preferenceMatch[1].toLowerCase() === "am interested in" ? "are interested in" : preferenceMatch[1].toLowerCase() + " ";
+    addVisitorProfileNote("facts", "They " + verb + preferenceMatch[2].trim().replace(/[,;:]$/, "") + ".");
+  }
+  if (visitorProfile.facts.length !== beforeCount) updateVisitorProfile();
 }
 
 function updateVisitorProfile() {
@@ -1498,6 +1569,7 @@ function updatePage() {
   updateBindle();
   updateHomeObjects();
   updateGallery();
+  updateVisitorProfile();
 }
 
 function ensureHollowWorld() {
@@ -1533,7 +1605,7 @@ function updateHomeObjects() {
     item.appendChild(name);
     if (object.status === "waiting") {
       const waiting = document.createElement("p");
-      waiting.textContent = "Waiting for Mabel to notice.";
+      waiting.textContent = "Waiting for one of Mabel’s quiet moments.";
       item.appendChild(waiting);
     }
     if (object.reaction) {
@@ -1581,7 +1653,7 @@ async function queueHomeGift(objectName, giftKind) {
   saveMabel();
   updateHomeObjects();
   const status = document.getElementById("hollow-status");
-  if (status) status.textContent = "Your gift is at home. Mabel will notice it when she gets around to it.";
+  if (status) status.textContent = "Your gift is at home. Mabel may notice it during her next quiet moment while this page is open.";
 }
 
 function chooseGift(event) {
@@ -1589,7 +1661,7 @@ function chooseGift(event) {
   const gifts = {
     food: ["a blackberry", "three sunflower seeds", "a fallen hazelnut", "a little oat crumb"],
     water: ["a sip of clean rainwater in a curled leaf", "a bead of dew", "a small cup of fresh water"],
-    surprise: ["a red toy dinosaur", "a Sharpie cap", "a tiny paper party hat", "a shiny bottle cap", "a little plastic horse", "one bright button"]
+    surprise: ["a dried flower tied with thread", "a smooth shell", "a little brass bell", "a pale green glass pebble", "a scrap of soft blue cloth", "a tiny wooden bead"]
   };
   const options = gifts[kind] || gifts.surprise;
   queueHomeGift(options[Math.floor(Math.random() * options.length)], kind);
@@ -1609,6 +1681,33 @@ function handleIntroducedObject(event) {
 }
 
 
+function isArtworkRequest(message) {
+  const text = String(message || "").trim();
+  const selfPortrait = /\bself[ -]?portrait\b|\bportrait of (?:yourself|mabel)\b|\bdraw (?:yourself|mabel)\b|\bpicture of (?:you|mabel)\b/i.test(text);
+  const directDraw = /^(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
+    /\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text);
+  const pictureRequest = /\b(?:make|create|give|show)\s+(?:me\s+)?(?:a|an|some)?\s*(?:picture|image|art|artwork|drawing|portrait|illustration)\b/i.test(text);
+  const requestedSubject = requestedArtworkSubject(text);
+  const makeSubject = /\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:make|create|do)\b/i.test(text) && Boolean(requestedSubject);
+  return selfPortrait || directDraw || pictureRequest || makeSubject;
+}
+
+function requestedArtworkSubject(message) {
+  const text = String(message || "").toLowerCase();
+  if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:yourself|mabel)|picture of (?:you|mabel))\b/.test(text)) return "mabel";
+  const subjects = [
+    ["power ranger", "power ranger"], ["cat|kitten", "cat"], ["dog|puppy", "dog"],
+    ["rabbit|bunny", "rabbit"], ["fox", "fox"], ["bird|robin|sparrow", "bird"],
+    ["flower|bouquet", "flower"], ["mushroom|toadstool", "mushroom"],
+    ["fossil", "fossil"], ["button", "button"], ["shell", "shell"],
+    ["moon", "moon"], ["star", "star"], ["fish", "fish"], ["house|cottage", "house"]
+  ];
+  for (const [pattern, subject] of subjects) {
+    if (new RegExp("\\b(?:" + pattern + ")\\b", "i").test(text)) return subject;
+  }
+  return "";
+}
+
 function makeMabelFallbackArtwork(context) {
   const palettes = [
     ["#718778", "#b77769", "#e9d8b7"],
@@ -1621,22 +1720,33 @@ function makeMabelFallbackArtwork(context) {
   const symbols = ["leaf", "moon", "berry", "feather", "button", "seed", "raindrop", "stone", "doorway", "shell", "twig"];
   const activity = context.activity || mabel.now.doing || "listening beneath the hawthorn";
   const mood = context.mood || mabel.now.mood || "quiet";
+  const subject = requestedArtworkSubject(context.message);
   const hint = ((context.message || "") + " " + activity + " " + mood).toLowerCase();
-  const motif = hint.includes("rain") || hint.includes("water")
-    ? "rain"
-    : hint.includes("flower") || hint.includes("bloom")
-      ? "bloom"
+  const motif = subject === "flower" || hint.includes("flower") || hint.includes("bloom")
+    ? "bloom"
+    : hint.includes("rain") || hint.includes("water")
+      ? "rain"
       : hint.includes("night") || hint.includes("moon")
         ? "night"
         : motifs[Math.floor(Math.random() * motifs.length)];
 
   return {
-    title: "Mabel's " + mood + " marks",
+    title: subject === "mabel"
+      ? "Mabel, as Mabel remembers herself"
+      : subject
+        ? "Mabel's little study of a " + subject
+        : "Mabel's " + mood + " marks",
     kind: "moment",
     palette: palettes[Math.floor(Math.random() * palettes.length)],
     motif: motif,
-    symbols: [symbols[Math.floor(Math.random() * symbols.length)]],
-    note: "She kept a small piece of " + activity + ".",
+    subject: subject,
+    selfPortrait: subject === "mabel",
+    symbols: [subject === "button" ? "button" : symbols[Math.floor(Math.random() * symbols.length)]],
+    note: subject === "mabel"
+      ? "She used the picture by her nest as a starting point, then let the colours wander."
+      : subject
+        ? "She let the shape of a " + subject + " lead the marks somewhere unexpected."
+        : "She kept a small piece of " + activity + ".",
     seed: (Date.now() ^ Math.floor(Math.random() * 2147483647)) >>> 0
   };
 }
@@ -1653,6 +1763,9 @@ async function requestMabelArtwork(context, targetElement) {
       body: JSON.stringify({
         source: source,
         message: context.message || "",
+        requestedSubject: requestedArtworkSubject(context.message),
+        selfPortrait: requestedArtworkSubject(context.message) === "mabel",
+        referenceImageUrl: new URL("images/mabel.png", window.location.href).href,
         mood: context.mood || mabel.now.mood,
         activity: context.activity || mabel.now.doing,
         thought: context.thought || mabel.now.thought,
@@ -1675,9 +1788,14 @@ async function requestMabelArtwork(context, targetElement) {
     // An explicit drawing request can still use Mabel's local drawing hand.
   }
 
-  const explicitRequest = source === "visitor" &&
-    /\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(context.message || "");
-  if (!artwork && explicitRequest && !declined) {
+  const requestedSubject = requestedArtworkSubject(context.message);
+  if (artwork && requestedSubject) {
+    artwork.subject = requestedSubject;
+    artwork.selfPortrait = requestedSubject === "mabel";
+  }
+
+  const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
+  if (!artwork && explicitRequest) {
     artwork = makeMabelFallbackArtwork(context);
   }
   if (!artwork) return null;
@@ -1699,6 +1817,7 @@ async function handleVisitorMessage() {
     return;
   }
 
+  captureVisitorFacts(message);
   replyElement.textContent = "Mabel is listening...";
 
   try {
@@ -1741,11 +1860,12 @@ async function handleVisitorMessage() {
 
     reflectOnConversation(message, data.reply, data.spark || null);
 
-    if (/\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(message)) {
-      await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
+    let requestedArtwork = null;
+    if (isArtworkRequest(message)) {
+      requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
     }
 
-    if (data.artwork) {
+    if (data.artwork && !requestedArtwork) {
       const artworkCard = renderMabelCard(data.artwork);
 
       if (artworkCard) {
@@ -1818,6 +1938,9 @@ async function handleVisitorMessage() {
     messageElement.value = "";
   } catch (error) {
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
+    if (isArtworkRequest(message)) {
+      await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
+    }
   }
 }
 
@@ -2089,13 +2212,6 @@ function recordSpark(candidate) {
   saveMabel();
   updatePage();
 
-  if (replyElement && document.querySelector(".spark-notice") === null) {
-    replyElement.append(document.createElement("br"));
-    const notice = document.createElement("p");
-    notice.className = "spark-notice";
-    notice.textContent = "A small question has stayed with Mabel.";
-    replyElement.appendChild(notice);
-  }
 }
 
 async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
@@ -2124,7 +2240,13 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
     const reflection = await response.json();
 
     addVisitorProfileNote("facts", reflection.visitorNote);
-    addVisitorProfileNote("moments", reflection.sharedMoment);
+    if (reflection.sharedMoment) {
+      addFeedEntry({
+        kind: "mind",
+        text: reflection.sharedMoment,
+        why: "A moment from Mabel’s side of the conversation."
+      });
+    }
 
 if (reflection.spark && reflection.spark.title && !sparkCandidate) {
       recordSpark(reflection.spark);
@@ -2269,21 +2391,144 @@ Return only JSON like this:
   }
 }
 
+const diverseWanderFinds = [
+  { kind: "treasure", name: "a tiny red Power Ranger figure with one missing boot", note: "It looked ready to defend a crumb from enormous danger." },
+  { kind: "treasure", name: "the chewed cap of a blue felt-tip pen", note: "Its teeth marks made it look like a very small beaver had been writing." },
+  { kind: "treasure", name: "a paper star from a forgotten piñata", note: "A little crease down the middle made it look as if it had flown here." },
+  { kind: "treasure", name: "a bottle-cap with a faded lemon on it", note: "It was almost a moon, if Mabel squinted." },
+  { kind: "treasure", name: "a single jigsaw piece showing half a lighthouse", note: "Somewhere, perhaps, the other half was waiting." },
+  { kind: "treasure", name: "a tiny plastic dinosaur", note: "It seemed to have been guarding the path for years." },
+  { kind: "treasure", name: "a bent paper clip shaped like a swan", note: "Mabel wondered who had taught it to swim." },
+  { kind: "treasure", name: "a green marble with a cloudy middle", note: "It held a small storm that never moved." },
+  { kind: "treasure", name: "a brass button shaped like a tiny anchor", note: "It felt like something a very small sailor might lose." },
+  { kind: "treasure", name: "a strip of shiny sweet wrapper", note: "It caught the light like a travelling puddle." },
+  { kind: "treasure", name: "a lost Lego wheel", note: "It was clearly in a hurry to get somewhere." },
+  { kind: "treasure", name: "a cracked plastic bead shaped like a strawberry", note: "A toy fruit, perhaps, for a toy picnic." },
+  { kind: "treasure", name: "a little wooden peg", note: "It could be a stool, a signpost, or a very stern person." },
+  { kind: "treasure", name: "a postage stamp with a crooked ship", note: "Mabel imagined it had sailed a long way before landing here." },
+  { kind: "treasure", name: "a tiny folded note with no writing inside", note: "The blankness felt like a secret still being kept." },
+  { kind: "treasure", name: "a silver sequin caught in a root", note: "It looked like the smallest possible medal." },
+  { kind: "treasure", name: "a red thread tangled around a twig", note: "It might have escaped from a scarf or a very small parade." },
+  { kind: "treasure", name: "a broken toy spoon", note: "Just the right size for serving one important pea." },
+  { kind: "treasure", name: "a tiny plastic crown", note: "Mabel tried it on a pebble, which seemed pleased." },
+  { kind: "treasure", name: "a smooth pebble painted with a crooked smile", note: "It looked as if it knew a joke but would not tell." },
+
+  { kind: "treasure", name: "a fossilized shell tucked into a lump of chalk", note: "A tiny sea creature had left the shape of its home behind." },
+  { kind: "treasure", name: "an old bouquet tied with fraying ribbon", note: "The flowers had gone papery, but still held a little colour." },
+  { kind: "treasure", name: "a tiny brass thimble", note: "It could be a bucket for a beetle or a helmet for a seed." },
+  { kind: "treasure", name: "a cracked domino with three white dots", note: "Mabel wondered where the rest of the game had gone." },
+  { kind: "treasure", name: "a faded train ticket folded into a square", note: "It seemed to have travelled farther than Mabel had." },
+  { kind: "treasure", name: "a small chunk of sea glass", note: "Its sharp edges had been softened by a long journey." },
+  { kind: "treasure", name: "a tiny wind-up key", note: "Perhaps it belonged to a clock that had forgotten its time." },
+  { kind: "treasure", name: "a dried seed pod that rattled like a maraca", note: "The smallest band in the hollow had found its instrument." },
+  { kind: "treasure", name: "a chipped chess knight", note: "Mabel thought it looked brave despite the missing paint." },
+  { kind: "treasure", name: "a little piece of blue-and-white pottery", note: "A broken bit of somebody’s cup, now a bright tile." },
+  { kind: "treasure", name: "a tiny toy bus with one wheel missing", note: "It had stopped at the edge of a mossy road." },
+  { kind: "treasure", name: "a dried clover pressed flat in a book page", note: "A small green memory from a much larger story." },
+  { kind: "food", name: "a crumb of oat biscuit", note: "A useful little bite for the road." },
+  { kind: "food", name: "half a dried cranberry", note: "Tart, chewy, and a very good travelling snack." },
+  { kind: "food", name: "a sesame seed", note: "Small enough to save, if she could keep track of it." },
+  { kind: "food", name: "a sliver of apple", note: "It still smelled faintly sweet." },
+  { kind: "food", name: "a crumb of cheese", note: "A rich little mouthful wrapped in no wrapper at all." },
+  { kind: "food", name: "a fallen sunflower seed", note: "A proper seed with a satisfying shell." },
+  { kind: "food", name: "a corner of plain cracker", note: "Crisp enough to make a tiny sound." },
+  { kind: "food", name: "one oat flake", note: "A modest snack with grand ambitions." },
+  { kind: "water", name: "a clean bead of rain gathered in a curled leaf", note: "A small drink sheltered from the wind." },
+  { kind: "water", name: "a drop of dew on a clover leaf", note: "It trembled but did not spill." },
+  { kind: "water", name: "a shallow puddle in a shell", note: "A little pool with a very useful edge." }
+];
+
+function diversifyWanderFinds(findResults) {
+  const recentNames = []
+    .concat(bindle.food || [], bindle.water || [], bindle.treasures || [])
+    .concat((mabel.world && mabel.world.objects) || [])
+    .concat(wanderings.slice(0, 8).flatMap(function (wandering) {
+      return Array.isArray(wandering.finds) ? wandering.finds : [];
+    }))
+    .map(function (item) {
+      return normalizeInterestTitle(typeof item === "string" ? item : item.name);
+    })
+    .filter(Boolean);
+
+  const used = new Set();
+  const candidates = Array.isArray(findResults) && findResults.length ? findResults.slice(0, 2) : [null];
+  return candidates.map(function (found) {
+    const name = String(found && found.name || "").trim();
+    const normalizedName = normalizeInterestTitle(name);
+    const repeatsBlueButton = /blue button/i.test(name);
+    if (normalizedName && !repeatsBlueButton && !recentNames.includes(normalizedName) && !used.has(normalizedName)) {
+      used.add(normalizedName);
+      return {
+        kind: ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure",
+        name: name.slice(0, 80),
+        note: String(found.note || "").slice(0, 160)
+      };
+    }
+
+    const fresh = diverseWanderFinds
+      .filter(function (item) {
+        const key = normalizeInterestTitle(item.name);
+        return !recentNames.includes(key) && !used.has(key);
+      });
+    const pool = fresh.length ? fresh : diverseWanderFinds.filter(function (item) { return !used.has(normalizeInterestTitle(item.name)); });
+    if (!pool.length) return null;
+    const replacement = pool[Math.floor(Math.random() * pool.length)];
+    used.add(normalizeInterestTitle(replacement.name));
+    return { kind: replacement.kind, name: replacement.name, note: replacement.note };
+  }).filter(Boolean);
+}
+
 async function handleWander(options) {
   const autonomous = options && options.autonomous === true;
+  const boardNote = options && options.boardNote && options.boardNote.message
+    ? {
+        message: String(options.boardNote.message).trim().slice(0, 280),
+        name: String(options.boardNote.name || "a visitor").trim().slice(0, 40)
+      }
+    : null;
+  const researchTarget = options && options.researchTarget && options.researchTarget.title
+    ? {
+        title: String(options.researchTarget.title).trim().slice(0, 100),
+        question: String(options.researchTarget.question || "").trim().slice(0, 180),
+        source: String(options.researchTarget.source || "exploration").slice(0, 40)
+      }
+    : null;
+  const activeInterest = options && options.interestId && mabel
+    ? mabel.interests.find(function (item) { return item.id === options.interestId; }) || null
+    : null;
+  const focusInterest = boardNote
+    ? {
+        id: "visitor-note-" + Date.now(),
+        title: "A note left by a visitor: " + boardNote.message.slice(0, 100),
+        question: "Mabel read this note from " + boardNote.name + " on the Visitors’ noticeboard. What could she learn or wonder about from it?",
+        source: "Visitors’ noticeboard"
+      }
+    : researchTarget
+      ? {
+          id: "exploration-find-" + Date.now(),
+          title: researchTarget.title,
+          question: researchTarget.question || "Mabel found " + researchTarget.title + " while exploring. What might it be, and what can she discover about it?",
+          source: researchTarget.source
+        }
+      : activeInterest;
   if (!mabel || (wanderButton && wanderButton.disabled)) return;
+  if ((boardNote || researchTarget) && !autonomous) switchTab("research");
   if (wanderButton) wanderButton.disabled = true;
   if (wanderStatus) {
-    wanderStatus.textContent = autonomous
-      ? "Mabel has gone to look something up."
-      : "Mabel is setting out to investigate a question.";
+    wanderStatus.textContent = boardNote
+      ? "Mabel is following a note from the Visitors’ board."
+      : researchTarget
+        ? "Mabel is looking into something she found."
+        : autonomous
+          ? "Mabel has gone to look something up."
+          : "Mabel is setting out to investigate a question.";
   }
 
   if (musingElement) {
     musingElement.replaceChildren();
     const waiting = document.createElement("p");
     waiting.className = "musing-source";
-    waiting.textContent = "Mabel is looking for something useful to read.";
+    waiting.textContent = boardNote ? "Mabel is following a note from the Visitors’ board." : researchTarget ? "Mabel is looking into something she found." : "Mabel is following a question through the world.";
     musingElement.appendChild(waiting);
   }
 
@@ -2292,13 +2537,22 @@ async function handleWander(options) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        interests: mabel.interests,
+        interests: focusInterest
+          ? [focusInterest].concat(mabel.interests.filter(function (item) { return item.id !== focusInterest.id; }))
+          : mabel.interests,
+        focusInterest: focusInterest,
         memories: mabel.memories.slice(0, 10),
         mood: mabel.now.mood,
         energy: mabel.now.energy,
         needs: mabel.needs,
         wanderings: wanderings.slice(0, 10),
-        bindle: bindle
+        bindle: bindle,
+        recentFinds: []
+          .concat(bindle.food || [], bindle.water || [], bindle.treasures || [])
+          .concat((mabel.world && mabel.world.objects) || [])
+          .map(function (item) { return typeof item === "string" ? item : item.name; })
+          .filter(Boolean)
+          .slice(0, 24)
       })
     });
     if (!response.ok) throw new Error("Mabel could not wander. Status " + response.status);
@@ -2313,8 +2567,10 @@ async function handleWander(options) {
       url: data.url || "",
       musing: data.musing || "",
       change: data.change || "",
-      interest: data.interest || null,
-      goalProgress: data.goalProgress || null
+      interest: data.interest || focusInterest,
+      goalProgress: data.goalProgress || null,
+      finds: diversifyWanderFinds(data.finds),
+      boardNote: boardNote
     };
     wanderings.unshift(wandering);
     if (wanderings.length > 30) wanderings.length = 30;
@@ -2370,7 +2626,7 @@ async function handleWander(options) {
     mabel.needs.water = clampNeed(mabel.needs.water - 0.035);
     mabel.needs.rest = clampNeed(mabel.needs.rest - 0.04);
 
-    const finds = Array.isArray(data.finds) ? data.finds.slice(0, 2) : [];
+    const finds = Array.isArray(wandering.finds) ? wandering.finds : [];
     finds.forEach(function (found) {
       const kind = ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure";
       const name = String(found.name || "something small").slice(0, 80);
@@ -2422,8 +2678,16 @@ async function handleWander(options) {
     addFeedEntry({
       kind: "noticed",
       text: "Mabel pondered: " + (wandering.searchQuestion || wandering.title) + ".",
-      why: [wandering.researchSummary, wandering.musing].filter(Boolean).join(" ")
+      why: [wandering.boardNote ? "A visitor’s noticeboard note led her here." : "", wandering.researchSummary, wandering.musing].filter(Boolean).join(" ")
     });
+
+    if (wandering.boardNote) {
+      addFeedEntry({
+        kind: "noticed",
+        text: "Mabel read a note left by " + wandering.boardNote.name + " on the Visitors’ board.",
+        why: wandering.boardNote.message
+      });
+    }
     if (finds.length > 0) {
       addFeedEntry({
         kind: "noticed",
@@ -2637,6 +2901,15 @@ function startMabel() {
 
   if (sendButton) {
     sendButton.addEventListener("click", handleVisitorMessage);
+  }
+
+  if (messageElement) {
+    messageElement.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        handleVisitorMessage();
+      }
+    });
   }
 
   if (wanderButton) {
