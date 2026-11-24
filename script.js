@@ -488,51 +488,6 @@ function addDiaryEntry(entry) {
   });
 }
 
-function updateInterest(interestId, change) {
-  const interest = mabel.interests.find(function (item) {
-    return item.id === interestId;
-  });
-
-  if (!interest) {
-    return;
-  }
-
-  interest.pull = Math.max(0, Math.min(1, interest.pull + change));
-
-  if (interest.pull > 0.65 && interest.stage === "dormant") {
-    interest.stage = "pursuing";
-
-    addFeedEntry({
-      kind: "mind",
-      text: "Mabel began a new thread: " + interest.title + ".",
-      why: interest.question,
-      interest: interest.id
-    });
-  }
-
-  if (interest.pull > 0.9 && interest.stage === "pursuing") {
-    interest.stage = "deepening";
-
-    addFeedEntry({
-      kind: "mind",
-      text: "Mabel's thread, " + interest.title + ", has become important to her.",
-      why: "Some questions begin to feel like homes.",
-      interest: interest.id
-    });
-  }
-
-  if (interest.pull < 0.15 && interest.stage !== "dormant") {
-    interest.stage = "dormant";
-
-    addFeedEntry({
-      kind: "mind",
-      text: "Mabel let " + interest.title + " rest for a while.",
-      why: "Not every question needs an answer today.",
-      interest: interest.id
-    });
-  }
-}
-
 function clampNeed(value) {
   return Math.max(0, Math.min(1, value));
 }
@@ -794,12 +749,13 @@ function updateDiary() {
 
   const diaryEntries = mabel.feed.filter(function (entry) {
     return (
-      entry.kind === "diary" ||
+      entry.text !== "A visitor's words settled among the moss like a fallen petal." &&
+      (entry.kind === "diary" ||
       entry.kind === "did" ||
       entry.kind === "noticed" ||
       entry.kind === "mind" ||
       entry.kind === "journal" ||
-      entry.kind === "reflection"
+      entry.kind === "reflection")
     );
   });
 
@@ -1499,7 +1455,6 @@ async function handleAutonomousMoment() {
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
-        conversation: conversation.slice(-10),
         feed: mabel.feed.slice(0, 15),
 	sparks: sparks.slice(0, 10)
       })
@@ -1835,7 +1790,6 @@ async function handleWander() {
       body: JSON.stringify({
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
-        conversation: conversation.slice(-10),
         mood: mabel.now.mood,
         energy: mabel.now.energy,
         needs: mabel.needs,
