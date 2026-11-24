@@ -1355,6 +1355,19 @@ async function loadVisitorBoard() {
         time.textContent = new Date(message.createdAt).toLocaleString();
         item.appendChild(time);
       }
+      const ponderButton = document.createElement("button");
+      ponderButton.type = "button";
+      ponderButton.className = "board-ponder-button";
+      ponderButton.textContent = "Let Mabel ponder this";
+      ponderButton.addEventListener("click", function () {
+        handleWander({
+          boardNote: {
+            message: String(message.message || "").slice(0, 280),
+            name: String(message.name || "a visitor").slice(0, 40)
+          }
+        });
+      });
+      item.appendChild(ponderButton);
       visitorBoardMessages.appendChild(item);
     });
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
@@ -1657,7 +1670,14 @@ async function requestMabelArtwork(context, targetElement) {
         activity: context.activity || mabel.now.doing,
         thought: context.thought || mabel.now.thought,
         needs: mabel.needs,
-        interests: mabel.interests,
+        interests: boardNote
+          ? mabel.interests.concat([{
+              id: "visitor-note-" + Date.now(),
+              title: "A note left by a visitor: " + boardNote.message.slice(0, 100),
+              question: "Mabel read this note from " + boardNote.name + " on the Visitors’ noticeboard. What could she learn or wonder about from it?",
+              source: "Visitors’ noticeboard"
+            }])
+          : mabel.interests,
         memories: mabel.memories.slice(0, 8),
         wanderings: wanderings.slice(0, 5),
         recentArtworks: gallery.slice(0, 6).map(function (item) {
@@ -2338,6 +2358,12 @@ function diversifyWanderFinds(findResults) {
 
 async function handleWander(options) {
   const autonomous = options && options.autonomous === true;
+  const boardNote = options && options.boardNote && options.boardNote.message
+    ? {
+        message: String(options.boardNote.message).trim().slice(0, 280),
+        name: String(options.boardNote.name || "a visitor").trim().slice(0, 40)
+      }
+    : null;
   if (!mabel || (wanderButton && wanderButton.disabled)) return;
   if (wanderButton) wanderButton.disabled = true;
   if (wanderStatus) {
@@ -2350,7 +2376,7 @@ async function handleWander(options) {
     musingElement.replaceChildren();
     const waiting = document.createElement("p");
     waiting.className = "musing-source";
-    waiting.textContent = "Mabel is looking for something useful to read.";
+    waiting.textContent = boardNote ? "Mabel is pondering a note from the visitors’ board." : "Mabel is looking for something useful to read.";
     musingElement.appendChild(waiting);
   }
 
@@ -2388,7 +2414,8 @@ async function handleWander(options) {
       change: data.change || "",
       interest: data.interest || null,
       goalProgress: data.goalProgress || null,
-      finds: diversifyWanderFinds(data.finds)
+      finds: diversifyWanderFinds(data.finds),
+      boardNote: boardNote
     };
     wanderings.unshift(wandering);
     if (wanderings.length > 30) wanderings.length = 30;
@@ -2498,6 +2525,14 @@ async function handleWander(options) {
       text: "Mabel pondered: " + (wandering.searchQuestion || wandering.title) + ".",
       why: [wandering.researchSummary, wandering.musing].filter(Boolean).join(" ")
     });
+
+    if (wandering.boardNote) {
+      addFeedEntry({
+        kind: "noticed",
+        text: "Mabel read a note left by " + wandering.boardNote.name + " on the Visitors’ board.",
+        why: wandering.boardNote.message
+      });
+    }
     if (finds.length > 0) {
       addFeedEntry({
         kind: "noticed",
