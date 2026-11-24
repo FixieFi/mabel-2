@@ -699,3 +699,33 @@ footer {
 .board-ponder-button:hover {
   background: var(--lilac);
 }
+
+
+.wandering-trail {
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 12px 4px 24px;
+  border: 1px solid rgba(107, 74, 143, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 248, 238, 0.48);
+}
+
+.wandering-trail > li {
+  padding: 10px 8px 12px;
+  border-bottom: 1px dashed rgba(107, 74, 143, 0.2);
+}
+
+.wandering-trail > li:last-child {
+  border-bottom: 0;
+}
+
+.explore-discovery {
+  margin: 6px 0;
+  color: var(--deep-plum);
+  font-weight: 600;
+}
+
+#research > .musing-card {
+  min-height: 120px;
+}
