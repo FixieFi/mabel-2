@@ -1412,12 +1412,6 @@ async function handleVisitorMessage() {
       }
     }
 
-    mabel.memories.unshift({
-      at: now(),
-      kind: "private-memory",
-      text: "A visitor whispered: " + message
-    });
-
     mabel.needs.connection = clampNeed(mabel.needs.connection + 0.18);
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
 
