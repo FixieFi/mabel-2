@@ -1244,6 +1244,12 @@ function updateActivityLog() {
     const item = document.createElement("li");
     const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     item.textContent = time + " — " + entry.text;
+    if (entry.why) {
+      const reason = document.createElement("span");
+      reason.className = "activity-reason";
+      reason.textContent = " " + entry.why;
+      item.appendChild(reason);
+    }
     activityLogElement.appendChild(item);
   });
 }
