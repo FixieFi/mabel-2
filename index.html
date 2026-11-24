@@ -74,10 +74,11 @@
     <section class="tabs-card">
       <div class="tab-buttons">
         <button class="tab-button active" data-tab="chat">Chat</button>
-        <button class="tab-button" data-tab="musings">Musings</button>
+        <button class="tab-button" data-tab="musings">Reading nook</button>
         <button class="tab-button" data-tab="day">Mabel’s Day</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
-	<button class="tab-button" data-tab="hollow">The Hollow</button>
+	<button class="tab-button" data-tab="hollow">Mabel’s place</button>
+        <button class="tab-button" data-tab="visitor-board">Visitors’ board</button>
       </div>
 
       <section id="chat" class="tab-panel active">
@@ -95,7 +96,8 @@
       </section>
 
 <div id="hollow" class="tab-panel">
-  <h2>The Hollow</h2>
+  <h2>Mabel’s place</h2>
+  <p class="day-intro">A small view of Mabel at home beneath the hawthorn. Leave her an object; she’ll decide whether it means something to her.</p>
 
   <div class="hollow-scene">
     <svg viewBox="0 0 600 400" class="hollow-svg" role="img" aria-label="Mabel’s mossy hollow">
@@ -115,7 +117,7 @@
         <circle cx="300" cy="70" r="35" fill="#8b76a1" />
       </g>
 
-      <g id="hollow-nest" class="hollow-hotspot" data-hollow-action="tidy-nest" aria-label="Tidy Mabel’s nest">
+      <g class="hollow-place-detail">
         <title>Mabel’s nest</title>
         <ellipse cx="180" cy="285" rx="65" ry="28" fill="#8a6f4f" />
         <ellipse cx="180" cy="278" rx="52" ry="20" fill="#a58a63" />
@@ -126,54 +128,81 @@
         <text x="180" y="325" text-anchor="middle" class="hollow-label">Mabel’s nest</text>
       </g>
 
-      <g id="hollow-food" class="hollow-hotspot" data-hollow-action="leave-food" aria-label="Leave a blackberry">
+      <g class="hollow-place-detail">
         <title>Leave a blackberry</title>
         <ellipse cx="300" cy="310" rx="30" ry="10" fill="#5d4a76" />
-        <circle id="hollow-food-item" cx="300" cy="300" r="8" fill="#8d4f63" opacity="0" />
+        <circle cx="300" cy="300" r="8" fill="#8d4f63" opacity="0" />
         <text x="300" y="340" text-anchor="middle" class="hollow-label">Food dish</text>
       </g>
 
-      <g id="hollow-water" class="hollow-hotspot" data-hollow-action="refill-water" aria-label="Refill the water leaf">
+      <g class="hollow-place-detail">
         <title>Refill the water leaf</title>
         <path d="M390 292 q30 -18 60 0 q-30 20 -60 0 Z" fill="#7d9b76" />
-        <ellipse id="hollow-water-item" cx="420" cy="292" rx="18" ry="5" fill="#9fc4d8" opacity="0.35" />
+        <ellipse cx="420" cy="292" rx="18" ry="5" fill="#9fc4d8" opacity="0.35" />
         <text x="420" y="330" text-anchor="middle" class="hollow-label">Water leaf</text>
       </g>
 
-      <g id="hollow-path" class="hollow-hotspot" data-hollow-action="leave-offering" aria-label="Leave an offering">
+      <g class="hollow-place-detail">
         <title>Leave something on the path</title>
         <path d="M240 390 Q300 340 360 390 Z" fill="#7a6591" />
-        <circle id="hollow-offering" cx="300" cy="365" r="6" fill="#e0b45c" opacity="0" />
+        <circle cx="300" cy="365" r="6" fill="#e0b45c" opacity="0" />
         <text x="300" y="385" text-anchor="middle" class="hollow-label">Mossy path</text>
       </g>
 
     </svg>
 
-    <div id="hollow-speech" class="hollow-speech hidden">
-      <p id="hollow-speech-text"></p>
-    </div>
   </div>
 
-  <p id="hollow-status">Choose Mabel’s nest, food dish, water leaf, or path to leave something for her.</p>
+  <div class="gift-choices">
+    <h3>Leave Mabel something</h3>
+    <p>Choose a little gift, or write in your own surprise. Mabel will notice it when she gets around to it.</p>
+    <div class="gift-choice-buttons" role="group" aria-label="Choose a gift for Mabel">
+      <button type="button" data-gift-kind="food">Something to eat</button>
+      <button type="button" data-gift-kind="water">A drink of water</button>
+      <button type="button" data-gift-kind="surprise">A small surprise</button>
+    </div>
+    <form id="introduce-object-form" class="introduce-object-form">
+      <label for="hollow-object-input">Or leave something of your own</label>
+      <div class="introduce-object-controls">
+        <input id="hollow-object-input" name="object" maxlength="80" placeholder="A Power Ranger, a Sharpie cap, a piñata…" autocomplete="off" required>
+        <button type="submit">Leave it for Mabel</button>
+      </div>
+    </form>
+  </div>
+  <div id="hollow-speech" class="hollow-speech hidden" aria-live="polite">
+    <p id="hollow-speech-text"></p>
+  </div>
+  <p id="hollow-status">Mabel’s home is quiet. You can leave her something to find.</p>
+  <h3>Things at home</h3>
+  <ul id="hollow-objects" class="hollow-objects"></ul>
 </div>
 
-      <section id="musings" class="tab-panel">
-        <h2>Mabel’s Musings</h2>
+      <section id="visitor-board" class="tab-panel">
+        <h2>Visitors’ noticeboard</h2>
+        <p class="day-intro">Leave a note for the next visitor. Notes are shared with everyone who visits this page.</p>
+        <form id="visitor-board-form" class="visitor-board-form">
+          <label for="visitor-board-name">Your name or sign-off (optional)</label>
+          <input id="visitor-board-name" name="name" maxlength="40" autocomplete="nickname" placeholder="A little sign-off">
+          <label for="visitor-board-message">A note for another visitor</label>
+          <textarea id="visitor-board-message" name="message" rows="3" maxlength="280" required placeholder="What would you like the next visitor to know?"></textarea>
+          <button type="submit">Post to the board</button>
+        </form>
+        <p id="visitor-board-status" aria-live="polite">Loading notes…</p>
+        <ul id="visitor-board-messages" class="visitor-board-messages"></ul>
+      </section>
 
-        <button id="wander">Let Mabel wander</button>
+      <section id="musings" class="tab-panel">
+        <h2>Mabel’s reading nook</h2>
+        <p class="day-intro">When a question catches Mabel’s attention, she can look it up, keep a useful note, and let it lead somewhere new.</p>
+
+        <button id="wander">Go on a wandering</button>
 
         <p id="wander-status">
-          Mabel is resting between wanderings.
+          Mabel sometimes heads out on her own to follow a question. You can send her wandering too.
         </p>
 
         <div id="musing" class="musing-card">
-          <p class="musing-source">Mabel has not wandered yet.</p>
-          <p class="musing-text">
-            Her curiosity is still gathering beneath the hawthorn.
-          </p>
-          <p class="mabel-thought">
-            “Perhaps I will find something small and shining.”
-          </p>
+          <p class="musing-source">Mabel has not looked anything up yet.</p>
         </div>
 
                <h3>Mabel’s wandering trail</h3>
