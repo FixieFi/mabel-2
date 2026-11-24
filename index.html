@@ -191,11 +191,20 @@
 
       <section id="musings" class="tab-panel">
         <h2>Explore</h2>
-        <p class="day-intro">Mabel’s own little wanderings: small discoveries, odd treasures, useful things, and surprises.</p>
-        <button id="explore" type="button">Go exploring</button>
-        <p id="explore-status" aria-live="polite">Mabel has not set out exploring yet.</p>
-        <h3>Wanderings &amp; discoveries</h3>
-        <ul id="wanderings" class="wandering-trail"></ul>
+        <div class="explore-scene">
+          <div class="explore-scene-mark" aria-hidden="true">🍃 ✦ 🍓</div>
+          <div class="explore-scene-copy">
+            <h3>A little wander</h3>
+            <p>The path beyond Mabel’s door is full of oddments, snacks, and small surprises.</p>
+            <button id="explore" class="explore-button" type="button"><span aria-hidden="true">✿</span> Go exploring <span aria-hidden="true">✿</span></button>
+            <p id="explore-status" aria-live="polite">Mabel hasn’t set out just yet.</p>
+          </div>
+        </div>
+        <div class="explore-trail-card">
+          <h3>Along Mabel’s path</h3>
+          <p class="day-intro">A little trail of what she found and what caught her eye.</p>
+          <ul id="wanderings" class="wandering-trail"></ul>
+        </div>
       </section>
 
       <section id="research" class="tab-panel">
