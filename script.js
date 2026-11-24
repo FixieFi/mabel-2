@@ -1370,6 +1370,82 @@ async function handleVisitorMessage() {
     content: message
   });
 
+reflectOnConversation(message, data.reply);
+async function reflectOnConversation(visitorMessage, mabelReply) {
+  try {
+    const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        visitorMessage: visitorMessage,
+        mabelReply: mabelReply,
+        needs: mabel.needs,
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 10),
+        world: mabel.world
+      })
+    });
+
+    if (!response.ok) return;
+
+    const reflection = await response.json();
+
+    if (reflection.diaryEntry) {
+      addDiaryEntry({
+        kind: "journal",
+        title: reflection.diaryEntry.title || "A small noticing",
+        text: reflection.diaryEntry.text
+      });
+    }
+
+    if (reflection.memory) {
+      mabel.memories.unshift({
+        at: now(),
+        kind: "reflection",
+        text: reflection.memory
+      });
+
+      if (mabel.memories.length > 20) {
+        mabel.memories.length = 20;
+      }
+    }
+
+    if (reflection.interestUpdate) {
+      const update = reflection.interestUpdate;
+      const existing = mabel.interests.find(function (interest) {
+        return interest.id === update.id;
+      });
+
+      if (existing) {
+        existing.pull = clampNeed(existing.pull + (update.pullChange || 0));
+      } else if (update.newInterest) {
+        mabel.interests.unshift({
+          id: update.id || "interest-" + Date.now(),
+          title: update.newInterest.title,
+          kind: update.newInterest.kind || "wonder",
+          question: update.newInterest.question || "What does this mean to Mabel?",
+          curiosity: 0.6,
+          pull: update.pull || 0.45,
+          stage: "pursuing"
+        });
+      }
+    }
+
+    if (reflection.desire) {
+      addDesire(reflection.desire);
+    }
+
+    saveMabel();
+    updatePage();
+  } catch (error) {
+    // Reflection is private and optional. Mabel can still chat if it fails.
+  }
+}
+
   try {
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
@@ -1490,10 +1566,10 @@ async function handleVisitorMessage() {
     }
 
     mabel.memories.unshift({
-      at: now(),
-      kind: "visitor",
-      text: "A visitor whispered: \"" + message + "\""
-    });
+  at: now(),
+  kind: "private-memory",
+  text: "A visitor whispered: " + message
+});
 
     mabel.needs.connection = clampNeed(mabel.needs.connection + 0.18);
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
@@ -1652,6 +1728,83 @@ async function handleAutonomousMoment() {
   }
 }
 
+async function reflectOnConversation(env, data) {
+  const visitorMessage = data.visitorMessage || "";
+  const mabelReply = data.mabelReply || "";
+
+  const interests = Array.isArray(data.interests) ? data.interests : [];
+  const memories = Array.isArray(data.memories) ? data.memories : [];
+
+  const interestText = interests
+    .map(function (interest) {
+      return "- " + interest.title + ": " + interest.question + " (pull: " + interest.pull + ")";
+    })
+    .join("\n");
+
+  const memoryText = memories
+    .map(function (memory) {
+      return "- " + memory.text;
+    })
+    .join("\n");
+
+  const prompt =
+    "Mabel is a small mouse living in the Hawthorn Hollow.\n\n" +
+    "A visitor said:\n" +
+    visitorMessage + "\n\n" +
+    "Mabel replied:\n" +
+    mabelReply + "\n\n" +
+    "Mabel's current interests:\n" +
+    (interestText || "Mabel has no interests yet.") + "\n\n" +
+    "Mabel's recent memories:\n" +
+    (memoryText || "Mabel has no recent memories yet.") + "\n\n" +
+    "Decide, from Mabel's own perspective, whether anything in this exchange caught her attention.\n" +
+    "Do not use keywords. Do not assume that sadness, love, or poetic language is automatically important.\n" +
+    "Something may catch Mabel's attention because it is unusual, connects to an existing interest, reveals something about the visitor, raises a question, or simply feels worth noticing.\n\n" +
+    "If nothing catches her attention, return null for diaryEntry, memory, interestUpdate, and desire.\n" +
+    "If something does catch her attention, it may become a diary entry, a memory, a new interest, or a change to an existing interest.\n" +
+    "Do not make every conversation important. Most conversations should leave no diary entry.\n\n" +
+    "Return only valid JSON in this exact shape:\n" +
+    '{"diaryEntry":null,"memory":null,"interestUpdate":null,"desire":null}';
+
+  const result = await env.AI.run(
+    "@cf/meta/llama-3.2-3b-instruct",
+    {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You decide what quietly catches the attention of Mabel, a small mouse in the Hawthorn Hollow. You return only valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 600,
+      temperature: 0.9
+    }
+  );
+
+  let raw = result?.response;
+
+  if (typeof raw !== "string") {
+    raw = JSON.stringify(result ?? {});
+  }
+
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw.slice(start, end + 1));
+  } catch (error) {
+    return {};
+  }
+}
+
 async function writeEveningPage() {
   if (!mabel) {
     return;
@@ -1737,6 +1890,91 @@ Return only JSON like this:
       title: data.entry.title || "Evening page",
       text: data.entry.text
     });
+
+async function reflectOnConversation(env, data) {
+  const visitorMessage = data.visitorMessage || "";
+  const mabelReply = data.mabelReply || "";
+
+  const interests = Array.isArray(data.interests) ? data.interests : [];
+  const memories = Array.isArray(data.memories) ? data.memories : [];
+
+  const interestText = interests
+    .map(function (interest) {
+      return "- " + interest.title + ": " + interest.question + " (pull: " + interest.pull + ")";
+    })
+    .join("\n");
+
+  const memoryText = memories
+    .map(function (memory) {
+      return "- " + memory.text;
+    })
+    .join("\n");
+
+  const prompt =
+    "Mabel is a small mouse living in the Hawthorn Hollow.\n\n" +
+    "A visitor said:\n" +
+    visitorMessage + "\n\n" +
+    "Mabel replied:\n" +
+    mabelReply + "\n\n" +
+    "Mabel's current interests:\n" +
+    (interestText || "Mabel has no interests yet.") + "\n\n" +
+    "Mabel's recent memories:\n" +
+    (memoryText || "Mabel has no recent memories yet.") + "\n\n" +
+    "Decide, from Mabel's own perspective, whether anything in this exchange caught her attention.\n" +
+    "Do not use keywords. Do not assume that sadness, love, or poetic language is automatically important.\n" +
+    "Something may catch Mabel's attention because it is unusual, connects to an existing interest, reveals something about the visitor, raises a question, or simply feels worth noticing.\n\n" +
+    "If nothing catches her attention, return null for diaryEntry, memory, interestUpdate, and desire.\n" +
+    "If something does catch her attention, it may become a diary entry, a memory, a new interest, or a change to an existing interest.\n" +
+    "Do not make every conversation important. Most conversations should leave no diary entry.\n\n" +
+    "Return only valid JSON in this exact shape:\n" +
+    '{"diaryEntry":null,"memory":null,"interestUpdate":null,"desire":null}';
+
+  const result = await env.AI.run(
+    "@cf/meta/llama-3.2-3b-instruct",
+    {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You decide what quietly catches the attention of Mabel, a small mouse in the Hawthorn Hollow. You return only valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 600,
+      temperature: 0.9
+    }
+  );
+
+  let raw = result?.response;
+
+  if (typeof raw !== "string") {
+    raw = JSON.stringify(result ?? {});
+  }
+
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw.slice(start, end + 1));
+  } catch (error) {
+    return {};
+  }
+}
+
+if (reflection.interestUpdate) {
+  mabel.interests.forEach(function (interest) {
+    if (interest.id !== reflection.interestUpdate.id) {
+      interest.pull = clampNeed(interest.pull - 0.03);
+    }
+  });
+}
 
     saveMabel();
     updatePage();
