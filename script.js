@@ -305,6 +305,19 @@ function saveToMabelGallery(artwork) {
   updateGallery();
 }
 
+function formatArtworkTime(isoTime) {
+  const date = new Date(isoTime);
+
+  if (isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function updateGallery() {
   const galleryElement = document.getElementById("gallery");
 
