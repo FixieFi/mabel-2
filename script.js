@@ -1370,81 +1370,6 @@ async function handleVisitorMessage() {
     content: message
   });
 
-reflectOnConversation(message, data.reply);
-async function reflectOnConversation(visitorMessage, mabelReply) {
-  try {
-    const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        visitorMessage: visitorMessage,
-        mabelReply: mabelReply,
-        needs: mabel.needs,
-        mood: mabel.now.mood,
-        activity: mabel.now.doing,
-        interests: mabel.interests,
-        memories: mabel.memories.slice(0, 10),
-        world: mabel.world
-      })
-    });
-
-    if (!response.ok) return;
-
-    const reflection = await response.json();
-
-    if (reflection.diaryEntry) {
-      addDiaryEntry({
-        kind: "journal",
-        title: reflection.diaryEntry.title || "A small noticing",
-        text: reflection.diaryEntry.text
-      });
-    }
-
-    if (reflection.memory) {
-      mabel.memories.unshift({
-        at: now(),
-        kind: "reflection",
-        text: reflection.memory
-      });
-
-      if (mabel.memories.length > 20) {
-        mabel.memories.length = 20;
-      }
-    }
-
-    if (reflection.interestUpdate) {
-      const update = reflection.interestUpdate;
-      const existing = mabel.interests.find(function (interest) {
-        return interest.id === update.id;
-      });
-
-      if (existing) {
-        existing.pull = clampNeed(existing.pull + (update.pullChange || 0));
-      } else if (update.newInterest) {
-        mabel.interests.unshift({
-          id: update.id || "interest-" + Date.now(),
-          title: update.newInterest.title,
-          kind: update.newInterest.kind || "wonder",
-          question: update.newInterest.question || "What does this mean to Mabel?",
-          curiosity: 0.6,
-          pull: update.pull || 0.45,
-          stage: "pursuing"
-        });
-      }
-    }
-
-    if (reflection.desire) {
-      addDesire(reflection.desire);
-    }
-
-    saveMabel();
-    updatePage();
-  } catch (error) {
-    // Reflection is private and optional. Mabel can still chat if it fails.
-  }
-}
 
   try {
     const response = await fetch(MABEL_AI_URL, {
@@ -1594,6 +1519,83 @@ updateHollowScene();
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
   }
 }
+
+reflectOnConversation(message, data.reply);
+async function reflectOnConversation(visitorMessage, mabelReply) {
+  try {
+    const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        visitorMessage: visitorMessage,
+        mabelReply: mabelReply,
+        needs: mabel.needs,
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 10),
+        world: mabel.world
+      })
+    });
+
+    if (!response.ok) return;
+
+    const reflection = await response.json();
+
+    if (reflection.diaryEntry) {
+      addDiaryEntry({
+        kind: "journal",
+        title: reflection.diaryEntry.title || "A small noticing",
+        text: reflection.diaryEntry.text
+      });
+    }
+
+    if (reflection.memory) {
+      mabel.memories.unshift({
+        at: now(),
+        kind: "reflection",
+        text: reflection.memory
+      });
+
+      if (mabel.memories.length > 20) {
+        mabel.memories.length = 20;
+      }
+    }
+
+    if (reflection.interestUpdate) {
+      const update = reflection.interestUpdate;
+      const existing = mabel.interests.find(function (interest) {
+        return interest.id === update.id;
+      });
+
+      if (existing) {
+        existing.pull = clampNeed(existing.pull + (update.pullChange || 0));
+      } else if (update.newInterest) {
+        mabel.interests.unshift({
+          id: update.id || "interest-" + Date.now(),
+          title: update.newInterest.title,
+          kind: update.newInterest.kind || "wonder",
+          question: update.newInterest.question || "What does this mean to Mabel?",
+          curiosity: 0.6,
+          pull: update.pull || 0.45,
+          stage: "pursuing"
+        });
+      }
+    }
+
+    if (reflection.desire) {
+      addDesire(reflection.desire);
+    }
+
+    saveMabel();
+    updatePage();
+  } catch (error) {
+    // Reflection is private and optional. Mabel can still chat if it fails.
+  }
+}
+
 
 async function handleAutonomousMoment() {
   lastAutonomousMoment = Date.now();
