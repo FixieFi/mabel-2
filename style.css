@@ -729,3 +729,66 @@ footer {
 #research > .musing-card {
   min-height: 120px;
 }
+
+
+.spark-notice-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  color: #fff8ee;
+  background: linear-gradient(120deg, #432a5e, #6b4a8f);
+  border: 1px solid rgba(255, 239, 199, 0.58);
+  border-radius: 16px;
+  box-shadow: 0 8px 22px rgba(67, 42, 94, 0.2);
+}
+
+.spark-notice-card.hidden {
+  display: none;
+}
+
+.spark-notice-card p {
+  margin: 4px 0 0;
+  color: rgba(255, 248, 238, 0.86);
+  font-size: 0.92rem;
+}
+
+.spark-notice-star {
+  color: #ffe4a8;
+  font-size: 1.8rem;
+  text-shadow: 0 0 12px rgba(255, 228, 168, 0.8);
+}
+
+#view-spark {
+  padding: 8px 12px;
+  color: #432a5e;
+  background: #fff0c8;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.research-log {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.research-log > li {
+  padding: 10px 12px;
+  background: rgba(255, 248, 238, 0.6);
+  border-radius: 12px;
+}
+
+@media (max-width: 560px) {
+  .spark-notice-card {
+    grid-template-columns: auto 1fr;
+  }
+  #view-spark {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
