@@ -1569,6 +1569,7 @@ function updatePage() {
   updateBindle();
   updateHomeObjects();
   updateGallery();
+  updateVisitorProfile();
 }
 
 function ensureHollowWorld() {
