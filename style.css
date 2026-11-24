@@ -660,3 +660,42 @@ footer {
 .visitor-profile-empty {
   opacity: 0.75;
 }
+
+
+.home-nest-art {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 18px;
+}
+
+.home-nest-art svg {
+  width: 96px;
+  height: 64px;
+  image-rendering: pixelated;
+}
+
+.home-inventory {
+  margin-top: 24px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(107, 74, 143, 0.28);
+}
+
+.home-inventory h3 {
+  margin-top: 18px;
+}
+
+.board-ponder-button {
+  margin-top: 10px;
+  padding: 8px 12px;
+  color: var(--deep-plum);
+  background: rgba(227, 209, 255, 0.75);
+  border: 1px solid rgba(107, 74, 143, 0.25);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.board-ponder-button:hover {
+  background: var(--lilac);
+}
