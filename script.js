@@ -2242,9 +2242,12 @@ function researchWords(value) {
 
 function researchMatchesFocus(text, focusInterest) {
   if (!focusInterest) return true;
-  const focusWords = researchWords(focusInterest.title + " " + focusInterest.question);
+  // Validate against the chosen subject itself; its explanatory question contains generic wording.
+  const focusWords = Array.from(new Set(researchWords(focusInterest.title)));
   const resultWords = new Set(researchWords(text));
-  return focusWords.some(function (word) { return resultWords.has(word); });
+  const matchedWords = focusWords.filter(function (word) { return resultWords.has(word); });
+  const requiredMatches = Math.min(2, focusWords.length);
+  return requiredMatches > 0 && matchedWords.length >= requiredMatches;
 }
 
 function chooseAutonomousResearchFocus(boardNote) {
