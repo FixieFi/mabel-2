@@ -41,48 +41,12 @@ const reflectionStorageKey = "mabel-last-reflection-date";
 const bindleStorageKey = "mabel-bindle-v1";
 const galleryStorageKey = "mabel-gallery-v1";
 
-const interestSeeds = [
-  {
-    id: "silver-thread",
-    title: "The Silver Thread",
-    kind: "mystery",
-    question: "Where does the silver thread beneath the hawthorn lead?",
-    actions: [],
-    curiosity: 0.9,
-    pull: 0.8,
-    stage: "pursuing"
-  },
-  {
-    id: "rain-listening",
-    title: "The Language of Rain",
-    kind: "wonder",
-    question: "What does the rain say when it lands on hawthorn leaves?",
-    actions: [],
-    curiosity: 0.5,
-    pull: 0.4,
-    stage: "dormant"
-  },
-  {
-    id: "button-collecting",
-    title: "The Museum of Small Lost Things",
-    kind: "making",
-    question: "Can Mabel make a little museum from the things the world has dropped?",
-    actions: [],
-    curiosity: 0.6,
-    pull: 0.35,
-    stage: "dormant"
-  },
-  {
-    id: "old-lane",
-    title: "The Lane That Forgot Its Name",
-    kind: "wander",
-    question: "Does an old lane remember the footsteps that once crossed it?",
-    actions: [],
-    curiosity: 0.7,
-    pull: 0.45,
-    stage: "dormant"
-  }
-];
+const legacySeedInterestIds = new Set([
+  "silver-thread",
+  "rain-listening",
+  "button-collecting",
+  "old-lane"
+]);
 
 let mabel = null;
 let conversation = [];
@@ -497,16 +461,8 @@ function createDefaultMabel() {
       mood: "wondering",
       energy: 0.72
     },
-    feed: [
-      {
-        at: now(),
-        kind: "noticed",
-        text: "Mabel found a silver thread beneath the hawthorn roots.",
-        why: "It glimmered once, as though the night had dropped a stitch.",
-        ok: true
-      }
-    ],
-    interests: structuredClone(interestSeeds),
+    feed: [],
+    interests: [],
     memories: []
   };
 }
@@ -588,10 +544,8 @@ function chooseAction() {
   const lonely = mabel.needs.connection < 0.3;
 
   const actionNames = [
-    "follow_the_silver_thread",
     "listen_to_rain",
     "find_a_treasure",
-    "visit_the_old_lane",
     "rest_in_hollow",
     "write_in_diary",
     "inspect_a_leaf",
@@ -627,10 +581,8 @@ function chooseAction() {
   const chosen = actionNames[Math.floor(Math.random() * actionNames.length)];
 
   const actionText = {
-    follow_the_silver_thread: "following the silver thread beneath the hawthorn roots",
     listen_to_rain: "listening to rain gather on the hawthorn leaves",
     find_a_treasure: "searching beneath the roots for something small and shining",
-    visit_the_old_lane: "walking a little way along the old lane",
     rest_in_hollow: "resting in her nest of moss and fallen blossom",
     write_in_diary: "writing by the light of a thimble lantern",
     inspect_a_leaf: "turning a curled leaf over in her paws",
@@ -644,10 +596,8 @@ function chooseAction() {
   };
 
   const actionMood = {
-    follow_the_silver_thread: "wondering",
     listen_to_rain: "quiet",
     find_a_treasure: "curious",
-    visit_the_old_lane: "brave",
     rest_in_hollow: "sleepy",
     write_in_diary: "thoughtful",
     inspect_a_leaf: "curious",
@@ -661,10 +611,8 @@ function chooseAction() {
   };
 
   const actionThought = {
-    follow_the_silver_thread: "The thread does not pull. It waits.",
     listen_to_rain: "Rain is the sky remembering how to speak softly.",
     find_a_treasure: "A lost thing is not always lost. Sometimes it is waiting to be noticed.",
-    visit_the_old_lane: "Old paths deserve gentle footsteps.",
     rest_in_hollow: "Even small creatures need a place where the world grows quiet.",
     write_in_diary: "A diary is a little boat for the day's forgotten weather.",
     inspect_a_leaf: "A leaf can hold a whole small world in its veins.",
@@ -704,22 +652,6 @@ function chooseAction() {
   }
 
   mabel.now.energy = clampNeed(mabel.now.energy + (Math.random() - 0.45) * 0.12);
-
-  if (chosen === "follow_the_silver_thread") {
-    updateInterest("silver-thread", 0.09);
-  }
-
-  if (chosen === "listen_to_rain") {
-    updateInterest("rain-listening", 0.07);
-  }
-
-  if (chosen === "find_a_treasure") {
-    updateInterest("button-collecting", 0.08);
-  }
-
-  if (chosen === "visit_the_old_lane") {
-    updateInterest("old-lane", 0.08);
-  }
 
   saveMabel();
   updatePage();
@@ -863,6 +795,7 @@ function updateDiary() {
   const diaryEntries = mabel.feed.filter(function (entry) {
     return (
       entry.kind === "diary" ||
+      entry.kind === "did" ||
       entry.kind === "noticed" ||
       entry.kind === "mind" ||
       entry.kind === "journal" ||
@@ -1536,12 +1469,6 @@ async function handleVisitorMessage() {
       mabel.memories.length = 20;
     }
 
-    addFeedEntry({
-      kind: "noticed",
-      text: "A visitor's words settled among the moss like a fallen petal.",
-      why: "Mabel keeps small messages beside the moonlight."
-    });
-
     saveMabel();
     updateHollowScene();
     updatePage();
@@ -1745,14 +1672,6 @@ if (reflection.spark && reflection.spark.title) {
 }
 
 
-
-    if (reflection.diaryEntry) {
-      addDiaryEntry({
-        kind: "journal",
-        title: reflection.diaryEntry.title || "A small noticing",
-        text: reflection.diaryEntry.text
-      });
-    }
 
     if (reflection.memory) {
       mabel.memories.unshift({
@@ -2188,6 +2107,11 @@ function switchTab(tabName) {
 
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
+  mabel.interests = Array.isArray(mabel.interests)
+    ? mabel.interests.filter(function (interest) {
+        return !legacySeedInterestIds.has(interest.id);
+      })
+    : [];
   conversation = loadConversation();
   wanderings = loadWanderings();
   sparks = loadSparks();
