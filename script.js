@@ -41,48 +41,12 @@ const reflectionStorageKey = "mabel-last-reflection-date";
 const bindleStorageKey = "mabel-bindle-v1";
 const galleryStorageKey = "mabel-gallery-v1";
 
-const interestSeeds = [
-  {
-    id: "silver-thread",
-    title: "The Silver Thread",
-    kind: "mystery",
-    question: "Where does the silver thread beneath the hawthorn lead?",
-    actions: [],
-    curiosity: 0.9,
-    pull: 0.8,
-    stage: "pursuing"
-  },
-  {
-    id: "rain-listening",
-    title: "The Language of Rain",
-    kind: "wonder",
-    question: "What does the rain say when it lands on hawthorn leaves?",
-    actions: [],
-    curiosity: 0.5,
-    pull: 0.4,
-    stage: "dormant"
-  },
-  {
-    id: "button-collecting",
-    title: "The Museum of Small Lost Things",
-    kind: "making",
-    question: "Can Mabel make a little museum from the things the world has dropped?",
-    actions: [],
-    curiosity: 0.6,
-    pull: 0.35,
-    stage: "dormant"
-  },
-  {
-    id: "old-lane",
-    title: "The Lane That Forgot Its Name",
-    kind: "wander",
-    question: "Does an old lane remember the footsteps that once crossed it?",
-    actions: [],
-    curiosity: 0.7,
-    pull: 0.45,
-    stage: "dormant"
-  }
-];
+const legacySeedInterestIds = new Set([
+  "silver-thread",
+  "rain-listening",
+  "button-collecting",
+  "old-lane"
+]);
 
 let mabel = null;
 let conversation = [];
@@ -236,6 +200,321 @@ function renderMabelCard(artwork) {
     return null;
   }
 
+  if (!Number.isInteger(artwork.seed)) {
+    artwork.seed = (Date.now() ^ Math.floor(Math.random() * 2147483647)) >>> 0;
+  }
+
+  let randomState = artwork.seed >>> 0;
+  function random() {
+    randomState += 0x6D2B79F5;
+    let value = randomState;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  }
+
+  const fallbackPalette = ["#718778", "#b77769", "#e9d8b7"];
+  const palette = Array.isArray(artwork.palette)
+    ? artwork.palette.filter(function (colour) {
+        return typeof colour === "string" && /^#[0-9a-fA-F]{6}$/.test(colour);
+      }).slice(0, 3)
+    : [];
+  while (palette.length < 3) {
+    palette.push(fallbackPalette[palette.length]);
+  }
+
+  const motif = typeof artwork.motif === "string" ? artwork.motif : "memory";
+  const symbols = Array.isArray(artwork.symbols) ? artwork.symbols.slice(0, 3) : [];
+  const namespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(namespace, "svg");
+  svg.setAttribute("viewBox", "0 0 160 160");
+  svg.setAttribute("class", "mabel-artwork-svg");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", artwork.title);
+
+  function node(name, attributes) {
+    const element = document.createElementNS(namespace, name);
+    Object.keys(attributes).forEach(function (key) {
+      element.setAttribute(key, attributes[key]);
+    });
+    svg.appendChild(element);
+    return element;
+  }
+
+  function ellipse(x, y, rx, ry, colour, opacity, rotation) {
+    node("ellipse", {
+      cx: x, cy: y, rx: rx, ry: ry, fill: colour, opacity: opacity,
+      transform: "rotate(" + rotation + " " + x + " " + y + ")"
+    });
+  }
+
+  function path(d, colour, width, opacity, fill) {
+    node("path", {
+      d: d, fill: fill || "none", stroke: colour, "stroke-width": width,
+      "stroke-linecap": "round", "stroke-linejoin": "round", opacity: opacity
+    });
+  }
+
+  function softBlob(x, y, rx, ry, colour, opacity) {
+    const points = [];
+    const count = 8;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count;
+      const wobble = 0.72 + random() * 0.48;
+      points.push([
+        x + Math.cos(angle) * rx * wobble,
+        y + Math.sin(angle) * ry * wobble
+      ]);
+    }
+    let d = "M " + points[0][0] + " " + points[0][1];
+    for (let i = 1; i <= count; i += 1) {
+      const previous = points[(i - 1) % count];
+      const current = points[i % count];
+      const midX = (previous[0] + current[0]) / 2;
+      const midY = (previous[1] + current[1]) / 2;
+      d += " Q " + previous[0] + " " + previous[1] + " " + midX + " " + midY;
+    }
+    d += " Z";
+    node("path", { d: d, fill: colour, opacity: opacity });
+  }
+
+  const background = palette[0];
+  node("rect", { x: 0, y: 0, width: 160, height: 160, fill: background });
+  node("rect", { x: 0, y: 0, width: 160, height: 160, fill: "#f4ead6", opacity: 0.24 });
+
+  // Layered, irregular washes give each picture its own balance and weight.
+  const washCount = 3 + Math.floor(random() * 4);
+  for (let i = 0; i < washCount; i += 1) {
+    softBlob(
+      25 + random() * 110,
+      22 + random() * 112,
+      20 + random() * 34,
+      14 + random() * 32,
+      palette[1 + Math.floor(random() * 2)],
+      0.16 + random() * 0.27
+    );
+  }
+
+  // Loose brush marks keep the drawing from resolving into a repeated icon.
+  const markCount = 18 + Math.floor(random() * 27);
+  for (let i = 0; i < markCount; i += 1) {
+    const x = -8 + random() * 176;
+    const y = -8 + random() * 176;
+    const bend = -18 + random() * 36;
+    const length = 5 + random() * 25;
+    const colour = palette[Math.floor(random() * palette.length)];
+    path(
+      "M " + x + " " + y +
+      " Q " + (x + bend) + " " + (y + length / 2) +
+      " " + (x + bend * 0.4) + " " + (y + length),
+      colour,
+      0.5 + random() * 2.7,
+      0.12 + random() * 0.33
+    );
+  }
+
+  if (motif === "rain") {
+    const drift = -8 + random() * 16;
+    for (let i = 0; i < 11 + Math.floor(random() * 13); i += 1) {
+      const x = 12 + random() * 136;
+      const y = 8 + random() * 135;
+      const fall = 9 + random() * 25;
+      path(
+        "M " + x + " " + y + " Q " + (x + drift) + " " + (y + fall * 0.5) +
+        " " + (x - 3 + random() * 7) + " " + (y + fall),
+        palette[2], 0.7 + random() * 1.8, 0.28 + random() * 0.42
+      );
+    }
+    softBlob(112 + random() * 20, 38 + random() * 55, 18, 12, palette[1], 0.28);
+  } else if (motif === "night" || motif === "stars") {
+    const cx = 45 + random() * 70;
+    const cy = 38 + random() * 70;
+    ellipse(cx, cy, 17 + random() * 8, 19 + random() * 8, palette[2], 0.68, -20 + random() * 40);
+    ellipse(cx + 8, cy - 4, 16, 18, palette[0], 0.8, 0);
+    for (let i = 0; i < 18 + Math.floor(random() * 20); i += 1) {
+      const x = random() * 160;
+      const y = random() * 160;
+      const r = 0.6 + random() * 2.1;
+      if (random() > 0.55) {
+        path("M " + (x - r) + " " + y + " L " + (x + r) + " " + y +
+          " M " + x + " " + (y - r) + " L " + x + " " + (y + r),
+          palette[1 + Math.floor(random() * 2)], 0.7 + random(), 0.7);
+      } else {
+        ellipse(x, y, r, r, palette[2], 0.35 + random() * 0.55, 0);
+      }
+    }
+  } else if (motif === "bloom") {
+    const cx = 45 + random() * 70;
+    const cy = 42 + random() * 68;
+    const petals = 5 + Math.floor(random() * 5);
+    for (let i = 0; i < petals; i += 1) {
+      const angle = (Math.PI * 2 * i) / petals + random() * 0.3;
+      const px = cx + Math.cos(angle) * (13 + random() * 8);
+      const py = cy + Math.sin(angle) * (13 + random() * 8);
+      ellipse(px, py, 7 + random() * 6, 3 + random() * 4, palette[1 + (i % 2)], 0.35 + random() * 0.35, angle * 57.3);
+    }
+    ellipse(cx, cy, 4 + random() * 4, 4 + random() * 4, palette[2], 0.8, 0);
+    path("M " + cx + " " + (cy + 9) + " Q " + (cx - 8) + " 112 " + (cx + random() * 18 - 9) + " 151",
+      palette[1], 2 + random() * 2, 0.68);
+  } else if (motif === "threads") {
+    for (let i = 0; i < 3 + Math.floor(random() * 5); i += 1) {
+      const y = 22 + i * (12 + random() * 10);
+      const sway = -30 + random() * 60;
+      path(
+        "M -8 " + y + " C " + (40 + sway) + " " + (y - 35) +
+        ", " + (85 - sway) + " " + (y + 38) + ", 168 " + (y - 4 + random() * 20),
+        palette[1 + (i % 2)], 0.8 + random() * 2.3, 0.3 + random() * 0.4
+      );
+    }
+  } else if (motif === "roots") {
+    const x = 30 + random() * 100;
+    const top = 22 + random() * 30;
+    path("M " + x + " " + top + " C " + (x - 20) + " 75, " + (x + 18) + " 104, " + (x - 12) + " 163",
+      palette[1], 2 + random() * 2, 0.72);
+    for (let i = 0; i < 8; i += 1) {
+      const y = 42 + random() * 100;
+      const dx = (random() - 0.5) * 95;
+      path("M " + x + " " + y + " Q " + (x + dx * 0.4) + " " + (y + 8) +
+        " " + (x + dx) + " " + (y + 20 + random() * 20),
+        palette[1 + (i % 2)], 0.7 + random() * 2, 0.34 + random() * 0.45);
+    }
+  } else if (motif === "embers") {
+    const cx = 35 + random() * 90;
+    const cy = 35 + random() * 90;
+    for (let i = 0; i < 16 + Math.floor(random() * 18); i += 1) {
+      const x = cx + (random() - 0.5) * 78;
+      const y = cy + (random() - 0.5) * 78;
+      ellipse(x, y, 1 + random() * 4, 2 + random() * 7, palette[1 + (i % 2)], 0.3 + random() * 0.55, -45 + random() * 90);
+    }
+  } else if (motif === "memory") {
+    const cx = 35 + random() * 90;
+    const cy = 35 + random() * 90;
+    for (let i = 0; i < 4; i += 1) {
+      ellipse(cx + (random() - 0.5) * 16, cy + (random() - 0.5) * 16,
+        12 + i * 5, 8 + i * 4, "none", 0.55 - i * 0.08, random() * 35 - 18);
+      path("M " + (cx - 12 - i * 3) + " " + (cy + 13 + i * 4) +
+        " Q " + cx + " " + (cy + 20 + i * 5) + " " + (cx + 18 + i * 3) + " " + (cy + 8 + i * 3),
+        palette[(i + 1) % 3], 1 + random() * 1.2, 0.4);
+    }
+  } else if (motif === "moss") {
+    for (let i = 0; i < 24 + Math.floor(random() * 20); i += 1) {
+      const x = random() * 160;
+      const y = 95 + random() * 70;
+      softBlob(x, y, 4 + random() * 12, 3 + random() * 8,
+        palette[1 + Math.floor(random() * 2)], 0.2 + random() * 0.38);
+    }
+  } else if (motif === "path") {
+    const startX = 25 + random() * 100;
+    const endX = 25 + random() * 100;
+    path("M " + startX + " 165 C " + (startX - 24 + random() * 48) + " 125, " +
+      (endX - 28 + random() * 56) + " 70, " + endX + " -5",
+      palette[2], 5 + random() * 6, 0.38);
+    path("M " + startX + " 165 C " + (startX - 24 + random() * 48) + " 125, " +
+      (endX - 28 + random() * 56) + " 70, " + endX + " -5",
+      palette[1], 1 + random() * 1.4, 0.72);
+    for (let i = 0; i < 8; i += 1) {
+      ellipse(20 + random() * 120, 20 + random() * 125, 1 + random() * 3, 1 + random() * 3,
+        palette[2], 0.6, 0);
+    }
+  } else if (motif === "echo") {
+    const cx = 35 + random() * 90;
+    const cy = 35 + random() * 90;
+    for (let i = 0; i < 7; i += 1) {
+      path("M " + (cx - i * 6) + " " + cy + " A " + (8 + i * 6) + " " +
+        (5 + i * 5) + " 0 1 0 " + (cx + i * 6) + " " + (cy + random() * 8),
+        palette[1 + (i % 2)], 0.8 + random() * 1.6, 0.25 + random() * 0.35);
+    }
+  } else {
+    const drift = 15 + random() * 50;
+    for (let i = 0; i < 6 + Math.floor(random() * 8); i += 1) {
+      softBlob(random() * 160, random() * 160, 12 + random() * 30, 8 + random() * 23,
+        palette[1 + (i % 2)], 0.12 + random() * 0.2);
+    }
+    path("M -5 " + (70 + random() * 30) + " C " + drift + " 35, " + (100 + random() * 40) +
+      " 125, 165 " + (72 + random() * 35), palette[2], 1.2 + random() * 2, 0.3);
+  }
+
+  const symbolMarks = {
+    leaf: function (x, y, size) {
+      path("M " + x + " " + y + " Q " + (x + size) + " " + (y - size) +
+        " " + (x + size * 1.5) + " " + y + " Q " + (x + size) + " " + (y + size) + " " + x + " " + y,
+        palette[1], 1.3, 0.8);
+      path("M " + x + " " + y + " Q " + (x + size * 0.7) + " " + y + " " + (x + size * 1.4) + " " + y,
+        palette[2], 0.8, 0.65);
+    },
+    moon: function (x, y, size) {
+      ellipse(x, y, size, size * 1.1, palette[2], 0.8, -12);
+      ellipse(x + size * 0.45, y - size * 0.16, size * 0.88, size * 1.02, palette[0], 0.9, 0);
+    },
+    berry: function (x, y, size) {
+      for (let i = 0; i < 5; i += 1) {
+        ellipse(x + (random() - 0.5) * size, y + (random() - 0.5) * size,
+          size * 0.25, size * 0.25, palette[1], 0.75, 0);
+      }
+    },
+    feather: function (x, y, size) {
+      path("M " + x + " " + (y + size) + " Q " + (x + size) + " " + y + " " + (x + size * 0.35) + " " + (y - size),
+        palette[2], 1.5, 0.8);
+      for (let i = -2; i <= 2; i += 1) {
+        path("M " + (x + size * 0.4) + " " + (y + i * size * 0.25) +
+          " Q " + (x + size * 0.8) + " " + (y + i * size * 0.25 - 4) +
+          " " + (x + size) + " " + (y + i * size * 0.25 - 7), palette[1], 0.8, 0.55);
+      }
+    },
+    button: function (x, y, size) {
+      ellipse(x, y, size, size, palette[1], 0.7, 0);
+      ellipse(x - size * 0.25, y - size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
+      ellipse(x + size * 0.25, y - size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
+      ellipse(x - size * 0.25, y + size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
+      ellipse(x + size * 0.25, y + size * 0.2, 1.1, 1.1, palette[0], 0.8, 0);
+    },
+    seed: function (x, y, size) {
+      ellipse(x, y, size * 0.5, size, palette[1], 0.8, -35);
+      path("M " + x + " " + (y + size * 0.7) + " Q " + (x - 3) + " " + (y - size) +
+        " " + (x + size) + " " + (y - size * 1.5), palette[2], 0.9, 0.75);
+    },
+    raindrop: function (x, y, size) {
+      path("M " + x + " " + (y - size) + " Q " + (x + size) + " " + y + " " + x + " " +
+        (y + size) + " Q " + (x - size) + " " + y + " " + x + " " + (y - size),
+        palette[2], 1, 0.76, palette[1]);
+    },
+    stone: function (x, y, size) {
+      softBlob(x, y, size * 1.4, size, palette[1], 0.74);
+      path("M " + (x - size * 0.5) + " " + y + " Q " + x + " " + (y - size * 0.6) +
+        " " + (x + size * 0.5) + " " + (y - size * 0.35), palette[2], 0.8, 0.6);
+    },
+    doorway: function (x, y, size) {
+      path("M " + (x - size) + " " + (y + size) + " L " + (x - size) + " " + y +
+        " Q " + x + " " + (y - size * 1.7) + " " + (x + size) + " " + y +
+        " L " + (x + size) + " " + (y + size), palette[2], 1.5, 0.78);
+      ellipse(x + size * 0.45, y, 0.8, 0.8, palette[1], 0.9, 0);
+    },
+    shell: function (x, y, size) {
+      path("M " + x + " " + y + " C " + (x + size * 2) + " " + (y - size * 2) +
+        ", " + (x + size * 2) + " " + (y + size * 2) + ", " + x + " " + y +
+        " C " + (x + size) + " " + (y - size) + ", " + (x + size) + " " + (y + size) +
+        ", " + x + " " + y, palette[1], 1.1, 0.75);
+    },
+    twig: function (x, y, size) {
+      path("M " + (x - size) + " " + (y + size) + " Q " + x + " " + y + " " +
+        (x + size) + " " + (y - size), palette[1], 1.5, 0.8);
+      path("M " + x + " " + y + " Q " + (x - size) + " " + (y - size) + " " +
+        (x - size * 0.8) + " " + (y - size * 1.3), palette[2], 0.9, 0.7);
+    }
+  };
+
+  symbols.forEach(function (symbol) {
+    const drawer = symbolMarks[String(symbol).toLowerCase()];
+    if (drawer) {
+      drawer(25 + random() * 100, 25 + random() * 100, 4 + random() * 8);
+    }
+  });
+
+  for (let i = 0; i < 45; i += 1) {
+    ellipse(random() * 160, random() * 160, 0.3 + random() * 0.8, 0.3 + random() * 0.8,
+      palette[2], 0.12 + random() * 0.15, 0);
+  }
+
   const card = document.createElement("div");
   card.className = "mabel-artwork-card";
 
@@ -243,133 +522,19 @@ function renderMabelCard(artwork) {
   title.className = "mabel-artwork-title";
   title.textContent = artwork.title;
 
-  let seed = 0;
-  const seedText = (artwork.title || "") + (artwork.note || "") + (artwork.motif || "");
-
-  for (let i = 0; i < seedText.length; i += 1) {
-    seed = (seed * 31 + seedText.charCodeAt(i)) % 100000;
-  }
-
-  function nextRandom() {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
-    return seed / 2147483648;
-  }
-
-  const fallbackPalette = ["#7d9b76", "#2f3b52", "#e8dcc3"];
-  const palette = Array.isArray(artwork.palette) && artwork.palette.length >= 2
-    ? artwork.palette
-    : fallbackPalette;
-
-  const motif = artwork.motif || "mist";
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 160 160");
-  svg.setAttribute("class", "mabel-artwork-svg");
-
-  const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  background.setAttribute("width", "160");
-  background.setAttribute("height", "160");
-  background.setAttribute("fill", palette[0]);
-  svg.appendChild(background);
-
-  function addCircle(x, y, radius, colour, opacity) {
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", x);
-    circle.setAttribute("cy", y);
-    circle.setAttribute("r", radius);
-    circle.setAttribute("fill", colour);
-    circle.setAttribute("opacity", opacity);
-    svg.appendChild(circle);
-  }
-
-  function addLine(x1, y1, x2, y2, colour, width, opacity) {
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", x1);
-    line.setAttribute("y1", y1);
-    line.setAttribute("x2", x2);
-    line.setAttribute("y2", y2);
-    line.setAttribute("stroke", colour);
-    line.setAttribute("stroke-width", width);
-    line.setAttribute("opacity", opacity);
-    svg.appendChild(line);
-  }
-
-  if (motif === "rain") {
-    for (let i = 0; i < 22; i += 1) {
-      const x = nextRandom() * 160;
-      const y = nextRandom() * 120;
-      addLine(x, y, x - 4, y + 18, palette[2], 1.5, 0.35 + nextRandom() * 0.4);
-    }
-    addCircle(110, 35, 14, palette[1], 0.55);
-  }
-
-  if (motif === "night") {
-    for (let i = 0; i < 28; i += 1) {
-      addCircle(nextRandom() * 160, nextRandom() * 160, nextRandom() * 2 + 0.5, palette[2], 0.4 + nextRandom() * 0.5);
-    }
-    addCircle(115, 40, 18, palette[2], 0.75);
-  }
-
-  if (motif === "bloom") {
-    for (let i = 0; i < 9; i += 1) {
-      const angle = (i / 9) * Math.PI * 2;
-      const x = 80 + Math.cos(angle) * 34;
-      const y = 80 + Math.sin(angle) * 34;
-      addCircle(x, y, 12 + nextRandom() * 8, palette[i % palette.length], 0.45);
-    }
-    addCircle(80, 80, 10, palette[2], 0.85);
-  }
-
-  if (motif === "threads") {
-    for (let i = 0; i < 7; i += 1) {
-      const y = 20 + i * 20;
-      addLine(0, y, 160, y + (nextRandom() * 40 - 20), palette[i % palette.length], 1.5, 0.5);
-    }
-    addCircle(nextRandom() * 120 + 20, nextRandom() * 120 + 20, 6, palette[2], 0.8);
-  }
-
-  if (motif === "roots") {
-    for (let i = 0; i < 9; i += 1) {
-      const x = 20 + i * 15;
-      addLine(x, 160, x + (nextRandom() * 30 - 15), 60 + nextRandom() * 50, palette[1], 2, 0.55);
-    }
-    addCircle(80, 45, 20, palette[2], 0.5);
-  }
-
-  if (motif === "mist") {
-    for (let i = 0; i < 14; i += 1) {
-      addCircle(nextRandom() * 160, nextRandom() * 160, 16 + nextRandom() * 24, palette[i % palette.length], 0.16 + nextRandom() * 0.2);
-    }
-  }
-
-  if (motif === "embers") {
-    for (let i = 0; i < 20; i += 1) {
-      addCircle(nextRandom() * 160, nextRandom() * 160, 2 + nextRandom() * 5, palette[1 + (i % 2)], 0.4 + nextRandom() * 0.5);
-    }
-  }
-
-  if (motif === "stars") {
-    for (let i = 0; i < 35; i += 1) {
-      addCircle(nextRandom() * 160, nextRandom() * 160, nextRandom() * 1.8 + 0.4, palette[2], 0.35 + nextRandom() * 0.55);
-    }
-    addCircle(120, 35, 10, palette[1], 0.7);
-  }
-
   const drawing = document.createElement("div");
   drawing.className = "mabel-artwork-drawing";
   drawing.appendChild(svg);
 
   const note = document.createElement("p");
   note.className = "mabel-artwork-note";
-  note.textContent = artwork.note || "Mabel made a little drawing to remember this.";
+  note.textContent = artwork.note || "Mabel made a small drawing to remember this.";
 
   card.appendChild(title);
   card.appendChild(drawing);
   card.appendChild(note);
-
   return card;
 }
-
 function saveToMabelGallery(artwork) {
   if (!artwork || !artwork.title) {
     return;
@@ -497,16 +662,8 @@ function createDefaultMabel() {
       mood: "wondering",
       energy: 0.72
     },
-    feed: [
-      {
-        at: now(),
-        kind: "noticed",
-        text: "Mabel found a silver thread beneath the hawthorn roots.",
-        why: "It glimmered once, as though the night had dropped a stitch.",
-        ok: true
-      }
-    ],
-    interests: structuredClone(interestSeeds),
+    feed: [],
+    interests: [],
     memories: []
   };
 }
@@ -532,51 +689,6 @@ function addDiaryEntry(entry) {
   });
 }
 
-function updateInterest(interestId, change) {
-  const interest = mabel.interests.find(function (item) {
-    return item.id === interestId;
-  });
-
-  if (!interest) {
-    return;
-  }
-
-  interest.pull = Math.max(0, Math.min(1, interest.pull + change));
-
-  if (interest.pull > 0.65 && interest.stage === "dormant") {
-    interest.stage = "pursuing";
-
-    addFeedEntry({
-      kind: "mind",
-      text: "Mabel began a new thread: " + interest.title + ".",
-      why: interest.question,
-      interest: interest.id
-    });
-  }
-
-  if (interest.pull > 0.9 && interest.stage === "pursuing") {
-    interest.stage = "deepening";
-
-    addFeedEntry({
-      kind: "mind",
-      text: "Mabel's thread, " + interest.title + ", has become important to her.",
-      why: "Some questions begin to feel like homes.",
-      interest: interest.id
-    });
-  }
-
-  if (interest.pull < 0.15 && interest.stage !== "dormant") {
-    interest.stage = "dormant";
-
-    addFeedEntry({
-      kind: "mind",
-      text: "Mabel let " + interest.title + " rest for a while.",
-      why: "Not every question needs an answer today.",
-      interest: interest.id
-    });
-  }
-}
-
 function clampNeed(value) {
   return Math.max(0, Math.min(1, value));
 }
@@ -588,10 +700,8 @@ function chooseAction() {
   const lonely = mabel.needs.connection < 0.3;
 
   const actionNames = [
-    "follow_the_silver_thread",
     "listen_to_rain",
     "find_a_treasure",
-    "visit_the_old_lane",
     "rest_in_hollow",
     "write_in_diary",
     "inspect_a_leaf",
@@ -627,10 +737,8 @@ function chooseAction() {
   const chosen = actionNames[Math.floor(Math.random() * actionNames.length)];
 
   const actionText = {
-    follow_the_silver_thread: "following the silver thread beneath the hawthorn roots",
     listen_to_rain: "listening to rain gather on the hawthorn leaves",
     find_a_treasure: "searching beneath the roots for something small and shining",
-    visit_the_old_lane: "walking a little way along the old lane",
     rest_in_hollow: "resting in her nest of moss and fallen blossom",
     write_in_diary: "writing by the light of a thimble lantern",
     inspect_a_leaf: "turning a curled leaf over in her paws",
@@ -644,10 +752,8 @@ function chooseAction() {
   };
 
   const actionMood = {
-    follow_the_silver_thread: "wondering",
     listen_to_rain: "quiet",
     find_a_treasure: "curious",
-    visit_the_old_lane: "brave",
     rest_in_hollow: "sleepy",
     write_in_diary: "thoughtful",
     inspect_a_leaf: "curious",
@@ -661,10 +767,8 @@ function chooseAction() {
   };
 
   const actionThought = {
-    follow_the_silver_thread: "The thread does not pull. It waits.",
     listen_to_rain: "Rain is the sky remembering how to speak softly.",
     find_a_treasure: "A lost thing is not always lost. Sometimes it is waiting to be noticed.",
-    visit_the_old_lane: "Old paths deserve gentle footsteps.",
     rest_in_hollow: "Even small creatures need a place where the world grows quiet.",
     write_in_diary: "A diary is a little boat for the day's forgotten weather.",
     inspect_a_leaf: "A leaf can hold a whole small world in its veins.",
@@ -704,22 +808,6 @@ function chooseAction() {
   }
 
   mabel.now.energy = clampNeed(mabel.now.energy + (Math.random() - 0.45) * 0.12);
-
-  if (chosen === "follow_the_silver_thread") {
-    updateInterest("silver-thread", 0.09);
-  }
-
-  if (chosen === "listen_to_rain") {
-    updateInterest("rain-listening", 0.07);
-  }
-
-  if (chosen === "find_a_treasure") {
-    updateInterest("button-collecting", 0.08);
-  }
-
-  if (chosen === "visit_the_old_lane") {
-    updateInterest("old-lane", 0.08);
-  }
 
   saveMabel();
   updatePage();
@@ -862,11 +950,13 @@ function updateDiary() {
 
   const diaryEntries = mabel.feed.filter(function (entry) {
     return (
-      entry.kind === "diary" ||
+      entry.text !== "A visitor's words settled among the moss like a fallen petal." &&
+      (entry.kind === "diary" ||
+      entry.kind === "did" ||
       entry.kind === "noticed" ||
       entry.kind === "mind" ||
       entry.kind === "journal" ||
-      entry.kind === "reflection"
+      entry.kind === "reflection")
     );
   });
 
@@ -1387,6 +1477,43 @@ async function handleHollowAction(action) {
   }
 }
 
+async function requestMabelArtwork(context, targetElement) {
+  try {
+    const response = await fetch(MABEL_ART_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: context.source || "autonomous",
+        message: context.message || "",
+        mood: context.mood || mabel.now.mood,
+        activity: context.activity || mabel.now.doing,
+        thought: context.thought || mabel.now.thought,
+        needs: mabel.needs,
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 8),
+        wanderings: wanderings.slice(0, 5),
+        recentArtworks: gallery.slice(0, 6).map(function (item) {
+          return { title: item.title, motif: item.motif };
+        })
+      })
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.artwork) return null;
+
+    const card = renderMabelCard(data.artwork);
+    saveToMabelGallery(data.artwork);
+    if (card && targetElement) {
+      targetElement.appendChild(document.createElement("br"));
+      targetElement.appendChild(card);
+    }
+    return data.artwork;
+  } catch (error) {
+    return null;
+  }
+}
+
 async function handleVisitorMessage() {
   const message = messageElement.value.trim();
 
@@ -1436,37 +1563,10 @@ async function handleVisitorMessage() {
 
     replyElement.textContent = data.reply;
 
-    reflectOnConversation(message, data.reply);
+    reflectOnConversation(message, data.reply, data.spark || null);
 
-    try {
-      const artResponse = await fetch(MABEL_ART_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message: message,
-          memories: mabel.memories.slice(0, 8),
-          wanderings: wanderings.slice(0, 5)
-        })
-      });
-
-      if (artResponse.ok) {
-        const artData = await artResponse.json();
-
-        if (artData.artwork) {
-          const artworkCard = renderMabelCard(artData.artwork);
-
-          if (artworkCard) {
-            replyElement.appendChild(document.createElement("br"));
-            replyElement.appendChild(artworkCard);
-          }
-
-          saveToMabelGallery(artData.artwork);
-        }
-      }
-    } catch (artError) {
-      // Mabel can still reply even if the artwork Worker is unavailable.
+    if (/\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(message)) {
+      await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
     }
 
     if (data.artwork) {
@@ -1523,24 +1623,12 @@ async function handleVisitorMessage() {
       }
     }
 
-    mabel.memories.unshift({
-      at: now(),
-      kind: "private-memory",
-      text: "A visitor whispered: " + message
-    });
-
     mabel.needs.connection = clampNeed(mabel.needs.connection + 0.18);
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
 
     if (mabel.memories.length > 20) {
       mabel.memories.length = 20;
     }
-
-    addFeedEntry({
-      kind: "noticed",
-      text: "A visitor's words settled among the moss like a fallen petal.",
-      why: "Mabel keeps small messages beside the moonlight."
-    });
 
     saveMabel();
     updateHollowScene();
@@ -1572,7 +1660,6 @@ async function handleAutonomousMoment() {
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
-        conversation: conversation.slice(-10),
         feed: mabel.feed.slice(0, 15),
 	sparks: sparks.slice(0, 10)
       })
@@ -1682,13 +1769,20 @@ async function handleAutonomousMoment() {
       writeEveningPage();
     }
 
+    await requestMabelArtwork({
+      source: "autonomous",
+      activity: mabel.now.doing,
+      thought: mabel.now.thought,
+      mood: mabel.now.mood
+    });
+
     writeEndOfDayReflection();
   } catch (error) {
     chooseAction();
   }
 }
 
-async function reflectOnConversation(visitorMessage, mabelReply) {
+async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
   try {
     const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
       method: "POST",
@@ -1698,6 +1792,7 @@ async function reflectOnConversation(visitorMessage, mabelReply) {
       body: JSON.stringify({
         visitorMessage: visitorMessage,
         mabelReply: mabelReply,
+        sparkCandidate: sparkCandidate,
         needs: mabel.needs,
         mood: mabel.now.mood,
         activity: mabel.now.doing,
@@ -1746,15 +1841,7 @@ if (reflection.spark && reflection.spark.title) {
 
 
 
-    if (reflection.diaryEntry) {
-      addDiaryEntry({
-        kind: "journal",
-        title: reflection.diaryEntry.title || "A small noticing",
-        text: reflection.diaryEntry.text
-      });
-    }
-
-    if (reflection.memory) {
+    if (reflection.remember === true && reflection.memory) {
       mabel.memories.unshift({
         at: now(),
         kind: "reflection",
@@ -1916,7 +2003,6 @@ async function handleWander() {
       body: JSON.stringify({
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
-        conversation: conversation.slice(-10),
         mood: mabel.now.mood,
         energy: mabel.now.energy,
         needs: mabel.needs,
@@ -2188,6 +2274,11 @@ function switchTab(tabName) {
 
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
+  mabel.interests = Array.isArray(mabel.interests)
+    ? mabel.interests.filter(function (interest) {
+        return !legacySeedInterestIds.has(interest.id);
+      })
+    : [];
   conversation = loadConversation();
   wanderings = loadWanderings();
   sparks = loadSparks();
