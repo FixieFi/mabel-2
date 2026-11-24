@@ -1788,6 +1788,12 @@ async function requestMabelArtwork(context, targetElement) {
     // An explicit drawing request can still use Mabel's local drawing hand.
   }
 
+  const requestedSubject = requestedArtworkSubject(context.message);
+  if (artwork && requestedSubject) {
+    artwork.subject = requestedSubject;
+    artwork.selfPortrait = requestedSubject === "mabel";
+  }
+
   const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   if (!artwork && explicitRequest) {
     artwork = makeMabelFallbackArtwork(context);
