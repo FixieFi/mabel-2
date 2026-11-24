@@ -1648,6 +1648,10 @@ async function handleVisitorMessage() {
     }
 
     conversation.push({
+      role: "user",
+      content: message
+    });
+    conversation.push({
       role: "assistant",
       content: data.reply
     });
