@@ -2269,7 +2269,7 @@ Return only JSON like this:
   }
 }
 
-async async function handleWander(options) {
+async function handleWander(options) {
   const autonomous = options && options.autonomous === true;
   if (!mabel || (wanderButton && wanderButton.disabled)) return;
   if (wanderButton) wanderButton.disabled = true;
