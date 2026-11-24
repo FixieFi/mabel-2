@@ -35,6 +35,7 @@ const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-jo
 const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-v2";
 const wanderingsStorageKey = "mabel-wanderings-v1";
+const sparksStorageKey = "mabel-sparks-v1";
 const autonomousStorageKey = "mabel-autonomous-v1";
 const reflectionStorageKey = "mabel-last-reflection-date";
 const bindleStorageKey = "mabel-bindle-v1";
@@ -86,6 +87,7 @@ const interestSeeds = [
 let mabel = null;
 let conversation = [];
 let wanderings = [];
+let sparks = [];
 let lastAutonomousMoment = 0;
 
 let autonomousMomentCount = 0;
@@ -153,6 +155,28 @@ function saveWanderings() {
   } catch (error) {
     // Local storage may be unavailable.
   }
+}
+
+function saveSparks() {
+  try {
+    localStorage.setItem(sparksStorageKey, JSON.stringify(sparks));
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function loadSparks() {
+  try {
+    const saved = localStorage.getItem(sparksStorageKey);
+
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    // Fall through to an empty spark list.
+  }
+
+  return [];
 }
 
 function saveBindle() {
@@ -1550,6 +1574,7 @@ async function handleAutonomousMoment() {
         wanderings: wanderings.slice(0, 10),
         conversation: conversation.slice(-10),
         feed: mabel.feed.slice(0, 15)
+	sparks: sparks.slice(0, 10)
       })
     });
 
@@ -1684,7 +1709,42 @@ async function reflectOnConversation(visitorMessage, mabelReply) {
 
     if (!response.ok) return;
 
-    const reflection = await response.json();
+    const reflection = await reflectionResponse.json();
+
+if (reflection.spark && reflection.spark.title) {
+  const existingSpark = sparks.find(function (spark) {
+    return spark.id === reflection.spark.id;
+  });
+
+  if (existingSpark) {
+    existingSpark.pull = Math.min(
+      1,
+      (existingSpark.pull || 0.4) + 0.1
+    );
+  } else {
+    sparks.unshift({
+      id: reflection.spark.id || "spark-" + Date.now(),
+      title: reflection.spark.title,
+      question: reflection.spark.question || "",
+      reason: reflection.spark.reason || "",
+      source: "conversation",
+      pull: reflection.spark.pull || 0.5,
+      stage: "spark",
+      createdAt: now()
+    });
+  }
+
+  saveSparks();
+
+  replyElement.append(document.createElement("br"));
+
+  const sparkNotice = document.createElement("p");
+  sparkNotice.className = "spark-notice";
+  sparkNotice.textContent = "This has piqued Mabel’s interest.";
+  replyElement.appendChild(sparkNotice);
+}
+
+
 
     if (reflection.diaryEntry) {
       addDiaryEntry({
@@ -2130,6 +2190,7 @@ function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
   conversation = loadConversation();
   wanderings = loadWanderings();
+  sparks = loadSparks();
   lastAutonomousMoment = loadLastAutonomousMoment();
   lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
   bindle = loadBindle();
