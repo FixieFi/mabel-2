@@ -8,6 +8,10 @@ const activityLogElement = document.getElementById("activity-log");
 const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
+const sparkNoticeCard = document.getElementById("spark-notice-card");
+const viewSparkButton = document.getElementById("view-spark");
+const exploreButton = document.getElementById("explore");
+const exploreStatus = document.getElementById("explore-status");
 const needComfort = document.getElementById("need-comfort");
 const needCuriosity = document.getElementById("need-curiosity");
 const needConnection = document.getElementById("need-connection");
@@ -39,6 +43,8 @@ const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
 const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-session-v3";
 const wanderingsStorageKey = "mabel-wanderings-v1";
+const researchLogStorageKey = "mabel-library-research-v1";
+const boardReadKeysStorageKey = "mabel-board-read-v1";
 const sparksStorageKey = "mabel-sparks-v1";
 const autonomousStorageKey = "mabel-autonomous-v1";
 const reflectionStorageKey = "mabel-last-reflection-date";
@@ -56,6 +62,8 @@ const legacySeedInterestIds = new Set([
 let mabel = null;
 let conversation = [];
 let wanderings = [];
+let researchLog = [];
+let boardReadKeys = [];
 let sparks = [];
 let lastAutonomousMoment = 0;
 
@@ -126,6 +134,48 @@ function saveWanderings() {
   } catch (error) {
     // Local storage may be unavailable.
   }
+}
+
+function saveResearchLog() {
+  try {
+    localStorage.setItem(researchLogStorageKey, JSON.stringify(researchLog.slice(0, 30)));
+  } catch (error) {
+    // Research history remains available in memory for this visit.
+  }
+}
+
+function loadResearchLog() {
+  try {
+    const saved = localStorage.getItem(researchLogStorageKey);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.slice(0, 30) : [];
+    }
+  } catch (error) {
+    // Fall through to an empty research log.
+  }
+  return [];
+}
+
+function saveBoardReadKeys() {
+  try {
+    localStorage.setItem(boardReadKeysStorageKey, JSON.stringify(boardReadKeys.slice(0, 100)));
+  } catch (error) {
+    // Board reading continues for this visit.
+  }
+}
+
+function loadBoardReadKeys() {
+  try {
+    const saved = localStorage.getItem(boardReadKeysStorageKey);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.slice(0, 100) : [];
+    }
+  } catch (error) {
+    // Fall through to an empty list.
+  }
+  return [];
 }
 
 function saveSparks() {
@@ -1147,50 +1197,86 @@ function updateActivityLog() {
   });
 }
 
-function updateMusing(wandering) {
+function updateMusing(research) {
   if (!musingElement) return;
   musingElement.replaceChildren();
 
-  if (!wandering) {
+  if (!research) {
     const empty = document.createElement("p");
     empty.className = "musing-source";
-    empty.textContent = "Mabel has not looked something up yet.";
+    empty.textContent = "Mabel has not looked anything up yet.";
     musingElement.appendChild(empty);
     return;
   }
 
+  if (research.researchMethod) {
+    const method = document.createElement("p");
+    method.className = "musing-source";
+    method.textContent = research.researchMethod;
+    musingElement.appendChild(method);
+  }
+
   const question = document.createElement("p");
   question.className = "musing-source";
-  question.textContent = "Mabel pondered: " + (wandering.searchQuestion || "a question of her own");
+  question.textContent = "Mabel researched: " + (research.searchQuestion || research.focusTitle || "a question of her own");
   musingElement.appendChild(question);
 
   const source = document.createElement("p");
   source.className = "musing-text";
-  source.appendChild(document.createTextNode("She found in her research: "));
-  const sourceUrl = safeExternalUrl(wandering.url);
+  source.appendChild(document.createTextNode("She found: "));
+  const sourceUrl = safeExternalUrl(research.url);
   if (sourceUrl) {
     const link = document.createElement("a");
     link.href = sourceUrl;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = wandering.sourceTitle || wandering.title || "a page she found";
+    link.textContent = research.sourceTitle || research.title || "a page she found";
     source.appendChild(link);
   } else {
-    source.appendChild(document.createTextNode(wandering.sourceTitle || wandering.title || "no useful page came up"));
+    source.appendChild(document.createTextNode(research.sourceTitle || research.title || "no useful page came up"));
   }
   musingElement.appendChild(source);
 
-  if (wandering.researchSummary) {
-    const research = document.createElement("p");
-    research.className = "wandering-research";
-    research.textContent = wandering.researchSummary;
-    musingElement.appendChild(research);
+  if (research.researchSummary) {
+    const summary = document.createElement("p");
+    summary.className = "wandering-research";
+    summary.textContent = research.researchSummary;
+    musingElement.appendChild(summary);
   }
 
   const thought = document.createElement("p");
   thought.className = "mabel-thought";
-  thought.textContent = wandering.musing || "";
+  thought.textContent = research.musing || "";
   musingElement.appendChild(thought);
+}
+
+function updateResearchLog() {
+  const list = document.getElementById("research-log");
+  if (!list) return;
+  list.replaceChildren();
+  if (!researchLog.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "Mabel’s library log is waiting for its first question.";
+    list.appendChild(empty);
+    return;
+  }
+  researchLog.slice(0, 12).forEach(function (entry) {
+    const item = document.createElement("li");
+    const heading = document.createElement("strong");
+    heading.textContent = "Mabel researched: " + (entry.searchQuestion || entry.focusTitle || "a question of her own");
+    item.appendChild(heading);
+    if (entry.researchMethod) {
+      const method = document.createElement("p");
+      method.textContent = entry.researchMethod;
+      item.appendChild(method);
+    }
+    if (entry.researchSummary) {
+      const summary = document.createElement("p");
+      summary.textContent = entry.researchSummary;
+      item.appendChild(summary);
+    }
+    list.appendChild(item);
+  });
 }
 
 function safeExternalUrl(value) {
@@ -1561,10 +1647,8 @@ function updatePage() {
   updateInterests();
   updateChanges();
 
-  if (wanderings.length > 0) {
-    updateMusing(wanderings[0]);
-  }
-
+  updateMusing(researchLog[0] || null);
+  updateResearchLog();
   updateWanderings();
   updateBindle();
   updateHomeObjects();
