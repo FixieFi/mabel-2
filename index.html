@@ -75,6 +75,7 @@
       <div class="tab-buttons">
         <button class="tab-button active" data-tab="chat">Chat</button>
         <button class="tab-button" data-tab="musings">Explore</button>
+        <button class="tab-button" data-tab="research">Research café</button>
         <button class="tab-button" data-tab="day">Activity log</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
 	<button class="tab-button" data-tab="hollow">Mabel’s home</button>
@@ -149,7 +150,7 @@
         <p class="day-intro">Notes she chose to keep from things you shared and moments between you. They stay in this browser.</p>
         <h3>Things you’ve shared</h3>
         <ul id="visitor-profile-facts" class="visitor-profile-list"></ul>
-        <h3>Moments Mabel kept</h3>
+        <h3>Moments you shared with Mabel</h3>
         <ul id="visitor-profile-moments" class="visitor-profile-list"></ul>
         <p id="visitor-profile-empty" class="visitor-profile-empty">Mabel is still getting to know this visitor.</p>
         <button id="forget-visitor-profile" type="button">Forget these notes</button>
@@ -171,21 +172,19 @@
 
       <section id="musings" class="tab-panel">
         <h2>Explore</h2>
-        <p class="day-intro">When a question catches Mabel’s attention, she can look it up, keep a useful note, and let it lead somewhere new.</p>
+        <p class="day-intro">A compact trail of Mabel’s wanderings and the things she finds along the way.</p>
+        <h3>Wanderings &amp; discoveries</h3>
+        <ul id="wanderings" class="wandering-trail"></ul>
+      </section>
 
-        <button id="wander">Go on a wandering</button>
-
-        <p id="wander-status">
-          Mabel sometimes heads out on her own to follow a question. You can send her wandering too.
-        </p>
-
+      <section id="research" class="tab-panel">
+        <h2>Mabel’s internet café</h2>
+        <p class="day-intro">Mabel follows questions from things she finds while exploring, notes on the Visitors’ board, and interests that grow from conversations. Sometimes she heads here to look something up on her own.</p>
+        <button id="wander">Research a question</button>
+        <p id="wander-status">Mabel’s research appears here as she follows a question.</p>
         <div id="musing" class="musing-card">
           <p class="musing-source">Mabel has not looked anything up yet.</p>
         </div>
-
-               <h3>Wanderings & discoveries</h3>
-        <ul id="wanderings"></ul>
-
       </section>
 
       <section id="day" class="tab-panel">
