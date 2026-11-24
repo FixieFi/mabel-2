@@ -1709,7 +1709,7 @@ async function reflectOnConversation(visitorMessage, mabelReply) {
 
     if (!response.ok) return;
 
-    const reflection = await reflectionResponse.json();
+    const reflection = await response.json();
 
 if (reflection.spark && reflection.spark.title) {
   const existingSpark = sparks.find(function (spark) {
