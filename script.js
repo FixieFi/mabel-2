@@ -1622,7 +1622,7 @@ if (reflection.spark && reflection.spark.title) {
 
 
 
-    if (reflection.memory) {
+    if (reflection.memory && (reflection.spark || reflection.interestUpdate || reflection.desire)) {
       mabel.memories.unshift({
         at: now(),
         kind: "reflection",
