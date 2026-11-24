@@ -22,6 +22,9 @@ const wanderButton = document.getElementById("wander");
 const wanderStatus = document.getElementById("wander-status");
 const musingElement = document.getElementById("musing");
 const wanderingsElement = document.getElementById("wanderings");
+const visitorBoardForm = document.getElementById("visitor-board-form");
+const visitorBoardMessages = document.getElementById("visitor-board-messages");
+const visitorBoardStatus = document.getElementById("visitor-board-status");
 
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
@@ -31,6 +34,7 @@ const MABEL_ART_URL = "https://mabel-ai-artwork.fianna-b-murphy.workers.dev/mabe
 const MABEL_WANDER_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-wander";
 const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
+const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
 
 const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-session-v3";
@@ -40,6 +44,7 @@ const autonomousStorageKey = "mabel-autonomous-v1";
 const reflectionStorageKey = "mabel-last-reflection-date";
 const bindleStorageKey = "mabel-bindle-v1";
 const galleryStorageKey = "mabel-gallery-v1";
+const visitorProfileStorageKey = "mabel-visitor-profile-v1";
 
 const legacySeedInterestIds = new Set([
   "silver-thread",
@@ -64,6 +69,7 @@ let bindle = {
 };
 
 let gallery = [];
+let visitorProfile = { facts: [], moments: [] };
 
 function now() {
   return new Date().toISOString();
@@ -552,6 +558,7 @@ function saveToMabelGallery(artwork) {
 
   saveGallery();
   updateGallery();
+  updateVisitorProfile();
 }
 
 function formatArtworkTime(isoTime) {
@@ -699,48 +706,30 @@ function chooseAction() {
   const thirsty = mabel.needs.water < 0.35;
   const tired = mabel.needs.rest < 0.35;
   const lonely = mabel.needs.connection < 0.3;
-
   const actionNames = [
-    "listen_to_rain",
-    "find_a_treasure",
-    "rest_in_hollow",
-    "write_in_diary",
-    "inspect_a_leaf",
-    "listen_for_small_creatures",
-    "watch_the_weather",
-    "sit_by_the_path",
-    "gather_moss",
-    "follow_a_scent"
+    "listen_to_rain", "find_a_treasure", "rest_in_hollow", "write_in_diary",
+    "inspect_a_leaf", "listen_for_small_creatures", "watch_the_weather",
+    "sit_by_the_path", "gather_moss", "follow_a_scent"
   ];
 
-  if (hungry) {
-    actionNames.push("look_for_food");
-    actionNames.push("look_for_food");
-    actionNames.push("look_for_food");
-  }
-
-  if (thirsty) {
-    actionNames.push("find_water");
-    actionNames.push("find_water");
-    actionNames.push("find_water");
-  }
-
-  if (tired) {
-    actionNames.push("rest_in_hollow");
-    actionNames.push("rest_in_hollow");
-  }
-
-  if (lonely) {
-    actionNames.push("sit_by_the_path");
-    actionNames.push("sit_by_the_path");
-  }
+  if (hungry) actionNames.push("look_for_food", "look_for_food", "look_for_food");
+  if (thirsty) actionNames.push("find_water", "find_water", "find_water");
+  if (tired) actionNames.push("rest_in_hollow", "rest_in_hollow");
+  if (lonely) actionNames.push("sit_by_the_path", "sit_by_the_path");
 
   const activeInterests = mabel.interests.filter(function (interest) {
     return interest.stage === "growing" || interest.stage === "pursuing";
   });
-  const pursueInterest = activeInterests.length > 0 &&
+  const canPursueInterest = !hungry && !thirsty && !tired && activeInterests.length > 0;
+  const pursueInterest = canPursueInterest &&
     Math.random() < Math.min(0.6, 0.2 + activeInterests[0].pull * 0.35);
-  const chosen = actionNames[Math.floor(Math.random() * actionNames.length)];
+  let chosen = actionNames[Math.floor(Math.random() * actionNames.length)];
+
+  if (hungry && bindle.food.length > 0 && (!thirsty || mabel.needs.food <= mabel.needs.water)) {
+    chosen = "eat_stored_food";
+  } else if (thirsty && bindle.water.length > 0) {
+    chosen = "drink_stored_water";
+  }
 
   const actionText = {
     listen_to_rain: "listening to rain gather on the hawthorn leaves",
@@ -753,83 +742,117 @@ function chooseAction() {
     sit_by_the_path: "sitting beside the path and listening for a familiar voice",
     gather_moss: "gathering a little moss for her nest",
     follow_a_scent: "following a faint scent through the damp grass",
-    look_for_food: "searching the brambles for blackberries or fallen seeds",
-    find_water: "looking for rainwater gathered in a curled leaf"
+    look_for_food: "looking for something to eat among the brambles",
+    find_water: "looking for water gathered in a leaf",
+    eat_stored_food: "eating food she saved in her bindle",
+    drink_stored_water: "drinking water she saved for later"
   };
-
   const actionMood = {
-    listen_to_rain: "quiet",
-    find_a_treasure: "curious",
-    rest_in_hollow: "sleepy",
-    write_in_diary: "thoughtful",
-    inspect_a_leaf: "curious",
-    listen_for_small_creatures: "attentive",
-    watch_the_weather: "quiet",
-    sit_by_the_path: "hopeful",
-    gather_moss: "busy",
-    follow_a_scent: "curious",
-    look_for_food: "hungry",
-    find_water: "thirsty"
+    listen_to_rain: "quiet", find_a_treasure: "curious", rest_in_hollow: "sleepy",
+    write_in_diary: "thoughtful", inspect_a_leaf: "curious",
+    listen_for_small_creatures: "attentive", watch_the_weather: "quiet",
+    sit_by_the_path: "hopeful", gather_moss: "busy", follow_a_scent: "curious",
+    look_for_food: "hungry", find_water: "thirsty",
+    eat_stored_food: "content", drink_stored_water: "relieved"
   };
-
   const actionThought = {
-    listen_to_rain: "Rain is the sky remembering how to speak softly.",
-    find_a_treasure: "A lost thing is not always lost. Sometimes it is waiting to be noticed.",
-    rest_in_hollow: "Even small creatures need a place where the world grows quiet.",
-    write_in_diary: "A diary is a little boat for the day's forgotten weather.",
-    inspect_a_leaf: "A leaf can hold a whole small world in its veins.",
-    listen_for_small_creatures: "The grass is full of tiny movements if you stay still long enough.",
-    watch_the_weather: "The sky changes its mind more often than Mabel does.",
-    sit_by_the_path: "Sometimes it is nice simply to wait where someone might pass.",
-    gather_moss: "Soft things make a home feel safer.",
-    follow_a_scent: "A scent is a story that has not yet found its ending.",
-    look_for_food: "Mabel's stomach feels small and empty. The brambles might have something.",
-    find_water: "Mabel is thirsty. A leaf may have saved a little rain for her."
+    listen_to_rain: "Rain taps gently on the hawthorn leaves.",
+    find_a_treasure: "What has this little thing seen before it reached the roots?",
+    rest_in_hollow: "Mabel needs a quiet pause.",
+    write_in_diary: "There is one small thing from today she wants to keep.",
+    inspect_a_leaf: "The marks on this leaf look almost like a map.",
+    listen_for_small_creatures: "Something small is moving through the grass.",
+    watch_the_weather: "The weather has changed while she was looking elsewhere.",
+    sit_by_the_path: "Mabel likes to see who might pass.",
+    gather_moss: "This moss will make her nest softer.",
+    follow_a_scent: "A new smell has come through the grass.",
+    look_for_food: "Mabel is hungry. The brambles may have something.",
+    find_water: "Mabel is thirsty. She is looking for a drink.",
+    eat_stored_food: "She is glad she kept this for later.",
+    drink_stored_water: "The cool water helps her feel steadier."
   };
 
-  mabel.now.updatedAt = now();
-  mabel.now.doing = pursueInterest
-    ? "following her curiosity about " + activeInterests[0].title
-    : actionText[chosen];
-  mabel.now.mood = pursueInterest ? "absorbed" : actionMood[chosen];
-  mabel.now.thought = pursueInterest
-    ? activeInterests[0].question
-    : actionThought[chosen];
+  mabel.needs.food = clampNeed(mabel.needs.food - 0.005);
+  mabel.needs.water = clampNeed(mabel.needs.water - 0.006);
+  mabel.needs.rest = clampNeed(mabel.needs.rest + (chosen === "rest_in_hollow" ? 0.12 : -0.003));
+  mabel.needs.comfort = clampNeed(mabel.needs.comfort + (Math.random() - 0.48) * 0.025);
+  mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + (Math.random() - 0.4) * 0.025);
+  mabel.needs.connection = clampNeed(mabel.needs.connection - 0.005);
+  mabel.needs.wonder = clampNeed(mabel.needs.wonder + (Math.random() - 0.47) * 0.025);
 
-  if (pursueInterest) {
+  let activityOverride = "";
+  let thoughtOverride = "";
+
+  if (chosen === "look_for_food" && Math.random() < 0.65) {
+    const foods = ["two blackberries", "a few sunflower seeds", "a rosehip", "a fallen hazelnut"];
+    const foundFood = foods[Math.floor(Math.random() * foods.length)];
+    if (mabel.needs.food < 0.58) {
+      chosen = "eat_stored_food";
+      activityOverride = "eating " + foundFood + " she found";
+      thoughtOverride = "That was just what she needed.";
+      mabel.needs.food = clampNeed(mabel.needs.food + 0.22);
+      addFeedEntry({ kind: "did", text: "Mabel found and ate " + foundFood + ".", why: "She was hungry." });
+    } else {
+      bindle.food.unshift({ name: foundFood, note: "Mabel saved it for later." });
+      bindle.food.length = Math.min(bindle.food.length, 8);
+    }
+  }
+
+  if (chosen === "find_water" && Math.random() < 0.6) {
+    const waters = ["rainwater in a curled leaf", "a bead of dew", "a little spring puddle"];
+    const foundWater = waters[Math.floor(Math.random() * waters.length)];
+    if (mabel.needs.water < 0.58) {
+      chosen = "drink_stored_water";
+      activityOverride = "drinking " + foundWater;
+      thoughtOverride = "The cool water helps her feel steadier.";
+      mabel.needs.water = clampNeed(mabel.needs.water + 0.24);
+      addFeedEntry({ kind: "did", text: "Mabel found water and had a drink.", why: foundWater + " was gathered nearby." });
+    } else {
+      bindle.water.unshift({ name: foundWater, note: "Mabel saved it for later." });
+      bindle.water.length = Math.min(bindle.water.length, 5);
+    }
+  }
+
+  if (chosen === "eat_stored_food" && bindle.food.length > 0) {
+    const meal = bindle.food.shift();
+    mabel.needs.food = clampNeed(mabel.needs.food + 0.24);
+    activityOverride = "eating " + meal.name + " from her bindle";
+  }
+  if (chosen === "drink_stored_water" && bindle.water.length > 0) {
+    const drink = bindle.water.shift();
+    mabel.needs.water = clampNeed(mabel.needs.water + 0.25);
+    activityOverride = "drinking " + drink.name + " from her bindle";
+  }
+
+  const followsInterest = pursueInterest && !activityOverride;
+  mabel.now.doing = activityOverride || (followsInterest
+    ? "following her curiosity about " + activeInterests[0].title
+    : actionText[chosen]);
+  mabel.now.updatedAt = now();
+  mabel.now.mood = activityOverride
+    ? (chosen === "drink_stored_water" || activityOverride.indexOf("drinking ") === 0 ? "relieved" : "content")
+    : followsInterest ? "absorbed" : (actionMood[chosen] || "curious");
+  mabel.now.thought = thoughtOverride || (followsInterest
+    ? activeInterests[0].question
+    : (actionThought[chosen] || mabel.now.thought));
+
+  if (followsInterest) {
     activeInterests[0].pull = clampNeed(activeInterests[0].pull + 0.035);
     activeInterests[0].lastPursuedAt = now();
   }
 
-  mabel.needs.comfort = clampNeed(mabel.needs.comfort + (Math.random() - 0.45) * 0.08);
-  mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + (Math.random() - 0.4) * 0.08);
-  mabel.needs.connection = clampNeed(mabel.needs.connection - 0.03);
-  mabel.needs.rest = clampNeed(mabel.needs.rest + (Math.random() - 0.5) * 0.08);
-  mabel.needs.wonder = clampNeed(mabel.needs.wonder + (Math.random() - 0.45) * 0.08);
-
-  mabel.needs.food = clampNeed(mabel.needs.food - 0.015);
-  mabel.needs.water = clampNeed(mabel.needs.water - 0.02);
-
-  if (chosen === "look_for_food") {
-    mabel.needs.food = clampNeed(mabel.needs.food + 0.18);
+  mabel.now.energy = clampNeed(
+    0.18 + mabel.needs.rest * 0.5 + Math.min(mabel.needs.food, mabel.needs.water) * 0.32
+  );
+  if (chosen === "look_for_food" || chosen === "find_water" || chosen === "eat_stored_food" || chosen === "drink_stored_water") {
+    saveBindle();
   }
-
-  if (chosen === "find_water") {
-    mabel.needs.water = clampNeed(mabel.needs.water + 0.22);
-  }
-
-  if (chosen === "rest_in_hollow") {
-    mabel.needs.rest = clampNeed(mabel.needs.rest + 0.2);
-  }
-
-  mabel.now.energy = clampNeed(mabel.now.energy + (Math.random() - 0.45) * 0.12);
 
   addFeedEntry({
     kind: "did",
     text: mabel.now.doing,
-    why: "Mabel chose this for herself."
+    why: pursueInterest ? activeInterests[0].question : "Mabel chose this for herself."
   });
-
   saveMabel();
   updatePage();
 }
@@ -865,16 +888,11 @@ function updateNeeds() {
 }
 
 function updateWishes() {
-  if (!wishesElement) {
-    return;
-  }
-
+  if (!wishesElement) return;
   wishesElement.innerHTML = "";
 
   const activeWishes = mabel.interests
-    .filter(function (interest) {
-      return interest.stage !== "dormant";
-    })
+    .filter(function (interest) { return interest.stage !== "dormant"; })
     .slice(0, 4);
 
   if (activeWishes.length === 0) {
@@ -886,51 +904,79 @@ function updateWishes() {
 
   activeWishes.forEach(function (interest) {
     const item = document.createElement("li");
-    item.textContent = "Mabel wishes to " + interest.question.toLowerCase().replace(/[?.!]$/, "") + ".";
+    const question = String(interest.question || "").trim().replace(/[?.!]+$/, "");
+    const lowerQuestion = question.charAt(0).toLowerCase() + question.slice(1);
+    if (/^(what|who|where|when|why|how|whether|if)\b/i.test(question)) {
+      item.textContent = "Mabel wishes to know " + lowerQuestion + ".";
+    } else {
+      item.textContent = "Mabel wishes to learn about " + lowerQuestion + ".";
+    }
     wishesElement.appendChild(item);
   });
 }
 
 function updateInterests() {
-  if (!interestsElement) {
+  if (!interestsElement) return;
+  interestsElement.replaceChildren();
+  const sorted = [...mabel.interests].sort(function (a, b) {
+    return (b.pull || 0) - (a.pull || 0);
+  });
+  if (!sorted.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "Mabel has not found a question she wants to follow yet.";
+    interestsElement.appendChild(empty);
     return;
   }
-
-  interestsElement.innerHTML = "";
-
-  const sorted = [...mabel.interests].sort(function (a, b) {
-    return b.pull - a.pull;
-  });
-
   sorted.forEach(function (interest) {
     const item = document.createElement("li");
     item.className = "interest-item";
-
-    const title = document.createElement("span");
+    const title = document.createElement("strong");
     title.className = "interest-title";
-    title.textContent = interest.title;
-
+    title.textContent = interest.title || "A small question";
+    item.appendChild(title);
     const question = document.createElement("span");
     question.className = "interest-question";
-    question.textContent = interest.question;
-
+    question.textContent = interest.question || "";
+    item.appendChild(question);
     const meter = document.createElement("progress");
     meter.className = "interest-meter";
     meter.max = 1;
-    meter.value = interest.pull;
-
+    meter.value = clampNeed(interest.pull || 0);
+    item.appendChild(meter);
+    const stepCount = Array.isArray(interest.steps) ? interest.steps.length : (interest.progress || 0);
     const stage = document.createElement("span");
     stage.className = "interest-stage";
-    stage.textContent = interest.stage;
-
-    item.appendChild(title);
-    item.appendChild(question);
-    item.appendChild(meter);
+    stage.textContent = stepCount > 0
+      ? "Investigating · " + stepCount + (stepCount === 1 ? " step" : " steps")
+      : (interest.stage === "pursuing" ? "Ready to investigate" : "Taking shape");
     item.appendChild(stage);
-
+    if (interest.lastStep) {
+      const progress = document.createElement("span");
+      progress.className = "interest-progress-note";
+      progress.textContent = "Latest step: " + interest.lastStep;
+      item.appendChild(progress);
+    }
+    if (interest.lastSource) {
+      const source = document.createElement("span");
+      source.className = "interest-source";
+      source.appendChild(document.createTextNode("Read: "));
+      const safeUrl = safeExternalUrl(interest.lastSource.url);
+      if (safeUrl) {
+        const link = document.createElement("a");
+        link.href = safeUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = interest.lastSource.title || "source";
+        source.appendChild(link);
+      } else {
+        source.appendChild(document.createTextNode(interest.lastSource.title || "source not available"));
+      }
+      item.appendChild(source);
+    }
     interestsElement.appendChild(item);
   });
 }
+
 
 function updateChanges() {
   if (!changesElement) {
@@ -1059,41 +1105,58 @@ function updateActivityLog() {
 }
 
 function updateMusing(wandering) {
-  if (!musingElement) {
-    return;
-  }
+  if (!musingElement) return;
+  musingElement.replaceChildren();
 
   if (!wandering) {
-    musingElement.innerHTML = `
-      <p class="musing-source">Mabel has not wandered yet.</p>
-      <p class="musing-text">
-        Her curiosity is still gathering beneath the hawthorn.
-      </p>
-      <p class="mabel-thought">
-        "Perhaps I will find something small and shining."
-      </p>
-    `;
-
+    const empty = document.createElement("p");
+    empty.className = "musing-source";
+    empty.textContent = "Mabel has not looked something up yet.";
+    musingElement.appendChild(empty);
     return;
   }
 
-  let linkPart = wandering.title;
+  const question = document.createElement("p");
+  question.className = "musing-source";
+  question.textContent = "Mabel pondered: " + (wandering.searchQuestion || "a question of her own");
+  musingElement.appendChild(question);
 
-  if (wandering.url) {
-    linkPart = '<a href="' + wandering.url + '" target="_blank" rel="noopener">' + wandering.title + "</a>";
+  const source = document.createElement("p");
+  source.className = "musing-text";
+  source.appendChild(document.createTextNode("She read: "));
+  const sourceUrl = safeExternalUrl(wandering.url);
+  if (sourceUrl) {
+    const link = document.createElement("a");
+    link.href = sourceUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = wandering.sourceTitle || wandering.title || "a page she found";
+    source.appendChild(link);
+  } else {
+    source.appendChild(document.createTextNode(wandering.sourceTitle || wandering.title || "no useful page came up"));
+  }
+  musingElement.appendChild(source);
+
+  if (wandering.researchSummary) {
+    const research = document.createElement("p");
+    research.className = "wandering-research";
+    research.textContent = wandering.researchSummary;
+    musingElement.appendChild(research);
   }
 
-  musingElement.innerHTML = `
-    <p class="musing-source">
-      Mabel followed: ${wandering.searchQuestion || "a quiet thought"}
-    </p>
-    <p class="musing-text">
-      She found: ${linkPart}
-    </p>
-    <p class="mabel-thought">
-      "${wandering.musing}"
-    </p>
-  `;
+  const thought = document.createElement("p");
+  thought.className = "mabel-thought";
+  thought.textContent = wandering.musing || "";
+  musingElement.appendChild(thought);
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch (error) {
+    return "";
+  }
 }
 
 function updateBindle() {
@@ -1244,6 +1307,13 @@ function updateWanderings() {
     const thought = document.createElement("p");
     thought.textContent = wandering.musing;
 
+    if (wandering.researchSummary) {
+      const research = document.createElement("p");
+      research.className = "research-note";
+      research.textContent = wandering.researchSummary;
+      item.appendChild(research);
+    }
+
     const change = document.createElement("p");
     change.className = "wandering-change";
     change.textContent = wandering.change || "";
@@ -1256,6 +1326,156 @@ function updateWanderings() {
 
     wanderingsElement.appendChild(item);
   });
+}
+
+async function loadVisitorBoard() {
+  if (!visitorBoardMessages) return;
+  try {
+    const response = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
+    if (!response.ok) throw new Error("The shared board is unavailable.");
+    const data = await response.json();
+    visitorBoardMessages.replaceChildren();
+    const messages = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
+    if (!messages.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "The board is waiting for its first note.";
+      visitorBoardMessages.appendChild(empty);
+    }
+    messages.forEach(function (message) {
+      const item = document.createElement("li");
+      const text = document.createElement("p");
+      text.textContent = message.message || "";
+      item.appendChild(text);
+      const signoff = document.createElement("strong");
+      signoff.textContent = message.name ? "— " + message.name : "— A visitor";
+      item.appendChild(signoff);
+      if (message.createdAt) {
+        const time = document.createElement("time");
+        time.dateTime = message.createdAt;
+        time.textContent = new Date(message.createdAt).toLocaleString();
+        item.appendChild(time);
+      }
+      visitorBoardMessages.appendChild(item);
+    });
+    if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
+  } catch (error) {
+    if (visitorBoardStatus) visitorBoardStatus.textContent = "The noticeboard is resting for now. Please try again later.";
+  }
+}
+
+async function submitVisitorBoardMessage(event) {
+  event.preventDefault();
+  if (!visitorBoardForm) return;
+  const nameInput = document.getElementById("visitor-board-name");
+  const messageInput = document.getElementById("visitor-board-message");
+  const message = messageInput ? messageInput.value.trim().slice(0, 280) : "";
+  const name = nameInput ? nameInput.value.trim().slice(0, 40) : "";
+  if (!message) return;
+  if (visitorBoardStatus) visitorBoardStatus.textContent = "Posting your note…";
+  try {
+    const response = await fetch(MABEL_BOARD_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, message: message })
+    });
+    if (!response.ok) throw new Error("The shared board is unavailable.");
+    if (messageInput) messageInput.value = "";
+    if (visitorBoardStatus) visitorBoardStatus.textContent = "Your note is on the board.";
+    await loadVisitorBoard();
+  } catch (error) {
+    if (visitorBoardStatus) visitorBoardStatus.textContent = "The noticeboard is resting for now. Your note has not been posted.";
+  }
+}
+
+function loadVisitorProfile() {
+  try {
+    const saved = localStorage.getItem(visitorProfileStorageKey);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        facts: Array.isArray(parsed.facts) ? parsed.facts.slice(0, 25) : [],
+        moments: Array.isArray(parsed.moments) ? parsed.moments.slice(0, 25) : []
+      };
+    }
+  } catch (error) {
+    // Use an empty local profile if storage is unavailable.
+  }
+  return { facts: [], moments: [] };
+}
+
+function saveVisitorProfile() {
+  try {
+    localStorage.setItem(visitorProfileStorageKey, JSON.stringify(visitorProfile));
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
+function addVisitorProfileNote(listName, value) {
+  const text = String(value || "").trim().slice(0, 240);
+  if (!text || !["facts", "moments"].includes(listName)) return;
+  const existing = visitorProfile[listName].some(function (item) {
+    return item.text.toLowerCase() === text.toLowerCase();
+  });
+  if (existing) return;
+  visitorProfile[listName].unshift({
+    id: "visitor-note-" + Date.now() + "-" + Math.floor(Math.random() * 10000),
+    text: text,
+    at: now()
+  });
+  visitorProfile[listName].length = Math.min(visitorProfile[listName].length, 25);
+  saveVisitorProfile();
+}
+
+function updateVisitorProfile() {
+  const factList = document.getElementById("visitor-profile-facts");
+  const momentList = document.getElementById("visitor-profile-moments");
+  const emptyNotice = document.getElementById("visitor-profile-empty");
+  const forgetButton = document.getElementById("forget-visitor-profile");
+
+  function renderList(list, key) {
+    if (!list) return;
+    list.replaceChildren();
+    visitorProfile[key].forEach(function (note) {
+      const item = document.createElement("li");
+      const details = document.createElement("div");
+      const text = document.createElement("p");
+      text.textContent = note.text;
+      details.appendChild(text);
+      if (note.at) {
+        const time = document.createElement("time");
+        time.dateTime = note.at;
+        time.textContent = new Date(note.at).toLocaleDateString();
+        details.appendChild(time);
+      }
+      item.appendChild(details);
+      const forget = document.createElement("button");
+      forget.type = "button";
+      forget.textContent = "Forget";
+      forget.setAttribute("aria-label", "Forget this note");
+      forget.addEventListener("click", function () {
+        visitorProfile[key] = visitorProfile[key].filter(function (entry) {
+          return entry.id !== note.id;
+        });
+        saveVisitorProfile();
+        updateVisitorProfile();
+      });
+      item.appendChild(forget);
+      list.appendChild(item);
+    });
+  }
+
+  renderList(factList, "facts");
+  renderList(momentList, "moments");
+  const hasNotes = visitorProfile.facts.length + visitorProfile.moments.length > 0;
+  if (emptyNotice) emptyNotice.hidden = hasNotes;
+  if (forgetButton) forgetButton.disabled = !hasNotes;
+}
+
+function forgetVisitorProfile() {
+  visitorProfile = { facts: [], moments: [] };
+  saveVisitorProfile();
+  updateVisitorProfile();
 }
 
 function updatePage() {
@@ -1275,230 +1495,119 @@ function updatePage() {
   }
 
   updateWanderings();
-    updateBindle();
+  updateBindle();
+  updateHomeObjects();
   updateGallery();
 }
 
 function ensureHollowWorld() {
-  if (!mabel.world) {
-    mabel.world = {
-      weather: "clear",
-      timeOfDay: "afternoon",
-      nest: {
-        tidiness: 0.7,
-        leaves: 2
-      },
-      foodDish: {
-        food: []
-      },
-      waterLeaf: {
-        water: 0.6
-      },
-      path: {
-        offerings: []
-      }
-    };
-  }
+  const saved = mabel.world && typeof mabel.world === "object" ? mabel.world : {};
+  mabel.world = {
+    weather: saved.weather || "clear",
+    timeOfDay: saved.timeOfDay || "afternoon",
+    ...saved,
+    nest: { tidiness: 0.7, leaves: 2, ...(saved.nest || {}) },
+    foodDish: { food: [], ...(saved.foodDish || {}) },
+    waterLeaf: { water: 0.6, ...(saved.waterLeaf || {}) },
+    path: { offerings: [], ...(saved.path || {}) },
+    objects: Array.isArray(saved.objects) ? saved.objects.slice(0, 20) : []
+  };
 }
 
-function updateHollowScene() {
+function updateHomeObjects() {
   ensureHollowWorld();
-
-  const foodItem = document.getElementById("hollow-food-item");
-  const waterItem = document.getElementById("hollow-water-item");
-  const offering = document.getElementById("hollow-offering");
-
-  if (foodItem) {
-    foodItem.setAttribute("opacity", mabel.world.foodDish.food.length > 0 ? "1" : "0");
+  const list = document.getElementById("hollow-objects");
+  if (!list) return;
+  list.replaceChildren();
+  const objects = mabel.world.objects.slice(0, 10);
+  if (!objects.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "The shelf is empty for now.";
+    list.appendChild(empty);
+    return;
   }
-
-  if (waterItem) {
-    waterItem.setAttribute("opacity", mabel.world.waterLeaf.water > 0.2 ? "0.75" : "0.2");
-  }
-
-  if (offering) {
-    offering.setAttribute("opacity", mabel.world.path.offerings.length > 0 ? "1" : "0");
-  }
+  objects.forEach(function (object) {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = object.name;
+    item.appendChild(name);
+    if (object.status === "waiting") {
+      const waiting = document.createElement("p");
+      waiting.textContent = "Waiting for Mabel to notice.";
+      item.appendChild(waiting);
+    }
+    if (object.reaction) {
+      const reaction = document.createElement("p");
+      reaction.textContent = object.reaction;
+      item.appendChild(reaction);
+    } else if (object.note) {
+      const note = document.createElement("p");
+      note.textContent = object.note;
+      item.appendChild(note);
+    }
+    list.appendChild(item);
+  });
 }
+
 
 function showHollowSpeech(text) {
   const speech = document.getElementById("hollow-speech");
   const speechText = document.getElementById("hollow-speech-text");
-
   if (!speech || !speechText) return;
-
   speechText.textContent = text;
   speech.classList.remove("hidden");
-
   setTimeout(function () {
     speech.classList.add("hidden");
   }, 7000);
 }
 
-async function handleHollowAction(action) {
+async function queueHomeGift(objectName, giftKind) {
   if (!mabel) return;
-
+  const cleanName = String(objectName || "").trim().slice(0, 80);
+  if (!cleanName) return;
   ensureHollowWorld();
-
-  const status = document.getElementById("hollow-status");
-  let eventText = "";
-  let eventDetails = {};
-
-  if (action === "leave-food") {
-    eventText = "The visitor leaves a blackberry in Mabel's food dish.";
-    eventDetails = { object: "blackberry" };
-
-    mabel.world.foodDish.food.push({
-      name: "blackberry",
-      at: now()
-    });
-  }
-
-  if (action === "refill-water") {
-    eventText = "The visitor refills Mabel's water leaf.";
-    eventDetails = { object: "water leaf" };
-
-    mabel.world.waterLeaf.water = 1;
-  }
-
-  if (action === "tidy-nest") {
-    eventText = "The visitor gently tidies Mabel's mossy nest.";
-    eventDetails = { object: "mossy nest" };
-
-    mabel.world.nest.tidiness = 1;
-
-    if (mabel.world.nest.leaves > 0) {
-      mabel.world.nest.leaves = mabel.world.nest.leaves - 1;
-    }
-  }
-
-  if (action === "leave-offering") {
-    const offerings = [
-      "a small white pebble",
-      "a curled leaf",
-      "a tiny blue button",
-      "a feather",
-      "a flower petal"
-    ];
-
-    const offering = offerings[Math.floor(Math.random() * offerings.length)];
-
-    eventText = "The visitor leaves " + offering + " on the path near Mabel's hollow.";
-    eventDetails = { object: offering };
-
-    mabel.world.path.offerings.unshift({
-      name: offering,
-      at: now()
-    });
-
-    if (mabel.world.path.offerings.length > 10) {
-      mabel.world.path.offerings.length = 10;
-    }
-  }
-
+  const gift = {
+    id: "gift-" + Date.now() + "-" + Math.floor(Math.random() * 100000),
+    name: cleanName,
+    kind: giftKind || "object",
+    at: now(),
+    source: "visitor",
+    noticedAt: "",
+    reaction: "",
+    status: "waiting"
+  };
+  mabel.world.objects.unshift(gift);
+  mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
   saveMabel();
-  updateHollowScene();
-
-  if (!eventText) return;
-
-  if (status) {
-    status.textContent = "Mabel notices something in the hollow...";
-  }
-
-  try {
-    const response = await fetch(MABEL_AI_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        event: eventText,
-        eventDetails: eventDetails,
-        world: mabel.world,
-        needs: mabel.needs,
-        mood: mabel.now.mood,
-        activity: mabel.now.doing,
-        energy: mabel.now.energy,
-        memories: mabel.memories.slice(0, 8),
-        conversation: conversation.slice(-10)
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error("Mabel could not notice the hollow. Status " + response.status);
-    }
-
-    const data = await response.json();
-
-    if (data.reply) {
-      showHollowSpeech(data.reply);
-
-      replyElement.textContent = data.reply;
-
-      conversation.push({
-        role: "user",
-        content: eventText
-      });
-
-      conversation.push({
-        role: "assistant",
-        content: data.reply
-      });
-
-      if (conversation.length > 20) {
-        conversation = conversation.slice(-20);
-      }
-
-      saveConversation();
-    }
-
-    if (data.needs) {
-      if (typeof data.needs.food === "number") {
-        mabel.needs.food = clampNeed(data.needs.food);
-      }
-
-      if (typeof data.needs.water === "number") {
-        mabel.needs.water = clampNeed(data.needs.water);
-      }
-
-      if (typeof data.needs.rest === "number") {
-        mabel.needs.rest = clampNeed(data.needs.rest);
-      }
-
-      if (typeof data.needs.comfort === "number") {
-        mabel.needs.comfort = clampNeed(data.needs.comfort);
-      }
-    }
-
-    if (data.mood) {
-      mabel.now.mood = data.mood;
-    }
-
-    if (data.memory) {
-      mabel.memories.unshift({
-        at: now(),
-        kind: "visitor",
-        text: data.memory
-      });
-
-      if (mabel.memories.length > 20) {
-        mabel.memories.length = 20;
-      }
-    }
-
-    saveMabel();
-    updatePage();
-    updateHollowScene();
-
-    if (status) {
-      status.textContent = "Mabel has noticed the hollow.";
-    }
-  } catch (error) {
-    if (status) {
-      status.textContent = "Mabel’s attention drifted for a moment. Try again soon.";
-    }
-  }
+  updateHomeObjects();
+  const status = document.getElementById("hollow-status");
+  if (status) status.textContent = "Your gift is at home. Mabel will notice it when she gets around to it.";
 }
+
+function chooseGift(event) {
+  const kind = event.currentTarget.dataset.giftKind;
+  const gifts = {
+    food: ["a blackberry", "three sunflower seeds", "a fallen hazelnut", "a little oat crumb"],
+    water: ["a sip of clean rainwater in a curled leaf", "a bead of dew", "a small cup of fresh water"],
+    surprise: ["a red toy dinosaur", "a Sharpie cap", "a tiny paper party hat", "a shiny bottle cap", "a little plastic horse", "one bright button"]
+  };
+  const options = gifts[kind] || gifts.surprise;
+  queueHomeGift(options[Math.floor(Math.random() * options.length)], kind);
+}
+
+function handleIntroducedObject(event) {
+  event.preventDefault();
+  const input = document.getElementById("hollow-object-input");
+  const objectName = input ? input.value.trim().slice(0, 80) : "";
+  const status = document.getElementById("hollow-status");
+  if (!objectName) {
+    if (status) status.textContent = "Write a small surprise for Mabel to find.";
+    return;
+  }
+  queueHomeGift(objectName, "object");
+  if (input) input.value = "";
+}
+
 
 function makeMabelFallbackArtwork(context) {
   const palettes = [
@@ -1703,7 +1812,7 @@ async function handleVisitorMessage() {
     }
 
     saveMabel();
-    updateHollowScene();
+    updateHomeObjects();
     updatePage();
 
     messageElement.value = "";
@@ -1712,11 +1821,79 @@ async function handleVisitorMessage() {
   }
 }
 
+async function noticeNextVisitorGift() {
+  ensureHollowWorld();
+  const gift = mabel.world.objects.find(function (item) {
+    return item.source === "visitor" && !item.noticedAt;
+  });
+  if (!gift) return;
+
+  const eventText = "During her own day, Mabel notices that someone left " + gift.name + " at home.";
+  try {
+    const response = await fetch(MABEL_AI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: eventText,
+        eventDetails: { kind: "introduced-gift", object: gift.name, giftKind: gift.kind },
+        world: mabel.world,
+        needs: mabel.needs,
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 8),
+        conversation: conversation.slice(-8)
+      })
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    gift.noticedAt = now();
+    gift.reaction = data.reply || "Mabel has noticed the gift.";
+    gift.status = "noticed";
+    if (data.reply) showHollowSpeech(data.reply);
+    if (data.mood) mabel.now.mood = data.mood;
+    if (data.memory) mabel.memories.unshift({ at: now(), kind: "discovery", text: data.memory });
+    if (data.spark) recordSpark({ ...data.spark, source: "discovery" });
+
+    if (gift.kind === "food" && mabel.needs.food < 0.72) {
+      mabel.needs.food = clampNeed(mabel.needs.food + 0.2);
+      gift.status = "eaten";
+      addFeedEntry({ kind: "did", text: "Mabel ate " + gift.name + ", a gift she found waiting at home.", why: data.reply || "She was hungry." });
+    } else if (gift.kind === "water" && mabel.needs.water < 0.72) {
+      mabel.needs.water = clampNeed(mabel.needs.water + 0.22);
+      gift.status = "drank";
+      addFeedEntry({ kind: "did", text: "Mabel drank " + gift.name + ", a gift she found waiting at home.", why: data.reply || "She was thirsty." });
+    } else if (gift.kind === "food") {
+      bindle.food.unshift({ name: gift.name, note: "A visitor left this for Mabel.", giftId: gift.id });
+      bindle.food.length = Math.min(bindle.food.length, 8);
+      gift.status = "saved for later";
+    } else if (gift.kind === "water") {
+      bindle.water.unshift({ name: gift.name, note: "A visitor left this for Mabel.", giftId: gift.id });
+      bindle.water.length = Math.min(bindle.water.length, 5);
+      gift.status = "saved for later";
+    }
+    addFeedEntry({
+      kind: "noticed",
+      text: "Mabel noticed " + gift.name + " waiting at home.",
+      why: gift.reaction,
+      interest: data.spark && data.spark.id
+    });
+    saveBindle();
+    saveMabel();
+    updateHomeObjects();
+    updatePage();
+  } catch (error) {
+    gift.noticeAttemptedAt = now();
+    saveMabel();
+  }
+}
+
 async function handleAutonomousMoment() {
   lastAutonomousMoment = Date.now();
   saveLastAutonomousMoment();
 
   try {
+    await noticeNextVisitorGift();
     const response = await fetch(MABEL_DAY_URL, {
       method: "POST",
       headers: {
@@ -1728,6 +1905,9 @@ async function handleAutonomousMoment() {
         energy: mabel.now.energy,
         needs: mabel.needs,
         interests: mabel.interests,
+        focusInterest: options && options.interestId
+          ? mabel.interests.find(function (interest) { return interest.id === options.interestId; }) || null
+          : null,
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
         feed: mabel.feed.slice(0, 15),
@@ -1768,36 +1948,6 @@ async function handleAutonomousMoment() {
       });
     }
 
-    if (data.needs) {
-      if (typeof data.needs.food === "number") {
-        mabel.needs.food = clampNeed(data.needs.food);
-      }
-
-      if (typeof data.needs.water === "number") {
-        mabel.needs.water = clampNeed(data.needs.water);
-      }
-
-      if (typeof data.needs.rest === "number") {
-        mabel.needs.rest = clampNeed(data.needs.rest);
-      }
-
-      if (typeof data.needs.comfort === "number") {
-        mabel.needs.comfort = clampNeed(data.needs.comfort);
-      }
-
-      if (typeof data.needs.curiosity === "number") {
-        mabel.needs.curiosity = clampNeed(data.needs.curiosity);
-      }
-
-      if (typeof data.needs.connection === "number") {
-        mabel.needs.connection = clampNeed(data.needs.connection);
-      }
-
-      if (typeof data.needs.wonder === "number") {
-        mabel.needs.wonder = clampNeed(data.needs.wonder);
-      }
-    }
-
     if (data.interest) {
       const existing = mabel.interests.find(function (interest) {
         return interest.id === data.interest.id;
@@ -1832,6 +1982,18 @@ async function handleAutonomousMoment() {
 
     saveMabel();
     updatePage();
+
+    const activeGoals = mabel.interests
+      .filter(function (interest) { return interest.stage === "growing" || interest.stage === "pursuing"; })
+      .sort(function (a, b) {
+        return new Date(a.lastPursuedAt || 0).getTime() - new Date(b.lastPursuedAt || 0).getTime();
+      });
+    const canResearch = mabel.needs.food > 0.2 && mabel.needs.water > 0.2 && mabel.needs.rest > 0.2;
+    if (activeGoals.length && canResearch) {
+      await handleWander({ autonomous: true, interestId: activeGoals[0].id });
+    } else if (Math.random() < 0.35) {
+      await handleWander({ autonomous: true });
+    }
 
     autonomousMomentCount = autonomousMomentCount + 1;
 
@@ -1952,6 +2114,7 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
         activity: mabel.now.doing,
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
+        visitorProfile: visitorProfile,
         world: mabel.world
       })
     });
@@ -1959,6 +2122,9 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate)
     if (!response.ok) return;
 
     const reflection = await response.json();
+
+    addVisitorProfileNote("facts", reflection.visitorNote);
+    addVisitorProfileNote("moments", reflection.sharedMoment);
 
 if (reflection.spark && reflection.spark.title && !sparkCandidate) {
       recordSpark(reflection.spark);
@@ -2103,28 +2269,28 @@ Return only JSON like this:
   }
 }
 
-async function handleWander() {
-  wanderButton.disabled = true;
-  wanderStatus.textContent = "Mabel is following a little thread through the moss...";
+async async function handleWander(options) {
+  const autonomous = options && options.autonomous === true;
+  if (!mabel || (wanderButton && wanderButton.disabled)) return;
+  if (wanderButton) wanderButton.disabled = true;
+  if (wanderStatus) {
+    wanderStatus.textContent = autonomous
+      ? "Mabel has gone to look something up."
+      : "Mabel is setting out to investigate a question.";
+  }
 
   if (musingElement) {
-    musingElement.innerHTML = `
-      <p class="musing-source">Mabel is wandering...</p>
-      <p class="musing-text">
-        Her small paws are quiet among the moss and fallen leaves.
-      </p>
-      <p class="mabel-thought">
-        "Perhaps something small and shining is waiting."
-      </p>
-    `;
+    musingElement.replaceChildren();
+    const waiting = document.createElement("p");
+    waiting.className = "musing-source";
+    waiting.textContent = "Mabel is looking for something useful to read.";
+    musingElement.appendChild(waiting);
   }
 
   try {
     const response = await fetch(MABEL_WANDER_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         interests: mabel.interests,
         memories: mabel.memories.slice(0, 10),
@@ -2135,134 +2301,151 @@ async function handleWander() {
         bindle: bindle
       })
     });
-
-    if (!response.ok) {
-      throw new Error("Mabel could not wander. Status " + response.status);
-    }
+    if (!response.ok) throw new Error("Mabel could not wander. Status " + response.status);
 
     const data = await response.json();
-
     const wandering = {
       at: now(),
-      searchQuestion: data.searchQuestion,
-      title: data.title,
-      url: data.url,
-      musing: data.musing,
+      searchQuestion: data.searchQuestion || "",
+      title: data.title || "A question Mabel followed",
+      sourceTitle: data.sourceTitle || "",
+      researchSummary: data.researchSummary || "",
+      url: data.url || "",
+      musing: data.musing || "",
       change: data.change || "",
-      interest: data.interest || null
+      interest: data.interest || null,
+      goalProgress: data.goalProgress || null
     };
-
     wanderings.unshift(wandering);
-
-    if (wanderings.length > 30) {
-      wanderings.length = 30;
-    }
-
+    if (wanderings.length > 30) wanderings.length = 30;
     saveWanderings();
 
     if (wandering.interest) {
-      const existing = mabel.interests.find(function (interest) {
-        return interest.id === wandering.interest.id;
+      const interest = mabel.interests.find(function (item) {
+        return item.id === wandering.interest.id ||
+          normalizeInterestTitle(item.title) === normalizeInterestTitle(wandering.interest.title);
       });
-
-      if (existing) {
-        existing.pull = Math.max(0, Math.min(1, existing.pull + 0.12));
-
-        if (existing.pull > 0.65 && existing.stage === "dormant") {
-          existing.stage = "pursuing";
-        }
+      if (interest) {
+        interest.pull = clampNeed((interest.pull || 0.4) + 0.12);
+        interest.question = wandering.interest.question || interest.question;
+        if (interest.pull > 0.65) interest.stage = "pursuing";
       } else {
         mabel.interests.push(wandering.interest);
-
         addFeedEntry({
           kind: "mind",
-          text: "Mabel began a new thread: " + wandering.interest.title + ".",
+          text: "A question from Mabel’s wandering stayed with her: " + wandering.interest.title + ".",
           why: wandering.interest.question,
           interest: wandering.interest.id
         });
       }
     }
 
-    const finds = Array.isArray(data.finds) ? data.finds : [];
+    const activeGoal = wandering.goalProgress && mabel.interests.find(function (item) {
+      return item.id === wandering.goalProgress.id;
+    });
+    if (activeGoal) {
+      activeGoal.steps = Array.isArray(activeGoal.steps) ? activeGoal.steps : [];
+      const step = String(wandering.goalProgress.step || wandering.researchSummary || "").slice(0, 260);
+      if (step) {
+        activeGoal.steps.unshift({ at: now(), text: step, source: wandering.sourceTitle || "", url: wandering.url || "" });
+        activeGoal.steps.length = Math.min(activeGoal.steps.length, 12);
+        activeGoal.progress = activeGoal.steps.length;
+        activeGoal.lastStep = step;
+        activeGoal.lastPursuedAt = now();
+        activeGoal.lastSource = { title: wandering.sourceTitle || "", url: wandering.url || "" };
+        activeGoal.nextQuestion = wandering.goalProgress.nextQuestion || activeGoal.question;
+        activeGoal.question = activeGoal.nextQuestion;
+        activeGoal.stage = "pursuing";
+        addFeedEntry({
+          kind: "mind",
+          text: "Mabel made a step in " + activeGoal.title + ": " + step,
+          why: wandering.researchSummary || "She followed a source and kept a note.",
+          interest: activeGoal.id
+        });
+      }
+    }
 
+    ensureHollowWorld();
+    mabel.needs.food = clampNeed(mabel.needs.food - 0.025);
+    mabel.needs.water = clampNeed(mabel.needs.water - 0.035);
+    mabel.needs.rest = clampNeed(mabel.needs.rest - 0.04);
+
+    const finds = Array.isArray(data.finds) ? data.finds.slice(0, 2) : [];
     finds.forEach(function (found) {
-      const kind = found.kind || "treasure";
-      const name = found.name || "something small";
-      const note = found.note || "";
+      const kind = ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure";
+      const name = String(found.name || "something small").slice(0, 80);
+      const note = String(found.note || "").slice(0, 160);
 
       if (kind === "food") {
-        bindle.food.unshift({
-          name: name,
-          note: note
-        });
-
-        if (bindle.food.length > 8) {
-          bindle.food.length = 8;
+        if (mabel.needs.food < 0.58) {
+          mabel.needs.food = clampNeed(mabel.needs.food + 0.24);
+          addFeedEntry({ kind: "did", text: "Mabel found and ate " + name + ".", why: note || "She was hungry." });
+        } else {
+          bindle.food.unshift({ name: name, note: note });
+          bindle.food.length = Math.min(bindle.food.length, 8);
         }
-
-        mabel.needs.food = clampNeed(mabel.needs.food + 0.12);
-      }
-
-      if (kind === "water") {
-        bindle.water.unshift({
-          name: name,
-          note: note
-        });
-
-        if (bindle.water.length > 5) {
-          bindle.water.length = 5;
+      } else if (kind === "water") {
+        if (mabel.needs.water < 0.58) {
+          mabel.needs.water = clampNeed(mabel.needs.water + 0.26);
+          addFeedEntry({ kind: "did", text: "Mabel found water and had a drink.", why: note || name });
+        } else {
+          bindle.water.unshift({ name: name, note: note });
+          bindle.water.length = Math.min(bindle.water.length, 5);
         }
-
-        mabel.needs.water = clampNeed(mabel.needs.water + 0.15);
-      }
-
-      if (kind === "treasure") {
-        bindle.treasures.unshift({
+      } else {
+        bindle.treasures.unshift({ name: name, note: note });
+        bindle.treasures.length = Math.min(bindle.treasures.length, 12);
+        mabel.world.objects.unshift({
           name: name,
-          note: note
+          at: now(),
+          source: "wandering",
+          note: note,
+          reaction: ""
         });
-
-        if (bindle.treasures.length > 12) {
-          bindle.treasures.length = 12;
-        }
-
+        mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
         mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
       }
     });
 
     saveBindle();
-
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.1);
-    mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
+    mabel.now.doing = wandering.searchQuestion
+      ? "looking up " + wandering.searchQuestion
+      : "following a question from her wandering";
+    mabel.now.thought = wandering.musing || wandering.researchSummary || mabel.now.thought;
+    mabel.now.mood = "curious";
+    mabel.now.updatedAt = now();
+    mabel.now.energy = clampNeed(
+      0.18 + mabel.needs.rest * 0.5 + Math.min(mabel.needs.food, mabel.needs.water) * 0.32
+    );
 
     addFeedEntry({
       kind: "noticed",
-      text: "Mabel encountered: " + wandering.title + ".",
-      why: wandering.musing
+      text: "Mabel pondered: " + (wandering.searchQuestion || wandering.title) + ".",
+      why: [wandering.researchSummary, wandering.musing].filter(Boolean).join(" ")
     });
-
     if (finds.length > 0) {
-      const foundNames = finds
-        .map(function (found) {
-          return found.name || "something small";
-        })
-        .join(", ");
-
       addFeedEntry({
         kind: "noticed",
-        text: "Mabel gathered: " + foundNames + ".",
-        why: "She tucked what she could carry into her bindle."
+        text: "Mabel found: " + finds.map(function (found) { return found.name || "something small"; }).join(", ") + ".",
+        why: "She decided what to eat, save, or bring home."
       });
     }
 
     saveMabel();
     updatePage();
-
-    wanderStatus.textContent = "Mabel has returned from her wandering.";
+    updateHomeObjects();
+    if (wanderStatus) {
+      wanderStatus.textContent = autonomous
+        ? "Mabel has come home with something to think about."
+        : "Mabel has come back with a question and a few things she found.";
+    }
   } catch (error) {
-    wanderStatus.textContent = "Mabel's paws paused at the edge of the hollow. The path beyond was tangled.";
+    if (wanderStatus) {
+      wanderStatus.textContent = "Mabel could not finish this wandering just now. Her home and needs are unchanged.";
+    }
   } finally {
-    wanderButton.disabled = false;
+    if (wanderButton) wanderButton.disabled = false;
   }
 }
 
@@ -2381,21 +2564,14 @@ Return only JSON like this:
 
 function switchTab(tabName) {
   tabButtons.forEach(function (button) {
-    if (button.dataset.tab === tabName) {
-      button.classList.add("active");
-    } else {
-      button.classList.remove("active");
-    }
+    button.classList.toggle("active", button.dataset.tab === tabName);
   });
-
   tabPanels.forEach(function (panel) {
-    if (panel.id === tabName) {
-      panel.classList.add("active");
-    } else {
-      panel.classList.remove("active");
-    }
+    panel.classList.toggle("active", panel.id === tabName);
   });
+  if (tabName === "visitor-board") loadVisitorBoard();
 }
+
 
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
@@ -2428,6 +2604,7 @@ function startMabel() {
   lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
   bindle = loadBindle();
   gallery = loadGallery();
+  visitorProfile = loadVisitorProfile();
 
   if (!mabel.needs) {
     mabel.needs = {
@@ -2449,6 +2626,7 @@ function startMabel() {
     mabel.needs.water = 0.75;
   }
 
+  ensureHollowWorld();
   updatePage();
 
   tabButtons.forEach(function (button) {
@@ -2465,23 +2643,19 @@ function startMabel() {
     wanderButton.addEventListener("click", handleWander);
   }
 
-  const hollowScene = document.querySelector(".hollow-svg");
-  if (hollowScene) {
-    hollowScene.querySelectorAll("[data-hollow-action]").forEach(function (hotspot) {
-      hotspot.setAttribute("tabindex", "0");
-      hotspot.setAttribute("role", "button");
-      hotspot.addEventListener("click", function () {
-        handleHollowAction(hotspot.dataset.hollowAction);
-      });
-      hotspot.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          handleHollowAction(hotspot.dataset.hollowAction);
-        }
-      });
-    });
-    updateHollowScene();
-  }
+  const introducedObjectForm = document.getElementById("introduce-object-form");
+  if (introducedObjectForm) introducedObjectForm.addEventListener("submit", handleIntroducedObject);
+  document.querySelectorAll("[data-gift-kind]").forEach(function (button) {
+    button.addEventListener("click", chooseGift);
+  });
+  if (visitorBoardForm) visitorBoardForm.addEventListener("submit", submitVisitorBoardMessage);
+  const forgetProfileButton = document.getElementById("forget-visitor-profile");
+  if (forgetProfileButton) forgetProfileButton.addEventListener("click", forgetVisitorProfile);
+  loadVisitorBoard();
+  setInterval(function () {
+    const boardPanel = document.getElementById("visitor-board");
+    if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
+  }, 30000);
 
   // Mabel's ordinary life continues every 45 seconds.
   setInterval(function () {
