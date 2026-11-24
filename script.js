@@ -809,6 +809,12 @@ function chooseAction() {
 
   mabel.now.energy = clampNeed(mabel.now.energy + (Math.random() - 0.45) * 0.12);
 
+  addFeedEntry({
+    kind: "did",
+    text: mabel.now.doing,
+    why: "Mabel chose this for herself."
+  });
+
   saveMabel();
   updatePage();
 }
@@ -1477,13 +1483,49 @@ async function handleHollowAction(action) {
   }
 }
 
+function makeMabelFallbackArtwork(context) {
+  const palettes = [
+    ["#718778", "#b77769", "#e9d8b7"],
+    ["#8b7798", "#d08b62", "#e9dfc9"],
+    ["#527b83", "#c27a78", "#ead8a5"],
+    ["#9a765d", "#718f74", "#e8cfb2"],
+    ["#6d7794", "#b67c8d", "#eadcbf"]
+  ];
+  const motifs = ["rain", "night", "bloom", "threads", "roots", "mist", "embers", "stars", "memory", "moss", "path", "echo"];
+  const symbols = ["leaf", "moon", "berry", "feather", "button", "seed", "raindrop", "stone", "doorway", "shell", "twig"];
+  const activity = context.activity || mabel.now.doing || "listening beneath the hawthorn";
+  const mood = context.mood || mabel.now.mood || "quiet";
+  const hint = ((context.message || "") + " " + activity + " " + mood).toLowerCase();
+  const motif = hint.includes("rain") || hint.includes("water")
+    ? "rain"
+    : hint.includes("flower") || hint.includes("bloom")
+      ? "bloom"
+      : hint.includes("night") || hint.includes("moon")
+        ? "night"
+        : motifs[Math.floor(Math.random() * motifs.length)];
+
+  return {
+    title: "Mabel's " + mood + " marks",
+    kind: "moment",
+    palette: palettes[Math.floor(Math.random() * palettes.length)],
+    motif: motif,
+    symbols: [symbols[Math.floor(Math.random() * symbols.length)]],
+    note: "She kept a small piece of " + activity + ".",
+    seed: (Date.now() ^ Math.floor(Math.random() * 2147483647)) >>> 0
+  };
+}
+
 async function requestMabelArtwork(context, targetElement) {
+  const source = context.source || "autonomous";
+  let artwork = null;
+  let declined = false;
+
   try {
     const response = await fetch(MABEL_ART_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        source: context.source || "autonomous",
+        source: source,
         message: context.message || "",
         mood: context.mood || mabel.now.mood,
         activity: context.activity || mabel.now.doing,
@@ -1498,20 +1540,29 @@ async function requestMabelArtwork(context, targetElement) {
       })
     });
 
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!data.artwork) return null;
-
-    const card = renderMabelCard(data.artwork);
-    saveToMabelGallery(data.artwork);
-    if (card && targetElement) {
-      targetElement.appendChild(document.createElement("br"));
-      targetElement.appendChild(card);
+    if (response.ok) {
+      const data = await response.json();
+      artwork = data.artwork || null;
+      declined = data.declined === true;
     }
-    return data.artwork;
   } catch (error) {
-    return null;
+    // An explicit drawing request can still use Mabel's local drawing hand.
   }
+
+  const explicitRequest = source === "visitor" &&
+    /\b(draw|drawing|sketch|paint|painting|picture|artwork|art)\b/i.test(context.message || "");
+  if (!artwork && explicitRequest && !declined) {
+    artwork = makeMabelFallbackArtwork(context);
+  }
+  if (!artwork) return null;
+
+  const card = renderMabelCard(artwork);
+  saveToMabelGallery(artwork);
+  if (card && targetElement) {
+    targetElement.appendChild(document.createElement("br"));
+    targetElement.appendChild(card);
+  }
+  return artwork;
 }
 
 async function handleVisitorMessage() {
@@ -2279,6 +2330,23 @@ function startMabel() {
         return !legacySeedInterestIds.has(interest.id);
       })
     : [];
+  mabel.feed = Array.isArray(mabel.feed)
+    ? mabel.feed.filter(function (entry) {
+        return entry.text !== "Mabel found a silver thread beneath the hawthorn roots.";
+      })
+    : [];
+
+  const hasAutonomousDiaryEntry = mabel.feed.some(function (entry) {
+    return ["did", "diary", "journal", "reflection"].includes(entry.kind);
+  });
+  if (!hasAutonomousDiaryEntry && mabel.now && mabel.now.doing) {
+    addFeedEntry({
+      kind: "did",
+      text: mabel.now.doing,
+      why: "Mabel began with a moment of her own."
+    });
+  }
+
   conversation = loadConversation();
   wanderings = loadWanderings();
   sparks = loadSparks();
