@@ -1159,6 +1159,7 @@ async function handleVisitorMessage() {
       },
       body: JSON.stringify({
         message: message,
+        needs: mabel.needs,
         mood: mabel.now.mood,
         activity: mabel.now.doing,
         energy: mabel.now.energy,
