@@ -10,6 +10,9 @@ const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
 const sparkNoticeCard = document.getElementById("spark-notice-card");
 const viewSparkButton = document.getElementById("view-spark");
+const galleryNoticeCard = document.getElementById("gallery-notice-card");
+const galleryNoticeText = document.getElementById("gallery-notice-text");
+const viewGalleryButton = document.getElementById("view-gallery");
 const exploreButton = document.getElementById("explore");
 const exploreStatus = document.getElementById("explore-status");
 const needComfort = document.getElementById("need-comfort");
@@ -61,6 +64,7 @@ const legacySeedInterestIds = new Set([
 
 let mabel = null;
 let conversation = [];
+let messagePending = false;
 let wanderings = [];
 let researchLog = [];
 let boardReadKeys = [];
@@ -1186,83 +1190,50 @@ function updateChanges() {
 }
 
 function updateDiary() {
-  if (!diaryElement) {
-    return;
-  }
-
-  diaryElement.innerHTML = "";
+  if (!diaryElement) return;
+  diaryElement.replaceChildren();
 
   const diaryEntries = mabel.feed.filter(function (entry) {
-    return (
-      entry.text !== "A visitor's words settled among the moss like a fallen petal." &&
-      (entry.kind === "diary" ||
-      entry.kind === "did" ||
-      entry.kind === "noticed" ||
-      entry.kind === "mind" ||
-      entry.kind === "journal" ||
-      entry.kind === "reflection")
-    );
+    return ["diary", "journal", "reflection"].includes(entry.kind);
   });
 
-  if (diaryEntries.length === 0) {
+  if (!diaryEntries.length) {
     const item = document.createElement("li");
-    item.textContent = "Mabel's day is still gathering itself.";
+    item.textContent = "Mabel has not written a diary page yet.";
     diaryElement.appendChild(item);
     return;
   }
 
   diaryEntries.slice(0, 10).forEach(function (entry) {
     const item = document.createElement("li");
-    const time = new Date(entry.at).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-    if (entry.kind === "journal") {
-      item.className = "journal-entry";
-    }
-
-    if (entry.kind === "reflection") {
-      item.className = "reflection-entry";
-    }
-
+    const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const title = document.createElement("strong");
+    const text = document.createElement("p");
 
     if (entry.kind === "journal") {
       title.textContent = time + " — Evening page";
     } else if (entry.kind === "reflection") {
       title.textContent = time + " — End-of-day reflection";
     } else {
-      title.textContent = time + " — " + entry.text;
+      title.textContent = time + " — " + (entry.journalTitle || "A note Mabel wanted to keep");
     }
 
-    const text = document.createElement("p");
-
-    if (entry.kind === "journal" || entry.kind === "reflection") {
-      text.textContent = entry.text;
-    } else {
-      text.textContent = entry.why || "";
-    }
-
+    text.textContent = entry.text || "";
     item.appendChild(title);
     item.appendChild(text);
-
     diaryElement.appendChild(item);
   });
 }
 
 function updateActivityLog() {
-  if (!activityLogElement) {
-    return;
-  }
-
-  activityLogElement.innerHTML = "";
+  if (!activityLogElement) return;
+  activityLogElement.replaceChildren();
 
   const activityEntries = mabel.feed.filter(function (entry) {
-    return entry.kind !== "journal" && entry.kind !== "reflection";
+    return !["diary", "journal", "reflection"].includes(entry.kind);
   });
 
-  if (activityEntries.length === 0) {
+  if (!activityEntries.length) {
     const item = document.createElement("li");
     item.textContent = "Mabel's day has not begun yet.";
     activityLogElement.appendChild(item);
@@ -1271,93 +1242,66 @@ function updateActivityLog() {
 
   activityEntries.slice(0, 20).forEach(function (entry) {
     const item = document.createElement("li");
-    const time = new Date(entry.at).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-    item.textContent = time + " - " + entry.text;
+    const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    item.textContent = time + " — " + entry.text;
+    if (entry.why) {
+      const reason = document.createElement("span");
+      reason.className = "activity-reason";
+      reason.textContent = " " + entry.why;
+      item.appendChild(reason);
+    }
     activityLogElement.appendChild(item);
   });
 }
 
-function updateMusing(research) {
-  if (!musingElement) return;
-  musingElement.replaceChildren();
 
-  if (!research) {
-    const empty = document.createElement("p");
-    empty.className = "musing-source";
-    empty.textContent = "Mabel has not looked anything up yet.";
-    musingElement.appendChild(empty);
-    return;
-  }
 
-  if (research.researchMethod) {
-    const method = document.createElement("p");
-    method.className = "musing-source";
-    method.textContent = research.researchMethod;
-    musingElement.appendChild(method);
-  }
-
-  const question = document.createElement("p");
-  question.className = "musing-source";
-  question.textContent = "Mabel researched: " + (research.searchQuestion || research.focusTitle || "a question of her own");
-  musingElement.appendChild(question);
-
-  const source = document.createElement("p");
-  source.className = "musing-text";
-  source.appendChild(document.createTextNode("She found: "));
-  const sourceUrl = safeExternalUrl(research.url);
-  if (sourceUrl) {
-    const link = document.createElement("a");
-    link.href = sourceUrl;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = research.sourceTitle || research.title || "a page she found";
-    source.appendChild(link);
-  } else {
-    source.appendChild(document.createTextNode(research.sourceTitle || research.title || "no useful page came up"));
-  }
-  musingElement.appendChild(source);
-
-  if (research.researchSummary) {
-    const summary = document.createElement("p");
-    summary.className = "wandering-research";
-    summary.textContent = research.researchSummary;
-    musingElement.appendChild(summary);
-  }
-
-  const thought = document.createElement("p");
-  thought.className = "mabel-thought";
-  thought.textContent = research.musing || "";
-  musingElement.appendChild(thought);
+function formatLibraryMethod(value) {
+  const method = String(value || "").toLowerCase();
+  if (method.includes("computer")) return "on a public computer by the window";
+  if (method.includes("encyclopedia")) return "in the library’s well-thumbed encyclopedia";
+  if (method.includes("magazine")) return "in a recent magazine";
+  if (method.includes("field guide")) return "in an old field guide";
+  if (method.includes("journal")) return "in a library journal";
+  if (/^(in|on)\b/.test(method)) return value;
+  return "in one of the library’s reference books";
 }
 
 function updateResearchLog() {
   const list = document.getElementById("research-log");
   if (!list) return;
   list.replaceChildren();
+
   if (!researchLog.length) {
     const empty = document.createElement("li");
-    empty.textContent = "Mabel’s library log is waiting for its first question.";
+    empty.textContent = "Mabel has not visited the library yet.";
     list.appendChild(empty);
     return;
   }
+
   researchLog.slice(0, 12).forEach(function (entry) {
     const item = document.createElement("li");
+    const subject = entry.focusTitle || entry.title || entry.searchQuestion || "a question of her own";
     const heading = document.createElement("strong");
-    heading.textContent = "Mabel researched: " + (entry.searchQuestion || entry.focusTitle || "a question of her own");
+    heading.textContent = "Mabel went to the library and researched " + subject + " " + formatLibraryMethod(entry.researchMethod) + ".";
     item.appendChild(heading);
-    if (entry.researchMethod) {
-      const method = document.createElement("p");
-      method.textContent = entry.researchMethod;
-      item.appendChild(method);
-    }
+
     if (entry.researchSummary) {
       const summary = document.createElement("p");
       summary.textContent = entry.researchSummary;
       item.appendChild(summary);
+    }
+
+    const sourceUrl = safeExternalUrl(entry.url);
+    if (sourceUrl && entry.sourceTitle) {
+      const source = document.createElement("p");
+      const link = document.createElement("a");
+      link.href = sourceUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = entry.sourceTitle;
+      source.appendChild(link);
+      item.appendChild(source);
     }
     list.appendChild(item);
   });
@@ -1706,7 +1650,6 @@ function updatePage() {
   updateInterests();
   updateChanges();
 
-  updateMusing(researchLog[0] || null);
   updateResearchLog();
   updateWanderings();
   updateBindle();
@@ -1918,7 +1861,8 @@ async function requestMabelArtwork(context, targetElement) {
         wanderings: wanderings.slice(0, 5),
         recentArtworks: gallery.slice(0, 6).map(function (item) {
           return { title: item.title, motif: item.motif };
-        })
+        }),
+        artisticInspiration: context.inspiration || null
       })
     });
 
@@ -1941,6 +1885,17 @@ async function requestMabelArtwork(context, targetElement) {
   if (!artwork && explicitRequest) {
     artwork = makeMabelFallbackArtwork(context);
   }
+
+  if (!artwork && source === "autonomous" && context.inspiration) {
+    artwork = makeMabelFallbackArtwork({
+      activity: "making a little study",
+      mood: context.mood || mabel.now.mood,
+      thought: context.inspiration.question || context.thought,
+      message: ""
+    });
+    artwork.title = "A little study of " + context.inspiration.title;
+    artwork.note = context.inspiration.question || "Mabel followed a thought that had stayed with her.";
+  }
   if (!artwork) return null;
 
   const card = renderMabelCard(artwork);
@@ -1953,6 +1908,7 @@ async function requestMabelArtwork(context, targetElement) {
 }
 
 async function handleVisitorMessage() {
+  if (messagePending || !messageElement || !replyElement) return;
   const message = messageElement.value.trim();
 
   if (!message) {
@@ -1960,10 +1916,12 @@ async function handleVisitorMessage() {
     return;
   }
 
-  captureVisitorFacts(message);
-  replyElement.textContent = "Mabel is listening...";
+  messagePending = true;
+  if (sendButton) sendButton.disabled = true;
 
   try {
+    captureVisitorFacts(message);
+    replyElement.textContent = "Mabel is listening...";
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
       headers: {
@@ -2085,6 +2043,9 @@ async function handleVisitorMessage() {
     if (isArtworkRequest(message)) {
       await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
     }
+  } finally {
+    messagePending = false;
+    if (sendButton) sendButton.disabled = false;
   }
 }
 
@@ -2304,6 +2265,30 @@ function chooseAutonomousResearchFocus(boardNote) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function chooseAutonomousArtworkInspiration() {
+  const activeSparks = sparks.filter(function (spark) {
+    return spark && spark.title && ["noticed", "growing", "pursuing"].includes(spark.stage);
+  });
+  const activeInterests = mabel.interests.filter(function (interest) {
+    return interest && interest.title && ["growing", "pursuing"].includes(interest.stage);
+  });
+  const inspirations = activeSparks.map(function (spark) {
+    return { title: spark.title, question: spark.question || spark.reason || "A thought Mabel wants to keep." };
+  }).concat(activeInterests.map(function (interest) {
+    return { title: interest.title, question: interest.question || "A question Mabel wants to follow." };
+  }));
+  if (inspirations.length && Math.random() < 0.7) {
+    return inspirations[Math.floor(Math.random() * inspirations.length)];
+  }
+  if (Math.random() < 0.18) {
+    return {
+      title: "a moment from today",
+      question: mabel.now.thought || "A small feeling Mabel wants to remember."
+    };
+  }
+  return null;
+}
+
 async function handleAutonomousMoment() {
   lastAutonomousMoment = Date.now();
   saveLastAutonomousMoment();
@@ -2410,12 +2395,17 @@ async function handleAutonomousMoment() {
       writeEveningPage();
     }
 
-    await requestMabelArtwork({
-      source: "autonomous",
-      activity: mabel.now.doing,
-      thought: mabel.now.thought,
-      mood: mabel.now.mood
-    });
+    const artworkInspiration = chooseAutonomousArtworkInspiration();
+    if (artworkInspiration) {
+      const newArtwork = await requestMabelArtwork({
+        source: "autonomous",
+        activity: mabel.now.doing,
+        thought: mabel.now.thought,
+        mood: mabel.now.mood,
+        inspiration: artworkInspiration
+      });
+      if (newArtwork) showGalleryNotice(newArtwork);
+    }
 
     writeEndOfDayReflection();
   } catch (error) {
@@ -2429,6 +2419,13 @@ function normalizeInterestTitle(value) {
 
 function showSparkNotice() {
   if (sparkNoticeCard) sparkNoticeCard.classList.remove("hidden");
+}
+
+function showGalleryNotice(artwork) {
+  if (galleryNoticeText && artwork && artwork.title) {
+    galleryNoticeText.textContent = "“" + artwork.title + "” is waiting in Mabel’s Gallery.";
+  }
+  if (galleryNoticeCard) galleryNoticeCard.classList.remove("hidden");
 }
 
 function recordSpark(candidate) {
@@ -2778,20 +2775,12 @@ async function handleWander(options) {
   if (!focusInterest || !focusInterest.title) return;
 
   if (wanderStatus) wanderStatus.textContent = "Mabel is following a question that caught her attention.";
-  if (musingElement) {
-    musingElement.replaceChildren();
-    const waiting = document.createElement("p");
-    waiting.className = "musing-source";
-    waiting.textContent = "Mabel is settling in at the library.";
-    musingElement.appendChild(waiting);
-  }
-
   const libraryMethods = [
-    "She searched for it on a public computer by the window.",
-    "She checked the well-thumbed encyclopedia shelves.",
-    "She found a recent magazine with a dog-eared page.",
-    "She followed a reference in an old field guide.",
-    "She compared notes in a library journal."
+    "on a public computer by the window",
+    "in the library’s well-thumbed encyclopedia",
+    "in a recent magazine",
+    "in an old field guide",
+    "in a library journal"
   ];
   const researchMethod = libraryMethods[Math.floor(Math.random() * libraryMethods.length)];
 
@@ -2907,8 +2896,33 @@ async function handleWander(options) {
 }
 
 function removeReflectionHeading(value) {
-  return String(value || "")
-    .trim()
+  let text = String(value || "").trim();
+
+  // Some journal Worker responses put a JSON object inside entry.text.
+  // Unwrap that object before adding the prose to the diary.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "string") {
+        text = parsed.trim();
+        continue;
+      }
+      if (parsed && typeof parsed.text === "string") {
+        text = parsed.text.trim();
+        continue;
+      }
+      break;
+    } catch (error) {
+      break;
+    }
+  }
+
+  text = text
+    .replace(/^\x60{3}(?:json)?\s*/i, "")
+    .replace(/\s*\x60{3}$/i, "")
+    .trim();
+
+  return text
     .replace(/^(?:mabel[’']s\s+)?end[ -]of[ -]day reflection(?:\s+text)?\s*(?::|—|–|-)?\s*/i, "")
     .trim();
 }
@@ -3043,6 +3057,25 @@ function switchTab(tabName) {
 
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
+  mabel.now = {
+    updatedAt: now(),
+    doing: "listening for the hush between raindrops",
+    thought: "Every small thing remembers being part of something larger.",
+    mood: "wondering",
+    energy: 0.72,
+    ...(mabel.now || {})
+  };
+  mabel.memories = Array.isArray(mabel.memories) ? mabel.memories : [];
+  mabel.needs = {
+    comfort: 0.7,
+    curiosity: 0.6,
+    connection: 0.4,
+    rest: 0.8,
+    wonder: 0.5,
+    food: 0.7,
+    water: 0.75,
+    ...(mabel.needs || {})
+  };
   mabel.interests = Array.isArray(mabel.interests)
     ? mabel.interests.filter(function (interest) {
         return !legacySeedInterestIds.has(interest.id);
@@ -3124,6 +3157,13 @@ function startMabel() {
   if (viewSparkButton) {
     viewSparkButton.addEventListener("click", function () {
       switchTab("inner-life");
+    });
+  }
+  if (viewGalleryButton) {
+    viewGalleryButton.addEventListener("click", function () {
+      switchTab("inner-life");
+      const galleryList = document.getElementById("gallery");
+      if (galleryList) galleryList.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 

@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mabel of the Hawthorn Hollow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -104,6 +107,14 @@
           </div>
           <button id="view-spark" type="button">View in Inner Life</button>
         </aside>
+        <aside id="gallery-notice-card" class="spark-notice-card gallery-notice-card hidden" aria-live="polite" aria-atomic="true">
+          <span class="spark-notice-star" aria-hidden="true">✧</span>
+          <div>
+            <strong>A new painting has entered the Gallery</strong>
+            <p id="gallery-notice-text">Mabel made something while following her own curiosity.</p>
+          </div>
+          <button id="view-gallery" type="button">See the Gallery</button>
+        </aside>
       </section>
 
 <div id="hollow" class="tab-panel">
@@ -180,22 +191,27 @@
 
       <section id="musings" class="tab-panel">
         <h2>Explore</h2>
-        <p class="day-intro">Mabel’s own little wanderings: small discoveries, odd treasures, useful things, and surprises.</p>
-        <button id="explore" type="button">Go exploring</button>
-        <p id="explore-status" aria-live="polite">Mabel has not set out exploring yet.</p>
-        <h3>Wanderings &amp; discoveries</h3>
-        <ul id="wanderings" class="wandering-trail"></ul>
+        <div class="explore-scene">
+          <div class="explore-scene-mark" aria-hidden="true">🍃 ✦ 🍓</div>
+          <div class="explore-scene-copy">
+            <h3>A little wander</h3>
+            <p>The path beyond Mabel’s door is full of oddments, snacks, and small surprises.</p>
+            <button id="explore" class="explore-button" type="button"><span aria-hidden="true">✿</span> Go exploring <span aria-hidden="true">✿</span></button>
+            <p id="explore-status" aria-live="polite">Mabel hasn’t set out just yet.</p>
+          </div>
+        </div>
+        <div class="explore-trail-card">
+          <h3>Along Mabel’s path</h3>
+          <p class="day-intro">A little trail of what she found and what caught her eye.</p>
+          <ul id="wanderings" class="wandering-trail"></ul>
+        </div>
       </section>
 
       <section id="research" class="tab-panel">
         <h2>Mabel’s library</h2>
-        <p class="day-intro">Mabel researches questions that grow from her conversations, things she finds, and notes visitors leave. Sometimes she chooses a question and comes here on her own. She might use a public computer, an encyclopedia, a field guide, or a magazine.</p>
-        <p id="wander-status" aria-live="polite">Mabel will add her research here when a question catches her attention.</p>
-        <div id="musing" class="musing-card">
-          <p class="musing-source">Mabel has not looked anything up yet.</p>
-        </div>
-        <h3>Recent research</h3>
-        <ul id="research-log" class="research-log"></ul>
+        <p class="day-intro">A little record of the questions Mabel chose to follow.</p>
+        <p id="wander-status" aria-live="polite">Mabel will add a note here when she visits the library.</p>
+        <ul id="research-log" class="research-log" aria-live="polite"></ul>
       </section>
 
       
