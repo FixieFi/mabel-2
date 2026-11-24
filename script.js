@@ -2907,8 +2907,33 @@ async function handleWander(options) {
 }
 
 function removeReflectionHeading(value) {
-  return String(value || "")
-    .trim()
+  let text = String(value || "").trim();
+
+  // Some journal Worker responses put a JSON object inside entry.text.
+  // Unwrap that object before adding the prose to the diary.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "string") {
+        text = parsed.trim();
+        continue;
+      }
+      if (parsed && typeof parsed.text === "string") {
+        text = parsed.text.trim();
+        continue;
+      }
+      break;
+    } catch (error) {
+      break;
+    }
+  }
+
+  text = text
+    .replace(/^\x60{3}(?:json)?\s*/i, "")
+    .replace(/\s*\x60{3}$/i, "")
+    .trim();
+
+  return text
     .replace(/^(?:mabel[’']s\s+)?end[ -]of[ -]day reflection(?:\s+text)?\s*(?::|—|–|-)?\s*/i, "")
     .trim();
 }
