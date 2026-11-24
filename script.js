@@ -211,16 +211,12 @@ function renderMabelCard(artwork) {
   title.className = "mabel-artwork-title";
   title.textContent = artwork.title;
 
-  const seedText = (artwork.title || "") + (artwork.note || "");
   let seed = 0;
+  const seedText = (artwork.title || "") + (artwork.note || "");
 
   for (let i = 0; i < seedText.length; i += 1) {
     seed = (seed * 31 + seedText.charCodeAt(i)) % 100000;
   }
-
-  const colours = Array.isArray(artwork.colours) && artwork.colours.length
-    ? artwork.colours
-    : ["lavender", "moss", "cream"];
 
   const palette = {
     lavender: "#b9a7d9",
@@ -231,6 +227,10 @@ function renderMabelCard(artwork) {
     rain: "#7f9bb3",
     lantern: "#e0b45c"
   };
+
+  const colours = Array.isArray(artwork.colours) && artwork.colours.length
+    ? artwork.colours
+    : ["lavender", "moss", "cream"];
 
   const artworkColours = colours.map(function (colour) {
     return palette[colour.toLowerCase()] || "#c9c2b4";
@@ -247,16 +247,13 @@ function renderMabelCard(artwork) {
     for (let column = 0; column < gridSize; column += 1) {
       seed = (seed * 1103515245 + 12345) % 2147483648;
 
-      const colour = artworkColours[seed % artworkColours.length];
-      const opacity = 0.25 + ((seed % 70) / 100);
-
       const cell = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       cell.setAttribute("x", column * cellSize);
       cell.setAttribute("y", row * cellSize);
       cell.setAttribute("width", cellSize);
       cell.setAttribute("height", cellSize);
-      cell.setAttribute("fill", colour);
-      cell.setAttribute("opacity", opacity);
+      cell.setAttribute("fill", artworkColours[seed % artworkColours.length]);
+      cell.setAttribute("opacity", 0.25 + ((seed % 70) / 100));
 
       svg.appendChild(cell);
     }
@@ -265,13 +262,9 @@ function renderMabelCard(artwork) {
   for (let mark = 0; mark < 4; mark += 1) {
     seed = (seed * 1103515245 + 12345) % 2147483648;
 
-    const x = 8 + (seed % 96);
-    seed = (seed * 1103515245 + 12345) % 2147483648;
-    const y = 8 + (seed % 96);
-
     const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", x);
-    circle.setAttribute("cy", y);
+    circle.setAttribute("cx", 8 + (seed % 96));
+    circle.setAttribute("cy", 8 + ((seed * 7) % 96));
     circle.setAttribute("r", 3 + (seed % 4));
     circle.setAttribute("fill", artworkColours[(seed + 1) % artworkColours.length]);
     circle.setAttribute("opacity", 0.75);
