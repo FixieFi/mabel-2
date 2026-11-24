@@ -1261,7 +1261,7 @@ async function handleHollowAction(action) {
   }
 
   try {
-    const response = await fetch(MABELAIURL, {
+    const response = await fetch(MABEL_AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -1370,7 +1370,6 @@ async function handleVisitorMessage() {
     content: message
   });
 
-
   try {
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
@@ -1401,9 +1400,11 @@ async function handleVisitorMessage() {
       throw new Error("Mabel's thoughts could not be reached. Status " + response.status);
     }
 
-       const data = await response.json();
+    const data = await response.json();
 
     replyElement.textContent = data.reply;
+
+    reflectOnConversation(message, data.reply);
 
     try {
       const artResponse = await fetch(MABEL_ART_URL, {
@@ -1464,7 +1465,7 @@ async function handleVisitorMessage() {
       });
 
       if (existing) {
-        existing.pull = Math.max(0, Math.min(1, existing.pull + 0.15));
+        existing.pull = clampNeed(existing.pull + 0.15);
 
         if (existing.pull > 0.65 && existing.stage === "dormant") {
           existing.stage = "pursuing";
@@ -1491,10 +1492,10 @@ async function handleVisitorMessage() {
     }
 
     mabel.memories.unshift({
-  at: now(),
-  kind: "private-memory",
-  text: "A visitor whispered: " + message
-});
+      at: now(),
+      kind: "private-memory",
+      text: "A visitor whispered: " + message
+    });
 
     mabel.needs.connection = clampNeed(mabel.needs.connection + 0.18);
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
@@ -1510,8 +1511,9 @@ async function handleVisitorMessage() {
     });
 
     saveMabel();
-updateHollowScene();
+    updateHollowScene();
     updatePage();
+
     messageElement.value = "";
   } catch (error) {
     conversation.pop();
@@ -1520,7 +1522,139 @@ updateHollowScene();
   }
 }
 
-reflectOnConversation(message, data.reply);
+async function handleAutonomousMoment() {
+  lastAutonomousMoment = Date.now();
+  saveLastAutonomousMoment();
+
+  try {
+    const response = await fetch(MABEL_DAY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        energy: mabel.now.energy,
+        needs: mabel.needs,
+        interests: mabel.interests,
+        memories: mabel.memories.slice(0, 10),
+        wanderings: wanderings.slice(0, 10),
+        conversation: conversation.slice(-10),
+        feed: mabel.feed.slice(0, 15)
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel's day could not continue. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (data.activity) {
+      mabel.now.doing = data.activity;
+      mabel.now.updatedAt = now();
+
+      addFeedEntry({
+        kind: "did",
+        text: data.activity,
+        why: data.reason || ""
+      });
+    }
+
+    if (data.mood) {
+      mabel.now.mood = data.mood;
+    }
+
+    if (data.thought) {
+      mabel.now.thought = data.thought;
+    }
+
+    if (data.diary) {
+      addFeedEntry({
+        kind: "diary",
+        text: data.diary,
+        why: data.reason || ""
+      });
+    }
+
+    if (data.needs) {
+      if (typeof data.needs.food === "number") {
+        mabel.needs.food = clampNeed(data.needs.food);
+      }
+
+      if (typeof data.needs.water === "number") {
+        mabel.needs.water = clampNeed(data.needs.water);
+      }
+
+      if (typeof data.needs.rest === "number") {
+        mabel.needs.rest = clampNeed(data.needs.rest);
+      }
+
+      if (typeof data.needs.comfort === "number") {
+        mabel.needs.comfort = clampNeed(data.needs.comfort);
+      }
+
+      if (typeof data.needs.curiosity === "number") {
+        mabel.needs.curiosity = clampNeed(data.needs.curiosity);
+      }
+
+      if (typeof data.needs.connection === "number") {
+        mabel.needs.connection = clampNeed(data.needs.connection);
+      }
+
+      if (typeof data.needs.wonder === "number") {
+        mabel.needs.wonder = clampNeed(data.needs.wonder);
+      }
+    }
+
+    if (data.interest) {
+      const existing = mabel.interests.find(function (interest) {
+        return interest.id === data.interest.id;
+      });
+
+      if (existing) {
+        existing.pull = clampNeed(existing.pull + (data.interest.pullChange || 0.1));
+
+        if (existing.pull > 0.65 && existing.stage === "dormant") {
+          existing.stage = "pursuing";
+        }
+      } else {
+        mabel.interests.push({
+          id: data.interest.id,
+          title: data.interest.title,
+          kind: data.interest.kind || "wonder",
+          question: data.interest.question || "What does this mean to Mabel?",
+          actions: [],
+          curiosity: data.interest.curiosity || 0.6,
+          pull: data.interest.pull || 0.5,
+          stage: data.interest.stage || "pursuing"
+        });
+
+        addFeedEntry({
+          kind: "mind",
+          text: "Mabel began a new thread: " + data.interest.title + ".",
+          why: data.interest.question,
+          interest: data.interest.id
+        });
+      }
+    }
+
+    saveMabel();
+    updatePage();
+
+    autonomousMomentCount = autonomousMomentCount + 1;
+
+    if (autonomousMomentCount % 3 === 0) {
+      writeEveningPage();
+    }
+
+    writeEndOfDayReflection();
+  } catch (error) {
+    chooseAction();
+  }
+}
+
 async function reflectOnConversation(visitorMessage, mabelReply) {
   try {
     const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
@@ -1595,6 +1729,133 @@ async function reflectOnConversation(visitorMessage, mabelReply) {
     // Reflection is private and optional. Mabel can still chat if it fails.
   }
 }
+
+async function writeEveningPage() {
+  if (!mabel) {
+    return;
+  }
+
+  const recentMoments = mabel.feed
+    .slice(0, 6)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const recentWanderings = wanderings
+    .slice(0, 4)
+    .map(function (entry) {
+      return entry.title + ": " + entry.musing;
+    })
+    .join("\n");
+
+  const prompt = `
+Mabel is a small mouse living in the Hawthorn Hollow.
+
+These are the moments Mabel has already recorded in her Activity Log:
+${recentMoments || "Mabel has not recorded any moments yet."}
+
+These are some of Mabel's recent wanderings:
+${recentWanderings || "Mabel has not wandered recently."}
+
+Mabel's current mood is ${mabel.now.mood}.
+Mabel is currently ${mabel.now.doing}.
+Mabel's inner thought is: ${mabel.now.thought}
+
+Mabel's needs:
+Comfort: ${mabel.needs.comfort}
+Curiosity: ${mabel.needs.curiosity}
+Connection: ${mabel.needs.connection}
+Rest: ${mabel.needs.rest}
+Wonder: ${mabel.needs.wonder}
+Food: ${mabel.needs.food}
+Water: ${mabel.needs.water}
+
+Write ONE short evening-page journal entry for Mabel.
+
+It should describe a quiet, private thing that happened between the recorded moments.
+Do not repeat the Activity Log.
+Do not mention that you are an AI.
+Do not mention Wikipedia, the internet, or searching.
+Keep it gentle, curious, mossy, and a little mysterious.
+Use 2 to 4 sentences.
+Write in Mabel's voice.
+
+Return only JSON like this:
+{
+  "title": "Evening page",
+  "text": "Mabel's journal entry"
+}
+`;
+
+  try {
+    const response = await fetch(MABEL_JOURNAL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        kind: "evening-page"
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel could not write her evening page. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (!data.entry || !data.entry.text) {
+      return;
+    }
+
+    addDiaryEntry({
+      kind: "journal",
+      title: data.entry.title || "Evening page",
+      text: data.entry.text
+    });
+
+    saveMabel();
+    updatePage();
+  } catch (error) {
+    console.log("Mabel could not write her evening page.", error);
+  }
+}
+
+async function writeEndOfDayReflection() {
+  if (!mabel) {
+    return;
+  }
+
+  const today = new Date().toDateString();
+  const currentHour = new Date().getHours();
+
+  if (currentHour < 20) {
+    return;
+  }
+
+  if (lastReflectionDate === today) {
+    return;
+  }
+
+  lastReflectionDate = today;
+  localStorage.setItem(reflectionStorageKey, today);
+
+  const recentMoments = mabel.feed
+    .slice(0, 10)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const recentDiary = mabel.feed
+    .filter(function (entry) {
+      return entry.kind === "journal" || entry.kind === "reflection";
+    })
+    .slice(0, 5)
+    .map(function (entry) {
+      return
 
 
 async function handleAutonomousMoment() {
@@ -1893,82 +2154,6 @@ Return only JSON like this:
       text: data.entry.text
     });
 
-async function reflectOnConversation(env, data) {
-  const visitorMessage = data.visitorMessage || "";
-  const mabelReply = data.mabelReply || "";
-
-  const interests = Array.isArray(data.interests) ? data.interests : [];
-  const memories = Array.isArray(data.memories) ? data.memories : [];
-
-  const interestText = interests
-    .map(function (interest) {
-      return "- " + interest.title + ": " + interest.question + " (pull: " + interest.pull + ")";
-    })
-    .join("\n");
-
-  const memoryText = memories
-    .map(function (memory) {
-      return "- " + memory.text;
-    })
-    .join("\n");
-
-  const prompt =
-    "Mabel is a small mouse living in the Hawthorn Hollow.\n\n" +
-    "A visitor said:\n" +
-    visitorMessage + "\n\n" +
-    "Mabel replied:\n" +
-    mabelReply + "\n\n" +
-    "Mabel's current interests:\n" +
-    (interestText || "Mabel has no interests yet.") + "\n\n" +
-    "Mabel's recent memories:\n" +
-    (memoryText || "Mabel has no recent memories yet.") + "\n\n" +
-    "Decide, from Mabel's own perspective, whether anything in this exchange caught her attention.\n" +
-    "Do not use keywords. Do not assume that sadness, love, or poetic language is automatically important.\n" +
-    "Something may catch Mabel's attention because it is unusual, connects to an existing interest, reveals something about the visitor, raises a question, or simply feels worth noticing.\n\n" +
-    "If nothing catches her attention, return null for diaryEntry, memory, interestUpdate, and desire.\n" +
-    "If something does catch her attention, it may become a diary entry, a memory, a new interest, or a change to an existing interest.\n" +
-    "Do not make every conversation important. Most conversations should leave no diary entry.\n\n" +
-    "Return only valid JSON in this exact shape:\n" +
-    '{"diaryEntry":null,"memory":null,"interestUpdate":null,"desire":null}';
-
-  const result = await env.AI.run(
-    "@cf/meta/llama-3.2-3b-instruct",
-    {
-      messages: [
-        {
-          role: "system",
-          content:
-            "You decide what quietly catches the attention of Mabel, a small mouse in the Hawthorn Hollow. You return only valid JSON."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_tokens: 600,
-      temperature: 0.9
-    }
-  );
-
-  let raw = result?.response;
-
-  if (typeof raw !== "string") {
-    raw = JSON.stringify(result ?? {});
-  }
-
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-
-  if (start === -1 || end === -1) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(raw.slice(start, end + 1));
-  } catch (error) {
-    return {};
-  }
-}
 
 if (reflection.interestUpdate) {
   mabel.interests.forEach(function (interest) {
