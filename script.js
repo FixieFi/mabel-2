@@ -155,6 +155,14 @@ function saveWanderings() {
   }
 }
 
+function saveBindle() {
+  try {
+    localStorage.setItem(bindleStorageKey, JSON.stringify(bindle));
+  } catch (error) {
+    // Local storage may be unavailable.
+  }
+}
+
 function loadWanderings() {
   try {
     const saved = localStorage.getItem(wanderingsStorageKey);
@@ -1984,6 +1992,119 @@ async function handleWander() {
     wanderStatus.textContent = "Mabel's paws paused at the edge of the hollow. The path beyond was tangled.";
   } finally {
     wanderButton.disabled = false;
+  }
+}
+
+async function writeEndOfDayReflection() {
+  if (!mabel) {
+    return;
+  }
+
+  const today = new Date().toDateString();
+  const currentHour = new Date().getHours();
+
+  if (currentHour < 20) {
+    return;
+  }
+
+  if (lastReflectionDate === today) {
+    return;
+  }
+
+  lastReflectionDate = today;
+  localStorage.setItem(reflectionStorageKey, today);
+
+  const recentMoments = mabel.feed
+    .slice(0, 10)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const recentDiary = mabel.feed
+    .filter(function (entry) {
+      return entry.kind === "journal" || entry.kind === "reflection";
+    })
+    .slice(0, 5)
+    .map(function (entry) {
+      return entry.text;
+    })
+    .join("\n");
+
+  const prompt = `
+Mabel is a small mouse living in the Hawthorn Hollow.
+
+It is evening. Mabel is writing one longer reflection about her day.
+
+These are some moments from Mabel's Activity Log:
+${recentMoments || "Mabel has not recorded many moments today."}
+
+These are some of Mabel's recent journal pages:
+${recentDiary || "Mabel has not written in her journal yet."}
+
+Mabel's current mood is ${mabel.now.mood}.
+Mabel is currently ${mabel.now.doing}.
+Mabel's inner thought is: ${mabel.now.thought}
+
+Mabel's needs:
+Comfort: ${mabel.needs.comfort}
+Curiosity: ${mabel.needs.curiosity}
+Connection: ${mabel.needs.connection}
+Rest: ${mabel.needs.rest}
+Wonder: ${mabel.needs.wonder}
+Food: ${mabel.needs.food}
+Water: ${mabel.needs.water}
+
+Write ONE end-of-day reflection for Mabel.
+
+It should feel like Mabel looking back on the day from her mossy nest.
+Mention one or two small things that may not have appeared in the Activity Log.
+Include a gentle feeling, a small question, or something Mabel wants to remember tomorrow.
+Do not repeat the Activity Log word for word.
+Do not mention that you are an AI.
+Do not mention Wikipedia, the internet, or searching.
+Use 4 to 7 sentences.
+Write in Mabel's voice.
+
+Return only JSON like this:
+{
+  "title": "End-of-day reflection",
+  "text": "Mabel's reflection"
+}
+`;
+
+  try {
+    const response = await fetch(MABEL_JOURNAL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        kind: "end-of-day-reflection"
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel could not write her reflection. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (!data.entry || !data.entry.text) {
+      return;
+    }
+
+    addDiaryEntry({
+      kind: "reflection",
+      title: data.entry.title || "End-of-day reflection",
+      text: data.entry.text
+    });
+
+    saveMabel();
+    updatePage();
+  } catch (error) {
+    console.log("Mabel could not write her end-of-day reflection.", error);
   }
 }
 
