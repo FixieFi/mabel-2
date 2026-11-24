@@ -931,3 +931,12 @@ button#explore.explore-button:disabled {
     min-height: 70px;
   }
 }
+
+
+.activity-reason {
+  display: inline-block;
+  margin-left: 0.25rem;
+  color: var(--plum);
+  font-size: 0.94em;
+  font-style: italic;
+}
