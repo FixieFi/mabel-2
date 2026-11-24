@@ -1136,6 +1136,225 @@ function updatePage() {
   updateGallery();
 }
 
+function ensureHollowWorld() {
+  if (!mabel.world) {
+    mabel.world = {
+      weather: "clear",
+      timeOfDay: "afternoon",
+      nest: {
+        tidiness: 0.7,
+        leaves: 2
+      },
+      foodDish: {
+        food: []
+      },
+      waterLeaf: {
+        water: 0.6
+      },
+      path: {
+        offerings: []
+      }
+    };
+  }
+}
+
+function updateHollowScene() {
+  ensureHollowWorld();
+
+  const foodItem = document.getElementById("hollow-food-item");
+  const waterItem = document.getElementById("hollow-water-item");
+  const offering = document.getElementById("hollow-offering");
+
+  if (foodItem) {
+    foodItem.setAttribute("opacity", mabel.world.foodDish.food.length > 0 ? "1" : "0");
+  }
+
+  if (waterItem) {
+    waterItem.setAttribute("opacity", mabel.world.waterLeaf.water > 0.2 ? "0.75" : "0.2");
+  }
+
+  if (offering) {
+    offering.setAttribute("opacity", mabel.world.path.offerings.length > 0 ? "1" : "0");
+  }
+}
+
+function showHollowSpeech(text) {
+  const speech = document.getElementById("hollow-speech");
+  const speechText = document.getElementById("hollow-speech-text");
+
+  if (!speech || !speechText) return;
+
+  speechText.textContent = text;
+  speech.classList.remove("hidden");
+
+  setTimeout(function () {
+    speech.classList.add("hidden");
+  }, 7000);
+}
+
+async function handleHollowAction(action) {
+  if (!mabel) return;
+
+  ensureHollowWorld();
+
+  const status = document.getElementById("hollow-status");
+  let eventText = "";
+  let eventDetails = {};
+
+  if (action === "leave-food") {
+    eventText = "The visitor leaves a blackberry in Mabel's food dish.";
+    eventDetails = { object: "blackberry" };
+
+    mabel.world.foodDish.food.push({
+      name: "blackberry",
+      at: now()
+    });
+  }
+
+  if (action === "refill-water") {
+    eventText = "The visitor refills Mabel's water leaf.";
+    eventDetails = { object: "water leaf" };
+
+    mabel.world.waterLeaf.water = 1;
+  }
+
+  if (action === "tidy-nest") {
+    eventText = "The visitor gently tidies Mabel's mossy nest.";
+    eventDetails = { object: "mossy nest" };
+
+    mabel.world.nest.tidiness = 1;
+
+    if (mabel.world.nest.leaves > 0) {
+      mabel.world.nest.leaves = mabel.world.nest.leaves - 1;
+    }
+  }
+
+  if (action === "leave-offering") {
+    const offerings = [
+      "a small white pebble",
+      "a curled leaf",
+      "a tiny blue button",
+      "a feather",
+      "a flower petal"
+    ];
+
+    const offering = offerings[Math.floor(Math.random() * offerings.length)];
+
+    eventText = "The visitor leaves " + offering + " on the path near Mabel's hollow.";
+    eventDetails = { object: offering };
+
+    mabel.world.path.offerings.unshift({
+      name: offering,
+      at: now()
+    });
+
+    if (mabel.world.path.offerings.length > 10) {
+      mabel.world.path.offerings.length = 10;
+    }
+  }
+
+  saveMabel();
+  updateHollowScene();
+
+  if (status) {
+    status.textContent = "Mabel notices something in the hollow...";
+  }
+
+  try {
+    const response = await fetch(MABELAIURL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        event: eventText,
+        eventDetails: eventDetails,
+        world: mabel.world,
+        needs: mabel.needs,
+        mood: mabel.now.mood,
+        activity: mabel.now.doing,
+        energy: mabel.now.energy,
+        memories: mabel.memories.slice(0, 8),
+        conversation: conversation.slice(-10)
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Mabel could not notice the hollow. Status " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (data.reply) {
+      showHollowSpeech(data.reply);
+
+      replyElement.textContent = data.reply;
+
+      conversation.push({
+        role: "user",
+        content: eventText
+      });
+
+      conversation.push({
+        role: "assistant",
+        content: data.reply
+      });
+
+      if (conversation.length > 20) {
+        conversation = conversation.slice(-20);
+      }
+
+      saveConversation();
+    }
+
+    if (data.needs) {
+      if (typeof data.needs.food === "number") {
+        mabel.needs.food = clampNeed(data.needs.food);
+      }
+
+      if (typeof data.needs.water === "number") {
+        mabel.needs.water = clampNeed(data.needs.water);
+      }
+
+      if (typeof data.needs.rest === "number") {
+        mabel.needs.rest = clampNeed(data.needs.rest);
+      }
+
+      if (typeof data.needs.comfort === "number") {
+        mabel.needs.comfort = clampNeed(data.needs.comfort);
+      }
+    }
+
+    if (data.mood) {
+      mabel.now.mood = data.mood;
+    }
+
+    if (data.memory) {
+      mabel.memories.unshift({
+        at: now(),
+        kind: "visitor",
+        text: data.memory
+      });
+
+      if (mabel.memories.length > 20) {
+        mabel.memories.length = 20;
+      }
+    }
+
+    saveMabel();
+    updatePage();
+    updateHollowScene();
+
+    if (status) {
+      status.textContent = "Mabel has noticed the hollow.";
+    }
+  } catch (error) {
+    if (status) {
+      status.textContent = "Mabel’s attention drifted for a moment. Try again soon.";
+    }
+  }
+}
+
 async function handleVisitorMessage() {
   const message = messageElement.value.trim();
 
@@ -1290,6 +1509,7 @@ async function handleVisitorMessage() {
     });
 
     saveMabel();
+updateHollowScene();
     updatePage();
     messageElement.value = "";
   } catch (error) {

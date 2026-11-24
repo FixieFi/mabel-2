@@ -77,6 +77,7 @@
         <button class="tab-button" data-tab="musings">Musings</button>
         <button class="tab-button" data-tab="day">Mabel’s Day</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
+	<button class="tab-button" data-tab="hollow">The Hollow</button>
       </div>
 
       <section id="chat" class="tab-panel active">
@@ -92,6 +93,69 @@
 
         <div id="reply" class="reply"></div>
       </section>
+
+<div id="hollow" class="tab-panel">
+  <h2>The Hollow</h2>
+
+  <div class="hollow-scene">
+    <svg viewBox="0 0 600 400" class="hollow-svg" role="img" aria-label="Mabel’s mossy hollow">
+
+      <rect width="600" height="400" fill="#2b2140" />
+      <circle cx="300" cy="330" r="230" fill="#3b2f52" />
+      <circle cx="300" cy="350" r="190" fill="#4a3a63" />
+
+      <path d="M80 350 Q300 250 520 350 Z" fill="#5d4a76" />
+      <path d="M120 360 Q300 290 480 360 Z" fill="#6f5a86" />
+
+      <g class="hollow-hawthorn">
+        <rect x="288" y="130" width="24" height="130" rx="10" fill="#5a4368" />
+        <circle cx="300" cy="105" r="70" fill="#6f5a86" />
+        <circle cx="250" cy="130" r="40" fill="#7d6894" />
+        <circle cx="350" cy="130" r="40" fill="#7d6894" />
+        <circle cx="300" cy="70" r="35" fill="#8b76a1" />
+      </g>
+
+      <g id="hollow-nest" class="hollow-hotspot">
+        <title>Mabel’s nest</title>
+        <ellipse cx="180" cy="285" rx="65" ry="28" fill="#8a6f4f" />
+        <ellipse cx="180" cy="278" rx="52" ry="20" fill="#a58a63" />
+        <circle cx="180" cy="270" r="17" fill="#e8d6ef" />
+        <circle cx="174" cy="266" r="2.5" fill="#3b2f52" />
+        <circle cx="186" cy="266" r="2.5" fill="#3b2f52" />
+        <path d="M176 274 q4 4 8 0" stroke="#3b2f52" stroke-width="1.5" fill="none" />
+        <text x="180" y="325" text-anchor="middle" class="hollow-label">Mabel’s nest</text>
+      </g>
+
+      <g id="hollow-food" class="hollow-hotspot">
+        <title>Leave a blackberry</title>
+        <ellipse cx="300" cy="310" rx="30" ry="10" fill="#5d4a76" />
+        <circle id="hollow-food-item" cx="300" cy="300" r="8" fill="#8d4f63" opacity="0" />
+        <text x="300" y="340" text-anchor="middle" class="hollow-label">Food dish</text>
+      </g>
+
+      <g id="hollow-water" class="hollow-hotspot">
+        <title>Refill the water leaf</title>
+        <path d="M390 292 q30 -18 60 0 q-30 20 -60 0 Z" fill="#7d9b76" />
+        <ellipse id="hollow-water-item" cx="420" cy="292" rx="18" ry="5" fill="#9fc4d8" opacity="0.35" />
+        <text x="420" y="330" text-anchor="middle" class="hollow-label">Water leaf</text>
+      </g>
+
+      <g id="hollow-path" class="hollow-hotspot">
+        <title>Leave something on the path</title>
+        <path d="M240 390 Q300 340 360 390 Z" fill="#7a6591" />
+        <circle id="hollow-offering" cx="300" cy="365" r="6" fill="#e0b45c" opacity="0" />
+        <text x="300" y="385" text-anchor="middle" class="hollow-label">Mossy path</text>
+      </g>
+
+    </svg>
+
+    <div id="hollow-speech" class="hollow-speech hidden">
+      <p id="hollow-speech-text"></p>
+    </div>
+  </div>
+
+  <p id="hollow-status">The hollow is quiet.</p>
+</div>
 
       <section id="musings" class="tab-panel">
         <h2>Mabel’s Musings</h2>

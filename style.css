@@ -476,3 +476,58 @@ footer {
 .mabel-artwork-drawing {
   margin: 10px 0;
 }
+
+.hollow-scene {
+  position: relative;
+  border: 1px solid rgba(232, 214, 239, 0.25);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #2b2140;
+}
+
+.hollow-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hollow-hotspot {
+  cursor: pointer;
+}
+
+.hollow-hotspot:hover .hollow-label,
+.hollow-hotspot:hover title {
+  opacity: 1;
+}
+
+.hollow-label {
+  fill: #e8d6ef;
+  font-size: 13px;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.hollow-speech {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: 80%;
+  padding: 12px 16px;
+  background: rgba(43, 33, 64, 0.92);
+  border: 1px solid rgba(232, 214, 239, 0.35);
+  border-radius: 16px;
+  color: #f3e7cf;
+  font-size: 15px;
+  text-align: center;
+}
+
+.hollow-speech.hidden {
+  display: none;
+}
+
+#hollow-status {
+  margin-top: 10px;
+  color: #d9c8e8;
+  font-size: 14px;
+}
