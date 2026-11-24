@@ -2059,6 +2059,7 @@ async function handleVisitorMessage() {
           why: data.interest.question,
           interest: data.interest.id
         });
+        showSparkNotice();
       }
     }
 
@@ -2379,6 +2380,7 @@ async function handleAutonomousMoment() {
           why: data.interest.question,
           interest: data.interest.id
         });
+        showSparkNotice();
       }
     }
 
@@ -2563,6 +2565,7 @@ if (reflection.spark && reflection.spark.title && !sparkCandidate) {
           pull: update.pull || 0.45,
           stage: "pursuing"
         });
+        showSparkNotice();
       }
     }
 
@@ -2891,6 +2894,13 @@ async function handleWander(options) {
   }
 }
 
+function removeReflectionHeading(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^(?:mabel[’']s\s+)?end[ -]of[ -]day reflection(?:\s+text)?\s*(?::|—|–|-)?\s*/i, "")
+    .trim();
+}
+
 async function writeEndOfDayReflection() {
   if (!mabel) {
     return;
@@ -2952,6 +2962,7 @@ Food: ${mabel.needs.food}
 Water: ${mabel.needs.water}
 
 Write ONE end-of-day reflection for Mabel.
+The JSON text field must contain only the reflection prose. Do not repeat the title or write “End-of-day reflection” at the start of the text.
 
 It should feel like Mabel looking back on the day from her mossy nest.
 Mention one or two small things that may not have appeared in the Activity Log.
@@ -2991,10 +3002,13 @@ Return only JSON like this:
       return;
     }
 
+    const reflectionText = removeReflectionHeading(data.entry.text);
+    if (!reflectionText) return;
+
     addDiaryEntry({
       kind: "reflection",
       title: data.entry.title || "End-of-day reflection",
-      text: data.entry.text
+      text: reflectionText
     });
 
     saveMabel();
