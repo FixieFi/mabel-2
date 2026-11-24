@@ -48,10 +48,10 @@ header {
 h1 {
   margin: 0;
   color: var(--deep-plum);
-  font-family: "Georgia", "Times New Roman", serif;
+  font-family: "Fraunces", "Georgia", "Times New Roman", serif;
   font-size: 2.1rem;
-  font-weight: normal;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.015em;
 }
 
 .tagline {
@@ -791,4 +791,10 @@ footer {
     grid-column: 2;
     justify-self: start;
   }
+}
+
+
+.gallery-notice-card {
+  background: linear-gradient(120deg, rgba(255, 248, 220, 0.96), rgba(238, 229, 255, 0.96));
+  border-color: rgba(180, 145, 76, 0.35);
 }
