@@ -876,6 +876,15 @@ function chooseAction() {
   let activityOverride = "";
   let thoughtOverride = "";
 
+  if (chosen === "find_a_treasure" && Math.random() < 0.35) {
+    const find = diversifyWanderFinds([null])[0];
+    if (find) {
+      applyExplorationFinds([find]);
+      activityOverride = "finding " + find.name + " beneath the hawthorn";
+      thoughtOverride = find.note || "What journey brought this little thing here?";
+    }
+  }
+
   if (chosen === "look_for_food" && Math.random() < 0.65) {
     const foods = ["two blackberries", "a few sunflower seeds", "a rosehip", "a fallen hazelnut"];
     const foundFood = foods[Math.floor(Math.random() * foods.length)];
@@ -948,6 +957,76 @@ function chooseAction() {
   });
   saveMabel();
   updatePage();
+}
+
+function applyExplorationFinds(findings) {
+  ensureHollowWorld();
+  (findings || []).forEach(function (found) {
+    const kind = ["food", "water", "treasure"].includes(found.kind) ? found.kind : "treasure";
+    const name = String(found.name || "something small").slice(0, 80);
+    const note = String(found.note || "").slice(0, 160);
+
+    if (kind === "food") {
+      if (mabel.needs.food < 0.58) {
+        mabel.needs.food = clampNeed(mabel.needs.food + 0.24);
+        addFeedEntry({ kind: "did", text: "Mabel found and ate " + name + ".", why: note || "She was hungry." });
+      } else {
+        bindle.food.unshift({ name: name, note: note });
+        bindle.food.length = Math.min(bindle.food.length, 8);
+      }
+    } else if (kind === "water") {
+      if (mabel.needs.water < 0.58) {
+        mabel.needs.water = clampNeed(mabel.needs.water + 0.26);
+        addFeedEntry({ kind: "did", text: "Mabel found water and had a drink.", why: note || name });
+      } else {
+        bindle.water.unshift({ name: name, note: note });
+        bindle.water.length = Math.min(bindle.water.length, 5);
+      }
+    } else {
+      bindle.treasures.unshift({ name: name, note: note });
+      bindle.treasures.length = Math.min(bindle.treasures.length, 12);
+      mabel.world.objects.unshift({ name: name, at: now(), source: "wandering", note: note, reaction: "" });
+      mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
+      mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
+    }
+  });
+  saveBindle();
+}
+
+function handleExplore() {
+  if (!mabel || (exploreButton && exploreButton.disabled)) return;
+  if (exploreButton) exploreButton.disabled = true;
+  if (exploreStatus) exploreStatus.textContent = "Mabel has set off to see what turns up.";
+  try {
+    const finds = diversifyWanderFinds([null, null]);
+    const outing = {
+      kind: "exploration",
+      at: now(),
+      title: "A little wander near home",
+      finds: finds
+    };
+    wanderings.unshift(outing);
+    wanderings.length = Math.min(wanderings.length, 30);
+    applyExplorationFinds(finds);
+    mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
+    mabel.now.doing = "exploring near her home";
+    mabel.now.thought = finds.length
+      ? "What might these small discoveries turn out to be?"
+      : "The path looks different today.";
+    mabel.now.mood = "curious";
+    mabel.now.updatedAt = now();
+    addFeedEntry({
+      kind: "noticed",
+      text: "Mabel went exploring and found " + (finds.map(function (item) { return item.name; }).join(" and ") || "a new path") + ".",
+      why: finds.map(function (item) { return item.note; }).filter(Boolean).join(" ")
+    });
+    saveWanderings();
+    saveMabel();
+    updatePage();
+    if (exploreStatus) exploreStatus.textContent = "Mabel came home with " + finds.map(function (item) { return item.name; }).join(" and ") + ".";
+  } finally {
+    if (exploreButton) exploreButton.disabled = false;
+  }
 }
 
 function updateNeeds() {
@@ -1407,48 +1486,36 @@ function updateWanderings() {
   if (!wanderingsElement) return;
   wanderingsElement.replaceChildren();
 
-  if (wanderings.length === 0) {
-    const item = document.createElement("li");
-    item.textContent = "Mabel’s trail is still unwritten.";
-    wanderingsElement.appendChild(item);
+  const trips = wanderings.filter(function (item) {
+    return item.kind === "exploration" || (Array.isArray(item.finds) && item.finds.length > 0);
+  }).slice(0, 10);
+
+  if (!trips.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "Mabel’s trail is still unwritten.";
+    wanderingsElement.appendChild(empty);
     return;
   }
 
-  wanderings.slice(0, 10).forEach(function (wandering) {
+  trips.forEach(function (trip) {
     const item = document.createElement("li");
-    const title = document.createElement("p");
-    title.textContent = "Mabel wandered after: " + (wandering.searchQuestion || wandering.title) + ".";
-    item.appendChild(title);
+    const heading = document.createElement("strong");
+    heading.textContent = trip.kind === "exploration"
+      ? "Mabel went exploring"
+      : "Mabel wandered near: " + (trip.searchQuestion || trip.title || "home");
+    item.appendChild(heading);
 
-    (Array.isArray(wandering.finds) ? wandering.finds : []).forEach(function (found) {
+    (trip.finds || []).forEach(function (found) {
       const discovery = document.createElement("p");
       discovery.className = "explore-discovery";
       discovery.textContent = "Mabel found " + found.name + ".";
       item.appendChild(discovery);
-
-      const researchButton = document.createElement("button");
-      researchButton.type = "button";
-      researchButton.className = "board-ponder-button";
-      researchButton.textContent = "Research this find";
-      researchButton.addEventListener("click", function () {
-        handleWander({
-          researchTarget: {
-            title: found.name,
-            question: "Mabel found " + found.name + " while exploring. What might it be, and what can she discover about its history or use?",
-            source: "exploration"
-          }
-        });
-      });
-      item.appendChild(researchButton);
+      if (found.note) {
+        const detail = document.createElement("p");
+        detail.textContent = found.note;
+        item.appendChild(detail);
+      }
     });
-
-    if (wandering.boardNote) {
-      const source = document.createElement("p");
-      source.className = "research-note";
-      source.textContent = "This research began with a note from " + wandering.boardNote.name + " on the Visitors’ board.";
-      item.appendChild(source);
-    }
-
     wanderingsElement.appendChild(item);
   });
 }
@@ -1480,19 +1547,6 @@ async function loadVisitorBoard() {
         time.textContent = new Date(message.createdAt).toLocaleString();
         item.appendChild(time);
       }
-      const ponderButton = document.createElement("button");
-      ponderButton.type = "button";
-      ponderButton.className = "board-ponder-button";
-      ponderButton.textContent = "Let Mabel ponder this";
-      ponderButton.addEventListener("click", function () {
-        handleWander({
-          boardNote: {
-            message: String(message.message || "").slice(0, 280),
-            name: String(message.name || "a visitor").slice(0, 40)
-          }
-        });
-      });
-      item.appendChild(ponderButton);
       visitorBoardMessages.appendChild(item);
     });
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
@@ -2225,6 +2279,10 @@ function normalizeInterestTitle(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function showSparkNotice() {
+  if (sparkNoticeCard) sparkNoticeCard.classList.remove("hidden");
+}
+
 function recordSpark(candidate) {
   if (!candidate || !candidate.title) return;
 
@@ -2236,6 +2294,7 @@ function recordSpark(candidate) {
   let spark = sparks.find(function (item) {
     return item.id === candidate.id || normalizeInterestTitle(item.title) === key;
   });
+  const isNewSpark = !spark;
 
   if (spark) {
     spark.evidence = (spark.evidence || 1) + 1;
@@ -2295,6 +2354,7 @@ function recordSpark(candidate) {
   saveSparks();
   saveMabel();
   updatePage();
+  if (isNewSpark) showSparkNotice();
 
 }
 
@@ -2947,6 +3007,8 @@ function startMabel() {
 
   conversation = loadConversation();
   wanderings = loadWanderings();
+  researchLog = loadResearchLog();
+  boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks();
   lastAutonomousMoment = loadLastAutonomousMoment();
   lastReflectionDate = localStorage.getItem(reflectionStorageKey) || "";
@@ -2996,8 +3058,13 @@ function startMabel() {
     });
   }
 
-  if (wanderButton) {
-    wanderButton.addEventListener("click", handleWander);
+  if (exploreButton) {
+    exploreButton.addEventListener("click", handleExplore);
+  }
+  if (viewSparkButton) {
+    viewSparkButton.addEventListener("click", function () {
+      switchTab("inner-life");
+    });
   }
 
   const introducedObjectForm = document.getElementById("introduce-object-form");
