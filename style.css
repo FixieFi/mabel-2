@@ -987,3 +987,152 @@ button#explore.explore-button:disabled {
   transform: translateY(1px);
   box-shadow: 0 2px 0 #38234f;
 }
+
+
+/* Gallery is a quiet, image-first stack. Details open only when a picture is selected. */
+.gallery-stream {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 0;
+  list-style: none;
+}
+
+.gallery-item {
+  width: min(100%, 420px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.gallery-artwork-button {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  background: linear-gradient(145deg, rgba(246, 237, 255, 0.9), rgba(255, 249, 238, 0.95));
+  border: 1px solid rgba(107, 74, 143, 0.2);
+  border-radius: 18px;
+  box-shadow: 0 6px 18px rgba(67, 42, 94, 0.12);
+  cursor: zoom-in;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.gallery-artwork-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(67, 42, 94, 0.18);
+}
+
+.gallery-artwork-button .mabel-artwork-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+.gallery-detail {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 620px);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 20px;
+  color: var(--deep-plum);
+  background: #fffaf1;
+  border: 2px solid rgba(107, 74, 143, 0.3);
+  border-radius: 22px;
+  box-shadow: 0 22px 60px rgba(32, 22, 42, 0.3);
+}
+
+.gallery-detail::backdrop {
+  background: rgba(40, 29, 48, 0.56);
+  backdrop-filter: blur(3px);
+}
+
+.gallery-detail-close {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.gallery-detail-close button {
+  width: 38px;
+  height: 38px;
+  color: var(--deep-plum);
+  background: #eee3f8;
+  border: 0;
+  border-radius: 50%;
+  font: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.gallery-detail-image .mabel-artwork-svg {
+  display: block;
+  width: min(100%, 460px);
+  max-height: 50vh;
+  margin: 0 auto 16px;
+  border-radius: 14px;
+}
+
+.gallery-detail time {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--plum);
+  font-size: 0.92rem;
+}
+
+.gallery-detail-context {
+  padding: 12px 14px;
+  background: rgba(229, 240, 218, 0.62);
+  border-radius: 12px;
+}
+
+.gallery-detail-context[hidden] {
+  display: none;
+}
+
+.gallery-detail-context p {
+  margin-bottom: 0;
+}
+
+.diary-entry-evening {
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(255, 247, 220, 0.96), rgba(239, 228, 255, 0.86));
+  border: 1px solid rgba(149, 116, 57, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 5px 14px rgba(67, 42, 94, 0.1);
+}
+
+.bindle-item.visitor-gift {
+  color: #57366f;
+  font-family: "Fraunces", Georgia, serif;
+  font-style: italic;
+  background: rgba(238, 229, 255, 0.68);
+  border-left: 3px solid #8c68ad;
+  border-radius: 8px;
+}
+
+.visitor-gift-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  color: #fffaf4;
+  background: #6b4a8f;
+  border-radius: 999px;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+
+.diary-entry-highlight {
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: rgba(255, 252, 241, 0.8);
+  border: 1px solid rgba(160, 135, 95, 0.18);
+  border-radius: 12px;
+}
