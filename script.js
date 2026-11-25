@@ -1347,6 +1347,21 @@ function renderMabelCard(artwork) {
     symbolMarks.button(80, 80, 22);
   }
 
+  if (Array.isArray(artwork.vectorPaths)) {
+    artwork.vectorPaths.slice(0, 24).forEach(function (item) {
+      if (!item || typeof item.d !== "string") return;
+      const d = item.d.slice(0, 360);
+      if (!/^[MmLlHhVvCcSsQqTtZz0-9.,+\-\s]+$/.test(d) || !/[MLCQ]/i.test(d)) return;
+      const values = d.match(/-?\d+(?:\.\d+)?/g) || [];
+      if (values.some(function (value) { return !Number.isFinite(Number(value)) || Number(value) < -20 || Number(value) > 180; })) return;
+      const strokeIndex = Number.isInteger(item.stroke) && item.stroke >= 0 && item.stroke < 3 ? item.stroke : 2;
+      const fillIndex = Number.isInteger(item.fill) && item.fill >= 0 && item.fill < 3 ? item.fill : -1;
+      const width = typeof item.width === "number" ? Math.max(0.35, Math.min(5, item.width)) : 1.4;
+      const opacity = typeof item.opacity === "number" ? Math.max(0.15, Math.min(1, item.opacity)) : 0.85;
+      path(d, palette[strokeIndex], width, opacity, fillIndex >= 0 ? palette[fillIndex] : "none");
+    });
+  }
+
   for (let i = 0; i < 45; i += 1) {
     ellipse(random() * 160, random() * 160, 0.3 + random() * 0.8, 0.3 + random() * 0.8,
       palette[2], 0.12 + random() * 0.15, 0);
@@ -3921,6 +3936,9 @@ async function requestMabelArtwork(context, targetElement) {
         requestedColors: requestedArtworkColors(context.message),
         selfPortrait: requestedArtworkSubject(context.message) === "mabel",
         referenceImageUrl: context.referenceImageUrl || new URL("images/mabel.png", window.location.href).href,
+        referenceRetry: context.referenceRetry === true,
+        referenceTitle: context.referenceTitle || "",
+        referenceFact: context.referenceFact || "",
         referenceImageInstruction: context.referenceImageInstruction || (requestedArtworkSubject(context.message) === "mabel"
           ? "Use mabel.png only as a visual reference for Mabel’s mouse features and proportions. Create a new original drawing; never paste or embed the reference image as a layer."
           : ""),
@@ -4287,7 +4305,7 @@ async function handleVisitorMessage() {
     growVisitorBond(1.5, "a thoughtful chat");
 
     replyElement.textContent = parsedReply.text;
-    const activityTopic = message.replace(/\\s+/g, " ").slice(0, 100);
+    const activityTopic = message.replace(/\s+/g, " ").slice(0, 100);
     addFeedEntry({
       kind: "did",
       source: "visitor",
@@ -6400,7 +6418,10 @@ async function handleWander(options) {
         source: focusInterest.isGiftArtReference ? "autonomous" : "visitor",
         message: "Draw " + focusInterest.title,
         referenceImageUrl: reference.imageUrl,
-        referenceImageInstruction: "Use this real visual reference only to learn the subject’s distinctive shape and details. Create a fresh, original drawing in Mabel’s own handmade style; do not paste, trace, or embed the reference image. The requested subject is " + focusInterest.title + ".",
+        referenceTitle: reference.sourceTitle || "",
+        referenceFact: reference.fact || "",
+        referenceRetry: true,
+        referenceImageInstruction: "Study the actual image at the supplied reference URL. Use its visible shape and distinguishing details to guide a fresh drawing of " + focusInterest.title + " in Mabel’s handmade style; do not paste, trace, or embed the reference image.",
         referenceRetry: true,
         inspiration: inspiration
       };
