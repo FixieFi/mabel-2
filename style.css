@@ -1445,3 +1445,23 @@ button#explore.explore-button:disabled {
   background: rgba(255, 248, 238, 0.78);
   border-left: 3px solid rgba(138, 114, 184, 0.5);
 }
+
+
+.bindle-item-status {
+  display: inline-block;
+  margin-left: 0.45rem;
+  color: #655477;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.research-one-sentence {
+  margin: 0.55rem 0 0;
+  color: #51406b;
+  line-height: 1.5;
+}
+.research-one-sentence a {
+  color: var(--deep-plum);
+  font-weight: 600;
+}
