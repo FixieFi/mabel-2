@@ -3149,9 +3149,9 @@ async function handleVisitorMessage() {
     const workerDiagnostic = String(data && data.debug && data.debug.message || "");
     const quotaExhausted = /\b4006\b|daily free allocation of 10,000 neurons|used up.*10,000 neurons/i.test(workerDiagnostic);
     if (quotaExhausted) {
-      replyElement.textContent = "Mabel’s AI allowance has run out for now, so she can’t reach her thoughts. Please try again after Cloudflare refreshes the allowance.";
+      replyElement.textContent = "My thoughts are all fuzzy right now.";
       if (chatStatusElement) {
-        chatStatusElement.textContent = "The site has used its 10,000 free Workers AI Neurons. The site owner can check Cloudflare AI usage or enable Workers Paid billing.";
+        chatStatusElement.textContent = "The site has used its 10,000 free tokens for today. Try again later.";
       }
       return;
     }
