@@ -657,11 +657,13 @@ async function handleSharedWorldEvent(request, env) {
   } else if (kind === "artwork") {
     const title = cleanText(data.title, 100);
     const inspiration = cleanText(data.inspiration, 220);
-    if (!title || !inspiration) return jsonResponse({ error: "The artwork needs a title and inspiration." }, 400);
-    const key = makeId(title + " " + inspiration);
-    if (!state.crafting.artInspirations.some(item => item.key === key)) {
-      state.crafting.artInspirations.unshift({ key, title, inspiration, at: new Date().toISOString() });
-      state.crafting.artInspirations = state.crafting.artInspirations.slice(0, 12);
+    if (!title || (!inspiration && !data.exhibitionArtwork)) return jsonResponse({ error: "The artwork needs a title and inspiration." }, 400);
+    if (inspiration) {
+      const key = makeId(title + " " + inspiration);
+      if (!state.crafting.artInspirations.some(item => item.key === key)) {
+        state.crafting.artInspirations.unshift({ key, title, inspiration, at: new Date().toISOString() });
+        state.crafting.artInspirations = state.crafting.artInspirations.slice(0, 12);
+      }
     }
     if (data.exhibitionArtwork) addArtExhibitionCandidate(state, data.exhibitionArtwork);
   } else return jsonResponse({ error: "That world event is not recognized." }, 400);
