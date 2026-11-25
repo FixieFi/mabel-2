@@ -119,6 +119,7 @@ function upsertInterest(state, interest, pullChange = 0.1) {
   let existing = state.interests.find(item => item.id === id);
   if (existing) {
     existing.pull = clamp((typeof existing.pull === "number" ? existing.pull : 0.45) + pullChange);
+    existing.kind = cleanText(interest.kind, 30, existing.kind || "wonder");
     existing.question = question || existing.question;
     existing.stage = existing.pull < 0.18 ? "resting" : existing.pull > 0.75 ? "pursuing" : "wondering";
     existing.events = Array.isArray(existing.events) ? existing.events : [];
@@ -557,7 +558,39 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
-  if (kind === "exploration") {
+  if (kind === "hobby") {
+    const supplied = data.interest && typeof data.interest === "object" ? data.interest : {};
+    const title = cleanText(supplied.title, 100);
+    const question = cleanText(supplied.question, 220);
+    const hobbyNames = new Set([
+      "baking", "baking bread", "baking cakes", "cooking", "cooking recipes",
+      "sewing", "knitting", "crocheting", "embroidery", "quilting", "woodworking",
+      "pottery", "ceramics", "painting", "drawing", "sketching", "photography",
+      "gardening", "singing", "dancing", "public speaking", "writing", "journaling",
+      "reading", "bookbinding", "music making", "making music", "playing music",
+      "playing guitar", "playing piano", "playing violin", "playing an instrument",
+      "guitar", "piano", "violin", "drumming", "songwriting", "composing music",
+      "hiking", "walking", "running", "swimming", "cycling", "yoga", "rock climbing",
+      "birdwatching", "chess", "acting", "theatre", "calligraphy", "origami",
+      "model making", "model building", "stargazing", "language learning",
+      "learning languages", "coding", "programming", "skateboarding", "surfing",
+      "fishing", "diy", "home improvement", "crafting", "crafting small objects"
+    ]);
+    if (!title || !question || !hobbyNames.has(title.toLowerCase())) {
+      return jsonResponse({ error: "That is not a concrete hobby for Mabel to keep yet." }, 400);
+    }
+    const current = state.interests.find(item => item.kind === "hobby" && item.title.toLowerCase() === title.toLowerCase());
+    const saved = upsertInterest(state, {
+      id: current?.id || title,
+      title,
+      kind: "hobby",
+      question,
+      evidence: cleanText(supplied.reason, 180, "This activity kept catching Mabel's attention."),
+      pull: typeof supplied.pull === "number" ? clamp(supplied.pull) : 0.5
+    }, 0.08);
+    if (!saved) return jsonResponse({ error: "Mabel could not keep that hobby yet." }, 400);
+    state.currentThread = saved.id;
+  } else if (kind === "exploration") {
     const names = Array.isArray(data.finds) ? data.finds.map(name => cleanText(name, 100)).filter(Boolean).slice(0, 3) : [];
     for (const name of names) {
       if (!state.crafting.materials.some(item => makeId(item.name) === makeId(name))) state.crafting.materials.unshift({ name, at: new Date().toISOString() });
