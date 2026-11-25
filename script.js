@@ -3969,6 +3969,10 @@ async function requestMabelArtwork(context, targetElement) {
       const data = await response.json();
       artwork = data.artwork || null;
       declined = data.declined === true;
+      if (data.referenceUnavailable === true) {
+        context.referenceUnavailable = true;
+        context.referenceUnavailableReason = String(data.reason || "").slice(0, 240);
+      }
     }
     } catch (error) {
       // An explicit drawing request can still use Mabel's local drawing hand.
@@ -3990,7 +3994,7 @@ async function requestMabelArtwork(context, targetElement) {
 
   const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   const comfortRequest = source === "comfort" && context.comfortRequest === true;
-  if (!artwork && explicitRequest) {
+  if (!artwork && explicitRequest && !context.referenceUnavailable && !context.referenceRetry) {
     artwork = makeMabelFallbackArtwork(context);
   }
   if (!artwork && comfortRequest) {
@@ -4002,7 +4006,7 @@ async function requestMabelArtwork(context, targetElement) {
     artwork.note = "A happy little picture Mabel made to keep you company.";
   }
 
-  if (!artwork && source === "autonomous" && context.inspiration) {
+  if (!artwork && source === "autonomous" && context.inspiration && !context.referenceUnavailable && !context.referenceRetry) {
     artwork = makeMabelFallbackArtwork({
       activity: "making a little study",
       mood: context.mood || mabel.now.mood,
@@ -6426,7 +6430,7 @@ async function handleWander(options) {
         inspiration: inspiration
       };
       let refinedArtwork = await requestMabelArtwork(artContext, null);
-      if (!refinedArtwork) refinedArtwork = await requestMabelArtwork({ ...artContext, forceLocalFallback: true }, null);
+      if (!refinedArtwork && !artContext.referenceUnavailable) refinedArtwork = await requestMabelArtwork({ ...artContext, forceLocalFallback: true }, null);
       if (refinedArtwork) {
         const firstFact = reference.fact ? " One thing Mabel learned: " + reference.fact : "";
         if (focusInterest.isGiftArtReference) {
@@ -6449,6 +6453,13 @@ async function handleWander(options) {
             why: "She wanted to share the second study after learning from a visual reference."
           });
         }
+        updatePage();
+      } else if (artContext.referenceUnavailable) {
+        addFeedEntry({
+          kind: "did",
+          text: "Mabel could not study the Library picture for her drawing yet.",
+          why: artContext.referenceUnavailableReason || "The image reference was unavailable to the artwork studio."
+        });
         updatePage();
       }
     }
