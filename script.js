@@ -566,6 +566,39 @@ function isDurableInterestCandidate(candidate) {
   return (enduringKind && activityTitle) || explicitOngoingActivity || (activityTitle && enduringDetails);
 }
 
+function registerSharedDrawing(artwork, context) {
+  if (!artwork || !MABEL_BRAIN_URL) return;
+  const artworkId = String(artwork.id || artwork.seed || artwork.createdAt || artwork.at || "drawing") + "-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
+  return fetch(MABEL_BRAIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind: "drawing-practice",
+      artworkId: artworkId,
+      title: artwork.title || "A little drawing",
+      source: context && context.source || "autonomous"
+    })
+  }).then(async function (response) {
+    if (!response.ok) return;
+    const result = await response.json();
+    if (result.newlyHobby) {
+      recordSpark({
+        id: "drawing-hobby",
+        title: "Drawing",
+        kind: "hobby",
+        question: "What could Mabel express through drawing, and how might she keep learning to draw?",
+        reason: "After returning to making pictures, Mabel wants to keep practicing drawing.",
+        originText: "Mabel has made several different drawings across her days and visitors.",
+        evidenceText: "Mabel has made several drawings across separate moments.",
+        source: "creative practice",
+        grounded: true
+      });
+    } else {
+      refreshSharedMabelBrain();
+    }
+  }).catch(function () {});
+}
+
 function persistSharedHobbyInterest(interest) {
   if (!interest || interest.kind !== "hobby" || !isConcreteHumanHobby(interest.title)) return;
   fetch(MABEL_BRAIN_URL, {
@@ -688,7 +721,20 @@ function moveBindleItemToTreasureBox(item, reason) {
 
 function trimBindleItems(items, limit) {
   while (items.length > limit) {
-    const leaving = items.pop();
+    let leavingIndex = -1;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (!item) { leavingIndex = index; break; }
+      const gift = item.giftId && mabel.world && Array.isArray(mabel.world.objects)
+        ? mabel.world.objects.find(function (object) { return object && object.id === item.giftId && object.source === "visitor"; })
+        : null;
+      const receivedAt = Date.parse(gift && (gift.noticedAt || gift.at) || item.at || item.addedAt || "");
+      const isVisitorGift = Boolean(gift || item.giftId || item.source === "visitor");
+      const protectedGift = isVisitorGift && (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 30 * 60 * 1000);
+      if (!protectedGift) { leavingIndex = index; break; }
+    }
+    if (leavingIndex < 0) break;
+    const leaving = items.splice(leavingIndex, 1)[0];
     const reason = bindleItemResonance(leaving);
     if (reason) moveBindleItemToTreasureBox(leaving, reason);
     else recordBindleDeparture(leaving, "discarded");
@@ -1248,8 +1294,9 @@ function saveToMabelGallery(artwork) {
   updateArtExhibition();
   updateVisitorProfile();
   refreshGalleryNotice();
+  let sharedArtworkUpdate = Promise.resolve();
   if (artwork.source === "autonomous") {
-    fetch(MABEL_BRAIN_URL, {
+    sharedArtworkUpdate = fetch(MABEL_BRAIN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1275,6 +1322,7 @@ function saveToMabelGallery(artwork) {
       })
     }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
   }
+  return sharedArtworkUpdate;
 }
 
 function formatArtworkTime(isoTime) {
@@ -2129,7 +2177,7 @@ function updateBrain() {
   if (mood) mood.textContent = shared.mood || mabel.now.mood || "quiet";
   if (thought) thought.textContent = "“" + (shared.thought || mabel.now.thought || "Mabel is listening to the hollow.") + "”";
   if (moodScore) {
-    const needs = Object.values(shared.needs || mabel.needs || {}).map(Number).filter(Number.isFinite);
+    const needs = Object.values((mabel && mabel.needs) || {}).map(Number).filter(Number.isFinite);
     const balance = needs.length ? Math.round(needs.reduce(function (sum, value) { return sum + clampNeed(value); }, 0) / needs.length * 100) : 0;
     moodScore.textContent = balance + " / 100";
   }
@@ -2351,17 +2399,19 @@ function updateResearchLog() {
       .slice(0, 90);
     const fact = chooseResearchPostcardSentence(entry) ||
       String(entry.researchSummary || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    const searchTerm = String(entry.searchTerm || entry.searchQuestion || subject).trim();
+    const resourceMethod = libraryResourceMethod(firstSource, entry.researchMethod);
     const sentence = document.createElement("p");
     sentence.className = "research-one-sentence";
     if (entry.related === false) {
-      sentence.textContent = "This search sparked Mabel’s curiosity. She now wonders: “" + (entry.followUpQuestion || "What might people want to know next about this?") + "”";
+      sentence.textContent = "Mabel searched for “" + searchTerm + "” using " + resourceMethod + ", but couldn’t verify a useful page about it this time.";
       item.appendChild(sentence);
       list.appendChild(item);
       return;
     }
-    sentence.appendChild(document.createTextNode("Mabel looked up "));
+    sentence.appendChild(document.createTextNode("Mabel searched for “" + searchTerm + "” and explored "));
     if (firstSource) {
-      sentence.appendChild(document.createTextNode("the page "));
+      sentence.appendChild(document.createTextNode("the page “"));
       const sourceUrl = safeExternalUrl(firstSource.url);
       if (sourceUrl) {
         const link = document.createElement("a");
@@ -2373,13 +2423,12 @@ function updateResearchLog() {
       } else {
         sentence.appendChild(document.createTextNode(firstSource.title));
       }
+      sentence.appendChild(document.createTextNode("” in " + resourceMethod));
     } else {
-      sentence.appendChild(document.createTextNode("the topic"));
+      sentence.appendChild(document.createTextNode("a useful page using " + resourceMethod));
     }
-    const resourceMethod = libraryResourceMethod(firstSource, entry.researchMethod);
-    sentence.appendChild(document.createTextNode((firstSource ? " from " : " using ") + resourceMethod + (inspiration ? " while thinking about “" + inspiration + "”" : "")));
-    if (fact) sentence.appendChild(document.createTextNode(" and learned: " + fact.replace(/[.!?]+$/, "") + "."));
-    else sentence.appendChild(document.createTextNode(" and kept exploring the topic."));
+    if (fact) sentence.appendChild(document.createTextNode(", learning: " + fact.replace(/[.!?]+$/, "") + "."));
+    else sentence.appendChild(document.createTextNode("."));
     item.appendChild(sentence);
     list.appendChild(item);
   });
@@ -2626,6 +2675,31 @@ async function loadVisitorBoard() {
         time.textContent = new Date(message.createdAt).toLocaleString();
         item.appendChild(time);
       }
+      if (message.id) {
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "board-delete-button";
+        removeButton.textContent = "Delete";
+        removeButton.setAttribute("aria-label", "Delete this notice");
+        removeButton.addEventListener("click", async function () {
+          if (!window.confirm("Delete this notice from the shared board?")) return;
+          removeButton.disabled = true;
+          try {
+            const deleteResponse = await fetch(MABEL_BOARD_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "delete", id: message.id })
+            });
+            if (!deleteResponse.ok) throw new Error("The notice could not be deleted.");
+            await loadVisitorBoard();
+            if (visitorBoardStatus) visitorBoardStatus.textContent = "The notice has been removed for everyone.";
+          } catch (error) {
+            removeButton.disabled = false;
+            if (visitorBoardStatus) visitorBoardStatus.textContent = "That notice could not be removed just now.";
+          }
+        });
+        item.appendChild(removeButton);
+      }
       visitorBoardMessages.appendChild(item);
     });
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
@@ -2660,7 +2734,7 @@ async function submitVisitorBoardMessage(event) {
 
 function visitorNoteKey(value) {
   return String(value || "").toLowerCase()
-    .replace(/\b(?:i|me|my|they|them|their|she|he|we|you|really|like|likes|love|loves|enjoy|enjoys|adore|adores|am|are|is|the|a|an)\b/g, " ")
+    .replace(/\b(?:i|me|my|they|them|their|she|he|we|you|visitor|shared|said|says|told|mentioned|really|like|likes|love|loves|enjoy|enjoys|adore|adores|am|are|is|the|a|an)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
@@ -2858,21 +2932,22 @@ function captureVisitorFacts(message) {
   const text = String(message || "");
   const nameMatch = text.match(/\b(?:my name is|my name's|call me)\s+([A-Za-zÀ-ÖØ-öø-ÿ'-]{2,32})\b/i);
   if (nameMatch && !/^(not|just|anonymous|visitor|mabel)$/i.test(nameMatch[1])) {
-    addVisitorProfileNote("facts", "Their name is " + nameMatch[1].trim() + ".");
+    addVisitorProfileNote("facts", "Visitor’s name is " + nameMatch[1].trim() + ".");
   }
   const ageMatch = text.match(/\b(?:my age is|i am|i'm|im)\s+(\d{1,3})(?=\s*(?:years? old|yrs? old|[.!?,;]|$))/i);
   if (ageMatch) {
     const age = Number(ageMatch[1]);
-    if (age >= 1 && age <= 110) addVisitorProfileNote("facts", "They are " + age + " years old.");
+    if (age >= 1 && age <= 110) addVisitorProfileNote("facts", "Visitor is " + age + " years old.");
   }
   const favoriteMatch = text.match(/\bmy favorite\s+([a-z ]{2,24})\s+is\s+([^.!?\n]{2,100})/i);
   if (favoriteMatch) {
-    addVisitorProfileNote("facts", "Their favorite " + favoriteMatch[1].trim() + " is " + favoriteMatch[2].trim() + ".");
+    addVisitorProfileNote("facts", "Visitor’s favorite " + favoriteMatch[1].trim() + " is " + favoriteMatch[2].trim() + ".");
   }
   const preferenceMatch = text.match(/\bI\s+(?:really\s+)?(like|love|enjoy|adore|am interested in)\s+([^.!?\n]{2,120})/i);
   if (preferenceMatch) {
     const verb = preferenceMatch[1].toLowerCase() === "am interested in" ? "are interested in" : preferenceMatch[1].toLowerCase() + " ";
-    addVisitorProfileNote("facts", "They " + verb + preferenceMatch[2].trim().replace(/[,;:]$/, "") + ".");
+    const preferenceVerb = preferenceMatch[1].toLowerCase() === "am interested in" ? "is interested in" : preferenceMatch[1].toLowerCase() + "s";
+    addVisitorProfileNote("facts", "Visitor " + preferenceVerb + " " + preferenceMatch[2].trim().replace(/[,;:]$/, "") + ".");
   }
   const appearancePatterns = [
     /\bI\s+(?:have|got|wear|am wearing)\s+[^.!?\n]{1,100}\b(?:hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes|eye colour|eye color|bald|curly|straight|blonde|blond|brunette|ginger|red-haired|red hair|brown hair|black hair|grey hair|gray hair)\b[^.!?\n]*/i,
@@ -2881,9 +2956,35 @@ function captureVisitorFacts(message) {
   ];
   appearancePatterns.forEach(function (pattern) {
     const appearanceMatch = text.match(pattern);
-    if (appearanceMatch) addVisitorProfileNote("facts", "They shared: " + appearanceMatch[0].trim() + ".");
+    if (appearanceMatch) addVisitorProfileNote("facts", formatVisitorFact(appearanceMatch[0].trim()));
   });
   if (visitorProfile.facts.length !== beforeCount) updateVisitorProfile();
+}
+
+function formatVisitorFact(value) {
+  let fact = String(value || "").trim().replace(/^They shared:\s*/i, "").replace(/^Visitor says:\s*/i, "");
+  let match = fact.match(/^(?:My name is|Their name is)\s+(.+?)\.?$/i);
+  if (match) return "Visitor’s name is " + match[1].replace(/\.$/, "") + ".";
+  match = fact.match(/^(?:Their favorite|Their favourite)\s+(.+?)\s+is\s+(.+?)\.?$/i);
+  if (match) return "Visitor’s favorite " + match[1] + " is " + match[2].replace(/\.$/, "") + ".";
+  match = fact.match(/^(?:They are|I am|I'm|Im)\s+(.+?)\.?$/i);
+  if (match) return "Visitor is " + match[1].replace(/\.$/, "") + ".";
+  match = fact.match(/^(?:They have|I have|I got|I’ve got|I got)\s+(.+?)\.?$/i);
+  if (match) return "Visitor has " + match[1].replace(/\.$/, "") + ".";
+  match = fact.match(/^(?:They wear|I wear|I am wearing)\s+(.+?)\.?$/i);
+  if (match) return "Visitor wears " + match[1].replace(/\.$/, "") + ".";
+  match = fact.match(/^(?:My|Their) hair is\s+(.+?)\.?$/i);
+  if (match) return "Visitor has " + match[1].replace(/\.$/, "") + " hair.";
+  match = fact.match(/^(?:My|Their) eyes are\s+(.+?)\.?$/i);
+  if (match) return "Visitor has " + match[1].replace(/\.$/, "") + " eyes.";
+  match = fact.match(/^They (like|love|enjoy|adore)\s+(.+?)\.?$/i);
+  if (match) return "Visitor " + match[1].toLowerCase() + "s " + match[2].replace(/\.$/, "") + ".";
+  match = fact.match(/^They are interested in\s+(.+?)\.?$/i);
+  if (match) return "Visitor is interested in " + match[1].replace(/\.$/, "") + ".";
+  match = fact.match(/^I\s+(like|love|enjoy|adore)\s+(.+?)\.?$/i);
+  if (match) return "Visitor " + match[1].toLowerCase() + "s " + match[2].replace(/\.$/, "") + ".";
+  if (/^Visitor\b/i.test(fact)) return fact;
+  return "Visitor says: " + fact.replace(/\.$/, "") + ".";
 }
 
 function updateVisitorProfile() {
@@ -2899,7 +3000,7 @@ function updateVisitorProfile() {
       const item = document.createElement("li");
       const details = document.createElement("div");
       const text = document.createElement("p");
-      text.textContent = note.text;
+      text.textContent = key === "facts" ? formatVisitorFact(note.text) : note.text;
       details.appendChild(text);
       if (note.at) {
         const time = document.createElement("time");
@@ -3201,10 +3302,23 @@ function visitorSeemsDistressed(message) {
   return /\b(sad|upset|lonely|alone|isolated|no one|nobody|scared|anxious|anxiety|stressed|overwhelmed|heartbroken|grieving|rough day|bad day|feeling low|feel awful|crying|in tears)\b/i.test(String(message || ""));
 }
 
+function requestedArtworkColors(message) {
+  const text = String(message || "");
+  if (!isArtworkRequest(text)) return [];
+  const colors = ["pink", "red", "orange", "yellow", "green", "blue", "purple", "violet", "lilac", "lavender", "teal", "turquoise", "black", "white", "brown", "grey", "gray", "gold", "silver"];
+  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\\b" + color + "\\b", "i").test(text); }))).slice(0, 4);
+}
+
+function requestedArtworkColorInstruction(message) {
+  const colors = requestedArtworkColors(message);
+  if (!colors.length) return "";
+  return " Honor the visitor’s explicit color request: use " + colors.join(" and ") + " prominently on the requested subject or scene; do not omit or replace those requested colors.";
+}
+
 function isArtworkRequest(message) {
   const text = String(message || "").trim();
   if (!text) return false;
-  const selfPortrait = /\bself[ -]?portrait\b|\bportrait of (?:yourself|mabel)\b|\bdraw (?:yourself|mabel)\b|\bpicture of (?:you|mabel)\b/i.test(text);
+  const selfPortrait = /\bself[ -]?portrait\b|\bportrait of (?:yourself|mabel)\b|\b(?:draw|sketch|paint|illustrate) (?:you|yourself|mabel)\b|\bpicture of (?:you|mabel)\b/i.test(text);
   const directDraw = /\b(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
     /\b(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
     /\b(?:i want|i'd like|i would like)\s+you\s+to\s+(?:draw|sketch|paint|illustrate)\b/i.test(text);
@@ -3214,6 +3328,45 @@ function isArtworkRequest(message) {
 
 function requestedArtworkDescriptionSubject(message) {
   return requestedArtworkSubject(message);
+}
+
+function shouldResearchArtworkReference(subject) {
+  const key = normalizeInterestTitle(subject);
+  if (!key || /^(mabel|mouse|visitor|me|you|self portrait)$/.test(key)) return false;
+  const familiar = new Set(["cat", "dog", "rabbit", "fox", "bird", "flower", "mushroom", "fossil", "button", "shell", "moon", "star", "fish", "house", "tree", "leaf", "apple", "heart", "cloud", "sun"]);
+  if (familiar.has(key)) return false;
+  const sharedReferences = sharedMabelBrain && Array.isArray(sharedMabelBrain.artReferences) ? sharedMabelBrain.artReferences : [];
+  if (sharedReferences.some(function (item) { return normalizeInterestTitle(item.subject || item.title) === key; })) return false;
+  return !researchLog.some(function (entry) {
+    return entry && entry.requestType === "art-reference" && normalizeInterestTitle(entry.searchTerm || entry.focusTitle) === key;
+  });
+}
+
+function queueArtworkReferenceResearch(message) {
+  const subject = requestedArtworkDescriptionSubject(message);
+  if (!subject || !shouldResearchArtworkReference(subject)) return null;
+  const lead = addResearchIdea({
+    id: "art-reference-" + normalizeInterestTitle(subject),
+    title: subject,
+    question: "What does " + subject + " look like, and what details could help Mabel draw it more clearly?",
+    searchTerm: subject,
+    source: "conversation",
+    grounded: true,
+    requestType: "art-reference",
+    originText: "Mabel was thinking about " + subject + " and wanted to explore it more creatively."
+  });
+  if (!lead) return null;
+  addFeedEntry({
+    kind: "did",
+    source: "visitor",
+    text: "Mabel decided to look for a visual reference for " + subject + ".",
+    why: "She was thinking about " + subject + " and wanted to explore it more creatively."
+  });
+  saveResearchIdeas();
+  saveMabel();
+  updatePage();
+  scheduleWanderingResearch(lead);
+  return lead;
 }
 
 function isVisitorPortraitRequest(message) {
@@ -3240,7 +3393,7 @@ function visitorAppearanceDetails(message) {
 
 function requestedArtworkSubject(message) {
   const text = String(message || "").trim();
-  if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:yourself|mabel)|picture of (?:you|mabel))\b/i.test(text)) return "mabel";
+  if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:you|yourself|mabel)|sketch (?:you|yourself|mabel)|paint (?:you|yourself|mabel)|illustrate (?:you|yourself|mabel)|picture of (?:you|mabel))\b/i.test(text)) return "mabel";
   if (isVisitorPortraitRequest(text)) return "visitor";
   const lower = text.toLowerCase();
   const knownSubjects = [
@@ -3341,18 +3494,19 @@ async function requestMabelArtwork(context, targetElement) {
         visitorPortrait: visitorPortrait,
         visitorAppearance: appearanceDetails,
         visitorPreferences: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; }),
-        artworkInstruction: visitorPortrait
+        artworkInstruction: (visitorPortrait
           ? "Draw Mabel’s visitor as the subject. Use only the explicitly shared appearance details in visitorAppearance; do not invent gender, hair, glasses, facial hair, age, or other features that are not provided. Give the artwork the exact title “Mabel drew her visitor”."
           : context.comfortRequest
             ? "Make a warm, happy comfort drawing for this visitor. First use a favorite animal, hobby, or interest explicitly stated in visitorPreferences if one is clearly available. If no such preference is present, draw Mabel the mouse holding a love heart, or Mabel beside the visitor with a bouquet of flowers and little hearts. Do not use unrelated things Mabel found as the subject. Do not invent the visitor's appearance; use only visitorAppearance details when drawing them. Keep the written title and description about the visitor's comfort, not about a random object."
             : requestedArtworkDescriptionSubject(context.message)
               ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
-              : "Give the artwork a specific title and a short description grounded in the inspiration supplied.",
+              : "Give the artwork a specific title and a short description grounded in the inspiration supplied.") + requestedArtworkColorInstruction(context.message) + (context.referenceImageInstruction ? " " + context.referenceImageInstruction : ""),
+        requestedColors: requestedArtworkColors(context.message),
         selfPortrait: requestedArtworkSubject(context.message) === "mabel",
-        referenceImageUrl: new URL("images/mabel.png", window.location.href).href,
-        referenceImageInstruction: requestedArtworkSubject(context.message) === "mabel"
+        referenceImageUrl: context.referenceImageUrl || new URL("images/mabel.png", window.location.href).href,
+        referenceImageInstruction: context.referenceImageInstruction || (requestedArtworkSubject(context.message) === "mabel"
           ? "Use mabel.png only as a visual reference for Mabel’s mouse features and proportions. Create a new original drawing; never paste or embed the reference image as a layer."
-          : "",
+          : ""),
         mood: context.mood || mabel.now.mood,
         activity: context.activity || mabel.now.doing,
         thought: context.thought || mabel.now.thought,
@@ -3438,11 +3592,25 @@ async function requestMabelArtwork(context, targetElement) {
     artwork.inspirationKey = artworkInspiration.key;
   }
   const card = renderMabelCard(artwork);
-  saveToMabelGallery(artwork);
+  const sharedArtworkUpdate = saveToMabelGallery(artwork);
   if (card && targetElement) {
     targetElement.appendChild(document.createElement("br"));
     targetElement.appendChild(card);
   }
+  if (source === "visitor" || source === "comfort") {
+    const creativeThought = context.inspiration && (context.inspiration.question || context.inspiration.title)
+      || requestedArtworkDescriptionSubject(context.message)
+      || context.comfortSubject
+      || "a little idea she wanted to explore";
+    addFeedEntry({
+      kind: "did",
+      source: "visitor",
+      text: context.comfortRequest ? "Mabel made a thoughtful drawing for her visitor." : "Mabel drew something for her visitor.",
+      why: "Mabel was thinking about " + String(creativeThought).replace(/[.?!]+$/, "") + " and wanted to explore it more creatively."
+    });
+  }
+  if (source === "autonomous") await sharedArtworkUpdate;
+  await registerSharedDrawing(artwork, { source: source });
   return artwork;
 }
 
@@ -3688,6 +3856,13 @@ async function handleVisitorMessage() {
     const inlineSpark = sparkFromMarker(parsedReply, "conversation", message);
 
     replyElement.textContent = parsedReply.text;
+    const activityTopic = message.replace(/\\s+/g, " ").slice(0, 100);
+    addFeedEntry({
+      kind: "did",
+      source: "visitor",
+      text: "Mabel talked with a visitor about “" + activityTopic + (message.length > 100 ? "…”." : "”."),
+      why: "A conversation in this browser."
+    });
 
     if (data.spark) {
       recordSpark({ ...data.spark, grounded: true, source: "conversation", evidenceText: message + " " + parsedReply.text });
@@ -3698,6 +3873,7 @@ async function handleVisitorMessage() {
     let requestedArtwork = null;
     if (isArtworkRequest(message)) {
       requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
+      if (requestedArtwork) queueArtworkReferenceResearch(message);
     } else if (visitorSeemsDistressed(message)) {
       requestedArtwork = await requestMabelArtwork({
         source: "comfort",
@@ -4177,7 +4353,7 @@ function researchMatchesFocus(text, focusInterest) {
   const focusWords = Array.from(new Set(researchWords(focusInterest.searchTerm || focusInterest.title)));
   const resultWords = new Set(researchWords(text));
   const matchedWords = focusWords.filter(function (word) { return resultWords.has(word); });
-  const requiredMatches = Math.min(2, focusWords.length);
+  const requiredMatches = focusWords.length >= 3 ? 2 : 1;
   return requiredMatches > 0 && matchedWords.length >= requiredMatches;
 }
 
@@ -4622,7 +4798,7 @@ function textSharesSpecificDetail(text, evidenceText) {
 function isGroundedResearchTrigger(candidate) {
   if (!candidate || !candidate.title) return false;
   const source = normalizeInterestTitle(candidate.source || "");
-  const trustedSources = new Set(["conversation", "visitor board", "discovery", "exploration", "research"]);
+  const trustedSources = new Set(["conversation", "visitor board", "discovery", "exploration", "research", "creative practice"]);
   if (candidate.grounded === true && trustedSources.has(source)) return true;
   const evidenceText = String(candidate.evidenceText || "");
   const ideaText = [candidate.title, candidate.question, candidate.reason].filter(Boolean).join(" ");
@@ -5301,8 +5477,10 @@ async function fetchPublicResearchFallback(searchTerm) {
     generator: "search",
     gsrsearch: keyword,
     gsrlimit: "3",
-    prop: "extracts|info",
+    prop: "extracts|info|pageimages",
     inprop: "url",
+    piprop: "thumbnail",
+    pithumbsize: "640",
     exintro: "1",
     explaintext: "1",
     exsentences: "3",
@@ -5322,7 +5500,8 @@ async function fetchPublicResearchFallback(searchTerm) {
     return {
       title: String(page.title).slice(0, 160),
       url: safeExternalUrl(page.fullurl),
-      snippet: String(page.extract).slice(0, 500)
+      snippet: String(page.extract).slice(0, 500),
+      imageUrl: safeExternalUrl(page.thumbnail && page.thumbnail.source || "")
     };
   });
   if (!sources.length) return null;
@@ -5442,7 +5621,9 @@ async function handleWander(options) {
         focusInterest: { ...focusInterest, ...(searchTerm ? { searchTerm: searchTerm } : {}) },
         interests: [focusInterest],
         guidingAim: MABEL_GUIDING_AIM,
-        researchInstruction: focusInterest.isGiftResearch
+        researchInstruction: focusInterest.requestType === "art-reference"
+          ? "Research the requested drawing subject " + focusInterest.title + " online to find a reliable visual reference. Return the exact subject, a relevant article title, the canonical page URL, a real image thumbnail URL from the article if one is available, and one short factual sentence. Do not invent an image URL or use a generic image unrelated to this subject."
+          : focusInterest.isGiftResearch
           ? "Research this exact visitor gift: " + focusInterest.title + ". Search online for reliable web pages about what it is; do not describe the physical gift itself as something Mabel read. If reliable sources confirm it is ordinary edible food, return edibleFood true and a brief source-grounded edibleReason. If it is not food or you cannot confirm it is safe to eat, return edibleFood false. Never guess that an unfamiliar object, plant, or mushroom is edible. Return real webpage titles, URLs, and snippets."
           : focusInterest.isGuidingAimStep
           ? "For this step in Mabel’s broad wish to understand life beyond her woods, choose one concrete, verifiable subject she has not researched recently. Let the web search choose a varied subject rather than using a fixed topic list. Search the public web, open relevant pages where possible, and return the actual specific subject as title, a search question, a useful fact, and a source URL/title. Treat sources as web pages she explored through the library computer, not as physical objects she found or necessarily as books she read. Keep it a one-time discovery unless it later keeps drawing her attention. Do not invent results or say she found an object."
@@ -5490,21 +5671,65 @@ async function handleWander(options) {
       if (data) researchMethod = "in the public encyclopedia";
     }
     if (!data) throw workerError || new Error("The Library could not find a useful page for this question.");
-    const rawSources = Array.isArray(data.sources)
+    let rawSources = Array.isArray(data.sources)
       ? data.sources.slice(0, 3).filter(function (source) {
           return source && source.title && safeExternalUrl(source.url);
         }).map(function (source) {
-          return { title: String(source.title).slice(0, 160), url: safeExternalUrl(source.url), snippet: String(source.snippet || "").slice(0, 500) };
+          return {
+            title: String(source.title).slice(0, 160),
+            url: safeExternalUrl(source.url),
+            snippet: String(source.snippet || "").slice(0, 500),
+            imageUrl: safeExternalUrl(source.imageUrl || source.thumbnail || "")
+          };
         })
       : [];
     if (!rawSources.length && data.sourceTitle && data.url) {
       const legacyUrl = safeExternalUrl(data.url);
-      if (legacyUrl) rawSources.push({ title: String(data.sourceTitle).slice(0, 160), url: legacyUrl, snippet: "" });
+      if (legacyUrl) rawSources.push({ title: String(data.sourceTitle).slice(0, 160), url: legacyUrl, snippet: "", imageUrl: "" });
     }
-    const relatedSources = rawSources.filter(function (source) {
+    let relatedSources = rawSources.filter(function (source) {
       return focusInterest.isGuidingAimStep ||
         researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
     });
+    if (!focusInterest.isGuidingAimStep && searchTerm && !relatedSources.length) {
+      const encyclopediaResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
+      if (encyclopediaResult && Array.isArray(encyclopediaResult.sources)) {
+        const fallbackSources = encyclopediaResult.sources.filter(function (source) {
+          return source && source.title && safeExternalUrl(source.url);
+        }).map(function (source) {
+          return {
+            title: String(source.title).slice(0, 160),
+            url: safeExternalUrl(source.url),
+            snippet: String(source.snippet || "").slice(0, 500),
+            imageUrl: safeExternalUrl(source.imageUrl || "")
+          };
+        });
+        const fallbackRelated = fallbackSources.filter(function (source) {
+          return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
+        });
+        if (fallbackRelated.length) {
+          data = encyclopediaResult;
+          rawSources = fallbackSources;
+          relatedSources = fallbackRelated;
+          researchMethod = "in the public encyclopedia";
+        }
+      }
+    }
+    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return source.imageUrl; })) {
+      const imageResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
+      const imageSources = imageResult && Array.isArray(imageResult.sources) ? imageResult.sources.filter(function (source) {
+        return source && source.title && source.imageUrl && safeExternalUrl(source.url);
+      }) : [];
+      const imageRelated = imageSources.filter(function (source) {
+        return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
+      });
+      if (imageRelated.length) {
+        data = imageResult;
+        rawSources = imageSources;
+        relatedSources = imageRelated;
+        researchMethod = "in the public encyclopedia";
+      }
+    }
     const returnedText = [
       data.searchQuestion,
       data.title,
@@ -5523,14 +5748,17 @@ async function handleWander(options) {
     const research = {
       kind: "research",
       at: now(),
+      requestType: focusInterest.requestType || "",
       focusTitle: ["exploration", "wandering"].includes(focusInterest.source)
         ? focusInterest.title
         : (focusInterest.isGuidingAimStep && relevant ? data.title : displayTitle),
       focusQuestionTitle: focusInterest.title,
       focusSource: focusInterest.source || "",
+      requestType: focusInterest.requestType || "",
       sourceOriginText: focusInterest.originText || "",
       sourceOriginAt: focusInterest.originAt || "",
-      searchQuestion: data.searchQuestion || searchTerm || focusInterest.question || "",
+      searchTerm: searchTerm || String(data.searchQuestion || "").slice(0, 100),
+      searchQuestion: searchTerm || data.searchQuestion || focusInterest.question || "",
       title: relevant ? (data.title || displayTitle) : "A new question from this search",
       sourceTitle: relevant ? (relatedSources[0]?.title || data.sourceTitle || "") : "",
       researchSummary: relevant
@@ -5556,6 +5784,19 @@ async function handleWander(options) {
       if (researchedGift) moveVisitorGiftToFood(researchedGift, data, research);
     }
 
+    if (focusInterest.requestType === "art-reference") {
+      const visualSource = relatedSources.find(function (source) { return source && safeExternalUrl(source.imageUrl); });
+      if (visualSource) {
+        research.artReference = {
+          subject: focusInterest.title,
+          imageUrl: safeExternalUrl(visualSource.imageUrl),
+          pageUrl: safeExternalUrl(visualSource.url),
+          sourceTitle: visualSource.title,
+          fact: String(visualSource.snippet || "").split(/(?<=[.!?])\s+/)[0].slice(0, 260),
+          at: research.at
+        };
+      }
+    }
     researchLog.unshift(research);
     researchLog = researchLog.slice(0, 30);
     if (!relevant && research.followUpQuestion) {
@@ -5665,6 +5906,34 @@ async function handleWander(options) {
 
     saveMabel();
     updatePage();
+    if (focusInterest.requestType === "art-reference" && relevant && research.artReference && research.artReference.imageUrl) {
+      const reference = research.artReference;
+      fetch(MABEL_BRAIN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "art-reference", artReference: reference })
+      }).then(function (response) {
+        if (response.ok) refreshSharedMabelBrain();
+      }).catch(function () {});
+      const refinedArtwork = await requestMabelArtwork({
+        source: "visitor",
+        message: "Draw " + focusInterest.title,
+        referenceImageUrl: reference.imageUrl,
+        referenceImageInstruction: "Use this real visual reference only to learn the subject’s distinctive shape and details. Create a fresh, original drawing in Mabel’s own handmade style; do not paste, trace, or embed the reference image. The requested subject is " + focusInterest.title + ".",
+        inspiration: { title: focusInterest.title, question: "Mabel studied a visual reference for " + focusInterest.title + " and wanted to explore it more creatively." }
+      }, null);
+      if (refinedArtwork) {
+        const firstFact = reference.fact ? " I learned that " + reference.fact : "";
+        addMabelPostboxItem({
+          kind: "artwork",
+          title: "Mabel tried another drawing",
+          text: "I looked up a visual reference for " + focusInterest.title + " at the Library and tried drawing it again." + firstFact,
+          artwork: refinedArtwork,
+          sources: [{ title: reference.sourceTitle, url: reference.pageUrl }]
+        });
+        updatePage();
+      }
+    }
     if (wanderStatus) {
       wanderStatus.textContent = relevant
         ? (researchMethod === "in the public encyclopedia"

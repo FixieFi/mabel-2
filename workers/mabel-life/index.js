@@ -14,6 +14,8 @@ const DEFAULT_STATE = {
   interests: [],
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
   artExhibition: { weekOf: null, candidates: [], works: [] },
+  artReferences: [],
+  drawingPractice: { count: 0, artworkIds: [], firstAt: null, lastAt: null },
   personality: {
     core_traits: ["gentle", "curious", "thoughtful", "quietly playful"],
     evolved_traits: [],
@@ -132,6 +134,12 @@ async function loadState(env) {
   state.personality.last_reflection_date = cleanText(state.personality.last_reflection_date, 10) || null;
   state.memories = Array.isArray(state.memories) ? state.memories.slice(0, MAX_MEMORIES) : [];
   state.knowledge = Array.isArray(state.knowledge) ? state.knowledge.slice(0, 40) : [];
+  state.artReferences = Array.isArray(state.artReferences) ? state.artReferences.slice(0, 40) : [];
+  state.drawingPractice = state.drawingPractice && typeof state.drawingPractice === "object" ? state.drawingPractice : {};
+  state.drawingPractice.count = Math.max(0, Number(state.drawingPractice.count) || 0);
+  state.drawingPractice.artworkIds = Array.isArray(state.drawingPractice.artworkIds) ? state.drawingPractice.artworkIds.slice(0, 100) : [];
+  state.drawingPractice.firstAt = cleanText(state.drawingPractice.firstAt, 40) || null;
+  state.drawingPractice.lastAt = cleanText(state.drawingPractice.lastAt, 40) || null;
   state.reflections = Array.isArray(state.reflections) ? state.reflections.slice(0, 16) : [];
   state.interests = Array.isArray(state.interests)
     ? state.interests.filter(item => item && !LEGACY_SEEDS.has(item.id)).slice(0, MAX_INTERESTS)
@@ -616,6 +624,94 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
+  if (kind === "art-reference") {
+    const supplied = data.artReference && typeof data.artReference === "object" ? data.artReference : {};
+    const subject = cleanText(supplied.subject, 100);
+    const imageUrl = cleanText(supplied.imageUrl, 500);
+    const pageUrl = cleanText(supplied.pageUrl, 500);
+    let imageHost = "";
+    let pageHost = "";
+    let secureUrls = false;
+    try {
+      const image = new URL(imageUrl);
+      const page = new URL(pageUrl);
+      imageHost = image.hostname;
+      pageHost = page.hostname;
+      secureUrls = image.protocol === "https:" && page.protocol === "https:";
+    } catch {}
+    if (!subject || !secureUrls ||
+        !(imageHost === "wikipedia.org" || imageHost.endsWith(".wikipedia.org") || imageHost === "wikimedia.org" || imageHost.endsWith(".wikimedia.org")) ||
+        !(pageHost === "wikipedia.org" || pageHost.endsWith(".wikipedia.org") || pageHost === "wikimedia.org" || pageHost.endsWith(".wikimedia.org"))) {
+      return jsonResponse({ error: "A verified encyclopedia reference is needed." }, 400);
+    }
+    const key = makeId(subject);
+    const saved = {
+      subject,
+      imageUrl,
+      pageUrl,
+      sourceTitle: cleanText(supplied.sourceTitle, 160),
+      fact: cleanText(supplied.fact, 260),
+      at: cleanText(supplied.at, 40) || new Date().toISOString()
+    };
+    state.artReferences = Array.isArray(state.artReferences) ? state.artReferences : [];
+    state.artReferences = state.artReferences.filter(item => makeId(item.subject || "") !== key);
+    state.artReferences.unshift(saved);
+    state.artReferences = state.artReferences.slice(0, 40);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, artReference: saved });
+  }
+  if (kind === "drawing-practice") {
+    const artworkId = cleanText(data.artworkId, 120);
+    const title = cleanText(data.title, 100, "A small drawing");
+    if (!artworkId) return jsonResponse({ error: "A completed drawing ID is needed." }, 400);
+    state.drawingPractice = state.drawingPractice || { count: 0, artworkIds: [], firstAt: null, lastAt: null };
+    state.drawingPractice.artworkIds = Array.isArray(state.drawingPractice.artworkIds) ? state.drawingPractice.artworkIds : [];
+    if (state.drawingPractice.artworkIds.includes(artworkId)) {
+      const existing = state.interests.find(item => item.id === "drawing");
+      return jsonResponse({ ok: true, duplicate: true, drawingCount: state.drawingPractice.count, interest: existing || null, newlyHobby: false });
+    }
+    const at = new Date().toISOString();
+    state.drawingPractice.artworkIds.unshift(artworkId);
+    state.drawingPractice.artworkIds = state.drawingPractice.artworkIds.slice(0, 100);
+    state.drawingPractice.count = Math.min(1000, state.drawingPractice.count + 1);
+    state.drawingPractice.firstAt = state.drawingPractice.firstAt || at;
+    state.drawingPractice.lastAt = at;
+    const count = state.drawingPractice.count;
+    const before = state.interests.find(item => item.id === "drawing");
+    const wasHobby = Boolean(before && before.kind === "hobby");
+    const previousLevel = Number(before && before.level) || 1;
+    const isHobby = count >= 3;
+    const question = "What could Mabel express through drawing, and how might she keep learning to draw?";
+    const evidence = count < 3
+      ? "Mabel has made " + count + " drawing" + (count === 1 ? "" : "s") + " so far, and is beginning to wonder what else she might put on paper."
+      : "After returning to drawing " + count + " times, Mabel is beginning to treat it as one of her own hobbies.";
+    const interest = upsertInterest(state, {
+      id: "drawing",
+      title: "Drawing",
+      kind: isHobby ? "hobby" : "wonder",
+      question,
+      evidence,
+      pull: Math.min(0.9, 0.32 + count * 0.11)
+    }, 0.06);
+    if (interest) {
+      interest.reason = evidence;
+      interest.evidence = count;
+      if (isHobby) {
+        interest.kind = "hobby";
+        interest.level = Math.min(5, 1 + Math.floor((count - 3) / 3));
+        interest.stage = interest.pull > 0.75 ? "pursuing" : "growing";
+      }
+    }
+    state.currentThread = interest ? interest.id : state.currentThread;
+    await saveState(env, state);
+    return jsonResponse({
+      ok: true,
+      drawingCount: count,
+      interest: interest || null,
+      newlyHobby: isHobby && !wasHobby,
+      levelUp: Boolean(isHobby && wasHobby && interest && interest.level > previousLevel)
+    });
+  }
   if (kind === "hobby") {
     const supplied = data.interest && typeof data.interest === "object" ? data.interest : {};
     const title = cleanText(supplied.title, 100);
@@ -701,6 +797,17 @@ async function handleVisitorBoard(request, env) {
     return jsonResponse({ error: "Please write a note first." }, 400);
   }
 
+  if (data?.action === "delete") {
+    const id = cleanText(data?.id, 100);
+    const before = messages.length;
+    messages = messages.filter(item => item && item.id !== id);
+    if (!id || messages.length === before) {
+      return jsonResponse({ error: "That notice could not be found." }, 404);
+    }
+    await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+    return jsonResponse({ ok: true });
+  }
+
   const message = cleanText(data?.message, 280);
   const name = cleanText(data?.name, 40);
   if (!message) {
@@ -751,6 +858,8 @@ export default {
           interests: state.interests,
           crafting: state.crafting,
           artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
+          artReferences: state.artReferences,
+          drawingPractice: state.drawingPractice,
           updatedAt: state.lastLifeUpdate
         }
       });
