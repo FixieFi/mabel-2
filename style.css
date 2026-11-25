@@ -1183,6 +1183,27 @@ button#explore.explore-button:disabled {
   vertical-align: middle;
 }
 
+.newly-noticed-gift-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  color: #50316f;
+  background: linear-gradient(120deg, #fff0b8, #e8d8ff);
+  border: 1px solid rgba(116, 79, 151, 0.28);
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(195, 159, 255, 0.45);
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.bindle-item.newly-noticed-gift {
+  outline: 2px solid rgba(174, 133, 219, 0.55);
+  outline-offset: 2px;
+}
+
 
 .diary-entry-highlight {
   padding: 12px 14px;
