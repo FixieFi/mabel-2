@@ -625,8 +625,16 @@ async function handleSharedWorldEvent(request, env) {
     const pageUrl = cleanText(supplied.pageUrl, 500);
     let imageHost = "";
     let pageHost = "";
-    try { imageHost = new URL(imageUrl).hostname; pageHost = new URL(pageUrl).hostname; } catch {}
-    if (!subject || !(imageHost === "wikipedia.org" || imageHost.endsWith(".wikipedia.org") || imageHost === "wikimedia.org" || imageHost.endsWith(".wikimedia.org")) ||
+    let secureUrls = false;
+    try {
+      const image = new URL(imageUrl);
+      const page = new URL(pageUrl);
+      imageHost = image.hostname;
+      pageHost = page.hostname;
+      secureUrls = image.protocol === "https:" && page.protocol === "https:";
+    } catch {}
+    if (!subject || !secureUrls ||
+        !(imageHost === "wikipedia.org" || imageHost.endsWith(".wikipedia.org") || imageHost === "wikimedia.org" || imageHost.endsWith(".wikimedia.org")) ||
         !(pageHost === "wikipedia.org" || pageHost.endsWith(".wikipedia.org") || pageHost === "wikimedia.org" || pageHost.endsWith(".wikimedia.org"))) {
       return jsonResponse({ error: "A verified encyclopedia reference is needed." }, 400);
     }
