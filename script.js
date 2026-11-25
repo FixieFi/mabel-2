@@ -100,6 +100,7 @@ let reflectionInProgress = false;
 let wanderings = [];
 let researchLog = [];
 let boardReadKeys = [];
+let boardNoticeInProgress = false;
 let sparks = [];
 let lastViewedSparkId = "";
 let lastViewedArtworkKey = "";
@@ -272,6 +273,8 @@ function loadSparks() {
 const researchIdeasStorageKey = "mabel-research-ideas-v1";
 let researchIdeas = [];
 const mabelPostboxStorageKey = "mabel-private-postbox-v1";
+const comfortPostboxQueueStorageKey = "mabel-comfort-postbox-queue-v1";
+let comfortPostboxQueue = [];
 const postboxSeenStorageKey = "mabel-viewed-postbox-item-v1";
 const researchShareCountStorageKey = "mabel-postbox-research-shares-v1";
 let mabelPostboxItems = [];
@@ -346,6 +349,60 @@ function addMabelPostboxItem(item) {
   saveMabelPostbox();
   updateMabelPostbox();
   refreshPostboxNotice();
+}
+function loadComfortPostboxQueue() {
+  try {
+    const saved = localStorage.getItem(comfortPostboxQueueStorageKey);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed.slice(0, 8) : [];
+  } catch (error) { return []; }
+}
+function saveComfortPostboxQueue() {
+  try { localStorage.setItem(comfortPostboxQueueStorageKey, JSON.stringify(comfortPostboxQueue.slice(0, 8))); }
+  catch (error) { /* The note can still be delivered during this visit. */ }
+}
+function comfortMessageTopic(message) {
+  const text = String(message || "").toLowerCase();
+  if (/\b(lonely|alone|no one|nobody)\b/.test(text)) return "feeling lonely";
+  if (/\b(grieving|grief|loss|died|death|passed away|heartbroken)\b/.test(text)) return "going through a loss";
+  if (/\b(anxious|anxiety|scared|afraid|overwhelmed|panic)\b/.test(text)) return "feeling worried";
+  if (/\b(rough day|bad day|hard day|awful day)\b/.test(text)) return "having a hard day";
+  return "feeling sad";
+}
+function queueComfortPostboxMail(visitorMessage, artwork) {
+  const topic = comfortMessageTopic(visitorMessage);
+  const notes = [
+    "What you said about " + topic + " stayed with me. Thank you for trusting me with it. I wanted to leave a little kindness here for you.",
+    "I kept thinking about your message about " + topic + ". You deserve a gentle moment, so I made this little picture just for you.",
+    "Your words about " + topic + " mattered to me. I’m glad you told me. Here’s a small bit of warmth from my corner of the woods."
+  ];
+  comfortPostboxQueue.push({
+    id: "comfort-mail-" + Date.now() + "-" + Math.floor(Math.random() * 10000),
+    deliverAt: Date.now() + (90 * 1000) + Math.floor(Math.random() * 90 * 1000),
+    title: "Mabel sent you a thoughtful note",
+    text: notes[Math.floor(Math.random() * notes.length)],
+    artwork: artwork || null
+  });
+  comfortPostboxQueue = comfortPostboxQueue.slice(-4);
+  saveComfortPostboxQueue();
+}
+function deliverDueComfortPostboxMail() {
+  const current = Date.now();
+  const due = comfortPostboxQueue.filter(function (item) { return item && Number(item.deliverAt) <= current; });
+  comfortPostboxQueue = comfortPostboxQueue.filter(function (item) { return !item || Number(item.deliverAt) > current; });
+  if (due.length) {
+    due.forEach(function (item) {
+      addMabelPostboxItem({
+        id: item.id,
+        kind: "artwork",
+        title: item.title || "Mabel sent you a thoughtful note",
+        text: item.text || "Mabel wanted to leave you a little kindness after your message.",
+        artwork: item.artwork || null,
+        at: new Date().toISOString()
+      });
+    });
+    saveComfortPostboxQueue();
+  }
 }
 function updateMabelPostbox() {
   const list = document.getElementById("mabel-postbox");
@@ -487,7 +544,7 @@ function isConcreteHumanHobby(title) {
     "chess", "acting", "theatre", "calligraphy", "origami", "model making",
     "model building", "stargazing", "language learning", "learning languages",
     "coding", "programming", "skateboarding", "surfing", "fishing", "DIY",
-    "home improvement"
+    "home improvement", "crafting", "crafting small objects"
   ];
   return concretePractices.includes(value);
 }
@@ -509,11 +566,23 @@ function isDurableInterestCandidate(candidate) {
   return (enduringKind && activityTitle) || explicitOngoingActivity || (activityTitle && enduringDetails);
 }
 
+function persistSharedHobbyInterest(interest) {
+  if (!interest || interest.kind !== "hobby" || !isConcreteHumanHobby(interest.title)) return;
+  fetch(MABEL_BRAIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "hobby", interest: { id: interest.id, title: interest.title, question: interest.question, reason: interest.reason || interest.originText || "", pull: interest.pull || 0.5 } })
+  }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
+}
+
 function promoteResearchIdeaToInterest(candidate, spark) {
   const existing = mabel.interests.find(function (item) {
     return item.id === spark.id || normalizeInterestTitle(item.title) === normalizeInterestTitle(spark.title);
   });
-  if (existing) return existing;
+  if (existing) {
+    if (candidate.kind === "hobby" || existing.kind === "hobby") persistSharedHobbyInterest(existing);
+    return existing;
+  }
   const interest = {
     id: spark.id,
     title: spark.title,
@@ -536,6 +605,7 @@ function promoteResearchIdeaToInterest(candidate, spark) {
     actions: []
   };
   mabel.interests.unshift(interest);
+  persistSharedHobbyInterest(interest);
   return interest;
 }
 
@@ -570,9 +640,58 @@ function recordBindleDeparture(item, action, at) {
   }
 }
 
+function bindleItemResonance(item) {
+  const text = String((item && item.name || "") + " " + (item && item.note || "")).toLowerCase();
+  const words = text.match(/[a-z]{4,}/g) || [];
+  const meaningful = Array.from(new Set(words.filter(function (word) {
+    return !/^(mabel|little|small|tiny|found|piece|thing|things|looked|seemed|wondered|might|could|would|with|from|that|this|their|there|what|when|where|once|again|visitor|gift|really|very|about|under|over|after|before|while|some|more|than|just|like)$/.test(word);
+  })));
+  if (!meaningful.length) return "";
+  const interests = (Array.isArray(mabel.interests) ? mabel.interests : []).concat(
+    sharedMabelBrain && Array.isArray(sharedMabelBrain.interests) ? sharedMabelBrain.interests : []
+  );
+  for (const interest of interests) {
+    if (!interest || !(interest.kind === "hobby" || interest.stage === "pursuing" || interest.stage === "growing")) continue;
+    const interestWords = String(interest.title || "").toLowerCase().match(/[a-z]{4,}/g) || [];
+    if (interestWords.some(function (word) { return meaningful.includes(word); })) {
+      return "It connects with Mabel’s growing interest in " + interest.title + ".";
+    }
+  }
+  const savedTexts = []
+    .concat((visitorProfile.facts || []).map(function (entry) { return entry.text || ""; }))
+    .concat((visitorProfile.moments || []).map(function (entry) { return entry.text || ""; }))
+    .concat((mabel.memories || []).slice(0, 12).map(function (entry) { return entry.text || ""; }))
+    .concat((mabel.feed || []).slice(0, 12).map(function (entry) { return (entry.text || "") + " " + (entry.why || ""); }))
+    .concat((mabel.knowledge || []).slice(0, 12).map(function (entry) { return (entry.item || "") + " " + (entry.fact || ""); }))
+    .join(" ").toLowerCase();
+  if (meaningful.some(function (word) { return savedTexts.includes(word); })) {
+    return "It reminds Mabel of something she and a visitor talked about.";
+  }
+  if (Math.random() < 0.14) return "It felt too special to leave behind, though Mabel is not quite sure why.";
+  return "";
+}
+
+function moveBindleItemToTreasureBox(item, reason) {
+  bindle.treasureBox = Array.isArray(bindle.treasureBox) ? bindle.treasureBox : [];
+  bindle.treasureBox.unshift({ ...item, keptReason: reason, keptAt: now() });
+  bindle.treasureBox = bindle.treasureBox.slice(0, 30);
+  if (item && item.giftId && mabel.world && Array.isArray(mabel.world.objects)) {
+    const gift = mabel.world.objects.find(function (object) { return object && object.id === item.giftId; });
+    if (gift) {
+      gift.status = "treasure box";
+      gift.keptReason = reason;
+      gift.keptAt = now();
+    }
+  }
+  addFeedEntry({ kind: "noticed", text: "Mabel kept " + String(item && item.name || "a little treasure") + " in her treasure box.", why: reason });
+}
+
 function trimBindleItems(items, limit) {
   while (items.length > limit) {
-    recordBindleDeparture(items.pop(), "discarded");
+    const leaving = items.pop();
+    const reason = bindleItemResonance(leaving);
+    if (reason) moveBindleItemToTreasureBox(leaving, reason);
+    else recordBindleDeparture(leaving, "discarded");
   }
 }
 
@@ -783,6 +902,17 @@ function renderMabelCard(artwork) {
     ellipse(cx, cy, 4 + random() * 4, 4 + random() * 4, palette[2], 0.8, 0);
     path("M " + cx + " " + (cy + 9) + " Q " + (cx - 8) + " 112 " + (cx + random() * 18 - 9) + " 151",
       palette[1], 2 + random() * 2, 0.68);
+  } else if (motif === "hearts") {
+    for (let i = 0; i < 6; i += 1) {
+      const x = 24 + random() * 112;
+      const y = 22 + random() * 112;
+      const size = 4 + random() * 5;
+      const colour = palette[1 + Math.floor(random() * 2)];
+      path("M " + x + " " + (y + size * 0.35) +
+        " C " + (x - size * 1.8) + " " + (y - size * 1.2) + " " + (x - size * 3) + " " + (y + size * 0.8) + " " + x + " " + (y + size * 2.5) +
+        " C " + (x + size * 3) + " " + (y + size * 0.8) + " " + (x + size * 1.8) + " " + (y - size * 1.2) + " " + x + " " + (y + size * 0.35),
+        colour, 1 + random(), 0.8, colour);
+    }
   } else if (motif === "threads") {
     for (let i = 0; i < 3 + Math.floor(random() * 5); i += 1) {
       const y = 22 + i * (12 + random() * 10);
@@ -1067,7 +1197,8 @@ function prepareArtworkForGallery(artwork, context) {
   artwork.source = details.source || artwork.source || "autonomous";
   if (details.message) artwork.promptContext = String(details.message).trim().slice(0, 240);
   if (details.inspiration) {
-    artwork.inspirationContext = String(details.inspiration.question || details.inspiration.title || "").slice(0, 240);
+    artwork.inspirationTitle = String(details.inspiration.title || "").slice(0, 100);
+    artwork.inspirationContext = String(details.inspiration.question || "").slice(0, 240);
   }
   if (visitorPortrait) {
     const appearance = visitorAppearanceDetails(details.message);
@@ -1093,8 +1224,7 @@ function prepareArtworkForGallery(artwork, context) {
     artwork.description = artwork.note || artwork.caption || "";
   }
   if (!artwork.description && details.inspiration) {
-    artwork.description = "A little study of " + details.inspiration.title + ". " +
-      (details.inspiration.question || "Mabel followed a thought that stayed with her.");
+    artwork.description = "A little study of " + details.inspiration.title + ", in Mabel’s own colours.";
   }
   return artwork;
 }
@@ -1117,6 +1247,9 @@ function saveToMabelGallery(artwork) {
   updateGallery();
   updateVisitorProfile();
   refreshGalleryNotice();
+  if (artwork.source === "autonomous" && artwork.inspirationContext) {
+    fetch(MABEL_BRAIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "artwork", title: artwork.title, inspiration: artwork.inspirationContext }) }).catch(function () {});
+  }
 }
 
 function formatArtworkTime(isoTime) {
@@ -1186,7 +1319,12 @@ function openGalleryArtworkDetails(artwork) {
     ? date.toLocaleString([], { dateStyle: "long", timeStyle: "short" })
     : "Creation time not recorded";
   description.textContent = artwork.description || artwork.note || "A little drawing Mabel made.";
-  const contextText = artwork.promptContext || artwork.inspirationContext || "";
+  const rawContext = artwork.inspirationContext || artwork.promptContext || "";
+  const contextText = rawContext && artwork.source === "autonomous"
+    ? (artwork.inspirationTitle
+      ? "Mabel was thinking about " + artwork.inspirationTitle + (rawContext ? " and wondering " + rawContext.replace(/[.!?]+$/, "") : "") + "."
+      : "Mabel was reflecting on " + rawContext.replace(/[.!?]+$/, "") + ".")
+    : rawContext;
   context.textContent = contextText;
   const contextBlock = document.getElementById("gallery-detail-context-block");
   if (contextLabel) contextLabel.hidden = !contextText;
@@ -1199,20 +1337,14 @@ function openGalleryArtworkDetails(artwork) {
 function loadBindle() {
   try {
     const saved = localStorage.getItem(bindleStorageKey);
-
     if (saved) {
-      return JSON.parse(saved);
+      const loaded = JSON.parse(saved);
+      return { food: [], water: [], treasures: [], treasureBox: [], history: [], ...loaded };
     }
   } catch (error) {
     // Fall through to an empty bindle.
   }
-
-  return {
-    food: [],
-    water: [],
-    treasures: [],
-    history: []
-  };
+  return { food: [], water: [], treasures: [], treasureBox: [], history: [] };
 }
 
 function loadLastAutonomousMoment() {
@@ -1572,7 +1704,7 @@ function scheduleWanderingResearch(researchLead) {
         try { localStorage.setItem(autonomousResearchStorageKey, String(lastAutonomousResearchAt)); } catch (error) {}
         if (exploreStatus) exploreStatus.textContent = "Mabel has come back from the Library with a little fact for your postbox.";
       } else if (exploreStatus) {
-        exploreStatus.textContent = "Mabel will look into this further later.";
+        exploreStatus.textContent = "Sometimes a finding sends Mabel to the Library; today, she has brought back a little wonder.";
       }
     });
   }, delay);
@@ -1594,6 +1726,7 @@ async function handleExplore() {
     wanderings.unshift(outing);
     wanderings.length = Math.min(wanderings.length, 30);
     applyExplorationFinds(finds);
+    fetch(MABEL_BRAIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "exploration", finds: finds.map(function (item) { return item && item.name; }).filter(Boolean) }) }).catch(function () {});
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
     mabel.now.doing = "exploring near her home";
     mabel.now.thought = finds.length
@@ -1695,10 +1828,24 @@ function updateWishes() {
   });
 }
 
+function sharedMabelInterestList() {
+  const shared = sharedMabelBrain && sharedMabelBrain.interests;
+  if (!Array.isArray(shared)) return Array.isArray(mabel.interests) ? mabel.interests : [];
+  const merged = shared.slice();
+  (Array.isArray(mabel.interests) ? mabel.interests : []).forEach(function (local) {
+    if (!merged.some(function (item) { return item.id === local.id || normalizeInterestTitle(item.title) === normalizeInterestTitle(local.title); })) merged.push(local);
+  });
+  return merged.map(function (interest) {
+    const events = Array.isArray(interest.events) ? interest.events : [];
+    const pull = Number(interest.pull) || 0;
+    return { ...interest, level: Math.max(1, Math.min(5, 1 + Math.floor(Math.max(0, pull - 0.45) * 5))), progress: events.length, steps: events, reason: events[0] && events[0].text || interest.reason || "", stage: interest.stage || "wondering" };
+  });
+}
+
 function updateInterests() {
   if (!interestsElement) return;
   interestsElement.replaceChildren();
-  const hobbies = (Array.isArray(mabel.interests) ? mabel.interests : [])
+  const hobbies = sharedMabelInterestList()
     .filter(function (interest) {
       return interest && interest.kind === "hobby" && isConcreteHumanHobby(interest.title);
     })
@@ -1718,6 +1865,13 @@ function updateInterests() {
     title.className = "interest-title";
     title.textContent = interest.title;
     item.appendChild(title);
+    const newAt = Date.parse(interest.createdAt || "");
+    if (Number.isFinite(newAt) && Date.now() - newAt < 7 * 24 * 60 * 60 * 1000) {
+      const newBadge = document.createElement("span");
+      newBadge.className = "visitor-gift-badge";
+      newBadge.textContent = "New";
+      item.appendChild(newBadge);
+    }
 
     const level = Math.max(1, Math.min(5, Number(interest.level) || 1));
     const levelBadge = document.createElement("span");
@@ -1766,15 +1920,19 @@ function updateMindTopics() {
     if (!entry || !entry.title) return;
     const key = normalizeInterestTitle(entry.title);
     if (!key || entries.some(function (saved) { return normalizeInterestTitle(saved.title) === key; })) return;
+    const questionText = String(entry.question || "").trim().slice(0, 240);
+    const whyText = String(entry.originText || entry.reason || (Array.isArray(entry.events) && entry.events[0] && entry.events[0].text) || "").trim().slice(0, 260);
+    const questionKey = normalizeInterestTitle(questionText);
+    const whyKey = normalizeInterestTitle(whyText);
     entries.push({
       title: String(entry.title).slice(0, 100),
-      question: String(entry.question || "").slice(0, 240),
-      why: String(entry.originText || entry.reason || "").slice(0, 260),
+      question: questionKey && questionKey !== key ? questionText : "",
+      why: whyKey && whyKey !== key && whyKey !== questionKey && !whyKey.includes(questionKey) && !questionKey.includes(whyKey) ? whyText : "",
       at: entry.originAt || entry.createdAt || entry.lastSeenAt || ""
     });
   };
 
-  (Array.isArray(mabel.interests) ? mabel.interests : []).forEach(function (interest) {
+  sharedMabelInterestList().forEach(function (interest) {
     if (interest && !(interest.kind === "hobby" && isConcreteHumanHobby(interest.title))) addEntry(interest);
   });
   (Array.isArray(sparks) ? sparks : []).forEach(function (spark) {
@@ -1865,6 +2023,30 @@ function updateChanges() {
   });
 }
 
+function updateCrafting() {
+  const list = document.getElementById("crafting-projects");
+  if (!list) return;
+  list.replaceChildren();
+  const crafting = sharedMabelBrain && sharedMabelBrain.crafting;
+  const level = document.getElementById("crafting-level");
+  const skillLevel = Number(crafting && crafting.skillLevel) || 0;
+  if (level) level.textContent = skillLevel > 0 ? "Crafting practice · Level " + skillLevel + " — Mabel is learning by trying her ideas." : "Mabel has not tried crafting yet; her first ideas will grow from things she finds.";
+  const projects = crafting && Array.isArray(crafting.projects) ? crafting.projects : [];
+  if (!projects.length) {
+    const empty = document.createElement("li"); empty.className = "brain-trait-empty";
+    empty.textContent = "No invention has taken shape yet. Mabel may start joining together things she finds when an idea catches her.";
+    list.appendChild(empty); return;
+  }
+  projects.slice(0, 8).forEach(function (project) {
+    const item = document.createElement("li"); item.className = "interest-item craft-project";
+    const title = document.createElement("strong"); title.className = "interest-title"; title.textContent = project.title || "A mouse-sized invention"; item.appendChild(title);
+    const materials = document.createElement("span"); materials.className = "interest-stage"; materials.textContent = "Using things she found: " + (Array.isArray(project.materials) ? project.materials.join(" + ") : ""); item.appendChild(materials);
+    const idea = document.createElement("p"); idea.className = "interest-reason"; idea.textContent = project.idea || ""; item.appendChild(idea);
+    const stage = document.createElement("span"); stage.className = "interest-stage"; stage.textContent = project.tried ? "Mabel tried making it" : "An idea Mabel wants to try"; item.appendChild(stage);
+    list.appendChild(item);
+  });
+}
+
 function updateBrain() {
   const mood = document.getElementById("brain-mood");
   const moodScore = document.getElementById("brain-mood-score");
@@ -1873,6 +2055,7 @@ function updateBrain() {
   const personality = shared.personality || (mabel && mabel.personality) || {};
   const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  updateCrafting();
   if (mood) mood.textContent = shared.mood || mabel.now.mood || "quiet";
   if (thought) thought.textContent = "“" + (shared.thought || mabel.now.thought || "Mabel is listening to the hollow.") + "”";
   if (moodScore) {
@@ -1928,6 +2111,9 @@ async function refreshSharedMabelBrain() {
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
       updateBrain();
+      updateInterests();
+      updateMindTopics();
+      updateCrafting();
     }
   } catch (error) {
     // Keep the browser's current Brain view if the shared Worker is unavailable.
@@ -2030,6 +2216,27 @@ function formatLibraryMethod(value) {
   return "on a library computer";
 }
 
+function libraryResourceMethod(source, fallback) {
+  const title = String(source && source.title || "").toLowerCase();
+  const url = String(source && source.url || "").toLowerCase();
+  if (/wikipedia|britannica|encyclop|reference/.test(title + " " + url)) return "the library’s online encyclopedia";
+  if (/journal|doi\.org|pubmed|nature\.com|sciencedirect|academic/.test(title + " " + url)) return "a journal archive";
+  if (/magazine|smithsonianmag|nationalgeographic|newyorker|atlasobscura/.test(title + " " + url)) return "a magazine archive";
+  if (/newspaper|news|bbc\.com|theguardian|nytimes|reuters|apnews/.test(title + " " + url)) return "an online newspaper archive";
+  const method = formatLibraryMethod(fallback);
+  if (method.includes("public computer by the window")) return "the public computer by the window";
+  if (method.includes("public PC")) return "the library’s public PC";
+  if (method.includes("web browser")) return "the library’s web browser";
+  return "a library computer";
+}
+
+function followUpQuestionForResearch(focusInterest, result) {
+  const supplied = String(result && (result.followUpQuestion || result.nextQuestion || (result.interest && result.interest.question)) || "").trim();
+  if (supplied.length >= 12 && supplied.length <= 220) return supplied;
+  const subject = String(result && (result.title || result.searchQuestion) || focusInterest && focusInterest.title || "that subject").trim();
+  return "What might people want to know next about " + subject + "?";
+}
+
 function updateResearchLog() {
   const list = document.getElementById("research-log");
   if (!list) return;
@@ -2057,8 +2264,7 @@ function updateResearchLog() {
       const timestamp = document.createElement("time");
       timestamp.className = "research-entry-time";
       timestamp.dateTime = entry.at;
-      timestamp.textContent = new Date(entry.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) +
-        " · " + formatLibraryMethod(entry.researchMethod);
+      timestamp.textContent = new Date(entry.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
       item.appendChild(timestamp);
     }
     const sourceEntries = Array.isArray(entry.sources) && entry.sources.length
@@ -2076,9 +2282,15 @@ function updateResearchLog() {
       String(entry.researchSummary || "").replace(/\s+/g, " ").trim().slice(0, 180);
     const sentence = document.createElement("p");
     sentence.className = "research-one-sentence";
-    sentence.appendChild(document.createTextNode("After wondering about “" + inspiration + "”, Mabel looked it up online"));
+    if (entry.related === false) {
+      sentence.textContent = "This search sparked Mabel’s curiosity. She now wonders: “" + (entry.followUpQuestion || "What might people want to know next about this?") + "”";
+      item.appendChild(sentence);
+      list.appendChild(item);
+      return;
+    }
+    sentence.appendChild(document.createTextNode("Mabel looked up "));
     if (firstSource) {
-      sentence.appendChild(document.createTextNode(" using "));
+      sentence.appendChild(document.createTextNode("the page "));
       const sourceUrl = safeExternalUrl(firstSource.url);
       if (sourceUrl) {
         const link = document.createElement("a");
@@ -2091,8 +2303,10 @@ function updateResearchLog() {
         sentence.appendChild(document.createTextNode(firstSource.title));
       }
     } else {
-      sentence.appendChild(document.createTextNode(" with the library search"));
+      sentence.appendChild(document.createTextNode("the topic"));
     }
+    const resourceMethod = libraryResourceMethod(firstSource, entry.researchMethod);
+    sentence.appendChild(document.createTextNode((firstSource ? " from " : " using ") + resourceMethod + (inspiration ? " while thinking about “" + inspiration + "”" : "")));
     if (fact) sentence.appendChild(document.createTextNode(" and learned: " + fact.replace(/[.!?]+$/, "") + "."));
     else sentence.appendChild(document.createTextNode(" and kept exploring the topic."));
     item.appendChild(sentence);
@@ -2115,10 +2329,12 @@ function syncNoticedItemsIntoBindle() {
   bindle.food = Array.isArray(bindle.food) ? bindle.food : [];
   bindle.water = Array.isArray(bindle.water) ? bindle.water : [];
   bindle.treasures = Array.isArray(bindle.treasures) ? bindle.treasures : [];
+  bindle.treasureBox = Array.isArray(bindle.treasureBox) ? bindle.treasureBox : [];
+  bindle.history = Array.isArray(bindle.history) ? bindle.history : [];
   const lists = { food: bindle.food, water: bindle.water, treasures: bindle.treasures };
   mabel.world.objects.forEach(function (object) {
     if (!object || (object.source !== "wandering" && !(object.source === "visitor" && object.noticedAt))) return;
-    if (["eaten", "drank", "discarded"].includes(object.status)) return;
+    if (["eaten", "drank", "discarded", "treasure box"].includes(object.status)) return;
     const target = object.edible || object.kind === "food" ? lists.food : object.kind === "water" ? lists.water : lists.treasures;
     const name = String(object.name || "").trim();
     if (!name || target.some(function (item) {
@@ -2152,12 +2368,17 @@ function syncNoticedItemsIntoBindle() {
 
 function updateBindle() {
   const bindleElement = document.getElementById("bindle");
+  const treasureBoxElement = document.getElementById("treasure-box");
+  const bindleHistoryElement = document.getElementById("bindle-history");
   if (!bindleElement) return;
   bindleElement.replaceChildren();
+  if (treasureBoxElement) treasureBoxElement.replaceChildren();
+  if (bindleHistoryElement) bindleHistoryElement.replaceChildren();
   const inventory = bindle || { food: [], water: [], treasures: [] };
   inventory.food = Array.isArray(inventory.food) ? inventory.food : [];
   inventory.water = Array.isArray(inventory.water) ? inventory.water : [];
   inventory.treasures = Array.isArray(inventory.treasures) ? inventory.treasures : [];
+  inventory.treasureBox = Array.isArray(inventory.treasureBox) ? inventory.treasureBox : [];
   inventory.history = Array.isArray(inventory.history) ? inventory.history : [];
   let historyRepaired = false;
   (mabel.world && Array.isArray(mabel.world.objects) ? mabel.world.objects : [])
@@ -2183,7 +2404,7 @@ function updateBindle() {
       })
     : [];
 
-  function appendGroup(title, values, isWaiting) {
+  function appendGroup(title, values, isWaiting, container) {
     if (!values.length) return;
     const group = document.createElement("div");
     group.className = "bindle-group";
@@ -2209,7 +2430,7 @@ function updateBindle() {
       if (value && value.action) {
         const status = document.createElement("span");
         status.className = "bindle-item-status";
-        status.textContent = value.action === "eaten" ? "eaten by Mabel" : value.action === "drank" ? "drank by Mabel" : "discarded";
+        status.textContent = value.action === "eaten" ? "eaten by Mabel" : value.action === "drank" ? "drank by Mabel" : value.action === "kept" ? "kept in Mabel’s treasure box" : "discarded";
         row.appendChild(status);
       }
       if (value && value.edible) {
@@ -2218,31 +2439,47 @@ function updateBindle() {
         edibleBadge.textContent = "edible";
         row.appendChild(edibleBadge);
       }
-      if (value.note || isWaiting) {
+      if (value.note || value.keptReason || isWaiting) {
         const note = document.createElement("span");
         note.className = "bindle-note";
-        note.textContent = " — " + (value.note || "Waiting for Mabel’s next quiet moment.");
+        note.textContent = " — " + (value.note || value.keptReason || "Waiting for Mabel’s next quiet moment.");
         row.appendChild(note);
       }
       list.appendChild(row);
     });
     group.appendChild(list);
-    bindleElement.appendChild(group);
+    (container || bindleElement).appendChild(group);
   }
 
-  if (!inventory.food.length && !inventory.water.length && !inventory.treasures.length && !waitingGifts.length && !inventory.history.length) {
+  if (!inventory.food.length && !inventory.water.length && !inventory.treasures.length && !waitingGifts.length) {
     const empty = document.createElement("p");
     empty.className = "bindle-empty";
     empty.textContent = "Mabel’s bindle is light today.";
     bindleElement.appendChild(empty);
-    return;
+  } else {
+    appendGroup("Food", inventory.food, false);
+    appendGroup("Water", inventory.water, false);
+    appendGroup("Little treasures", inventory.treasures, false);
+    appendGroup("Waiting to be noticed", waitingGifts, true);
   }
-
-  appendGroup("Food", inventory.food, false);
-  appendGroup("Water", inventory.water, false);
-  appendGroup("Little treasures", inventory.treasures, false);
-  appendGroup("Waiting to be noticed", waitingGifts, true);
-  appendGroup("No longer in her bindle", inventory.history, false);
+  if (treasureBoxElement) {
+    if (inventory.treasureBox.length) appendGroup("Things she decided to keep", inventory.treasureBox, false, treasureBoxElement);
+    else {
+      const emptyKeepsakes = document.createElement("p");
+      emptyKeepsakes.className = "bindle-empty";
+      emptyKeepsakes.textContent = "Nothing has found its way into the treasure box yet.";
+      treasureBoxElement.appendChild(emptyKeepsakes);
+    }
+  }
+  if (bindleHistoryElement) {
+    if (inventory.history.length) appendGroup("No longer in her bindle", inventory.history, false, bindleHistoryElement);
+    else {
+      const emptyHistory = document.createElement("p");
+      emptyHistory.className = "bindle-empty";
+      emptyHistory.textContent = "Nothing has left Mabel’s bindle yet.";
+      bindleHistoryElement.appendChild(emptyHistory);
+    }
+  }
 }
 
 function updateWanderings() {
@@ -2813,7 +3050,9 @@ function chooseGift(event) {
   const gifts = {
     food: [
       "a blackberry", "three sunflower seeds", "a fallen hazelnut", "a little oat crumb",
-      "a small piece of plain pizza crust", "a crumb from an old bakery roll", "a dried edible porcini mushroom",
+      "a small piece of plain pizza crust", "a crumb from an old bakery roll", "a piece of stale artisan focaccia", "a dried edible porcini mushroom",
+      "a dried shiitake mushroom", "a piece of cultivated oyster mushroom", "a pistachio kernel", "a pine nut",
+      "a fresh basil leaf", "a mint leaf", "a raspberry", "a blueberry",
       "a sliver of apple", "half a dried cranberry", "a corner of plain cracker",
       "a crumb of oat biscuit", "a sesame seed", "a little strawberry top", "a crumb of mild cheese"
     ],
@@ -2826,7 +3065,8 @@ function chooseGift(event) {
       "a dried flower tied with thread", "a smooth shell", "a little brass bell", "a pale green glass pebble",
       "a scrap of soft blue cloth", "a tiny wooden bead", "a pressed four-leaf clover", "a tiny wooden spool",
       "a miniature paper star", "a little copper key", "a worn postage stamp", "a small piece of sea glass",
-      "a tiny thimble", "a green ribbon bow", "a little carved acorn"
+      "a tiny thimble", "a green ribbon bow", "a little carved acorn",
+      "an old faded Nintendo DS game cartridge", "a used tea-light candle with cool wax"
     ]
   };
   const options = gifts[kind] || gifts.surprise;
@@ -2847,8 +3087,23 @@ function handleIntroducedObject(event) {
 }
 
 
+function comfortDrawingSubject(message) {
+  const facts = (visitorProfile && Array.isArray(visitorProfile.facts) ? visitorProfile.facts : [])
+    .map(function (fact) { return String(fact && fact.text || ""); });
+  const current = String(message || "");
+  const candidates = [current].concat(facts);
+  for (const value of candidates) {
+    const hasExplicitPreference = /\b(?:i|they|he|she)\s+(?:really\s+)?(?:like|love|enjoy|adore)|\b(?:my|their|his|her)\s+(?:favorite|favourite)\b|\b(?:fan of|interested in)\b/i.test(value);
+    if (!hasExplicitPreference) continue;
+    const detail = value.match(/\b(?:like|love|enjoy|adore|fan of|interested in|favorite|favourite)\s+(?:to\s+)?([^.!?,;]{2,60})/i);
+    if (detail && detail[1]) return String(detail[1]).trim().slice(0, 60);
+  }
+  const appearance = visitorAppearanceDetails(message);
+  return appearance.length ? "Mabel beside the visitor" : "Mabel holding a love heart";
+}
+
 function visitorSeemsDistressed(message) {
-  return /\b(sad|upset|lonely|scared|anxious|anxiety|stressed|overwhelmed|heartbroken|grieving|rough day|bad day|feeling low|feel awful|crying|in tears)\b/i.test(String(message || ""));
+  return /\b(sad|upset|lonely|alone|isolated|no one|nobody|scared|anxious|anxiety|stressed|overwhelmed|heartbroken|grieving|rough day|bad day|feeling low|feel awful|crying|in tears)\b/i.test(String(message || ""));
 }
 
 function isArtworkRequest(message) {
@@ -2987,14 +3242,14 @@ async function requestMabelArtwork(context, targetElement) {
         source: source,
         message: context.message || "",
         comfortRequest: context.comfortRequest === true,
-        requestedSubject: visitorPortrait ? "visitor" : requestedArtworkDescriptionSubject(context.message),
+        requestedSubject: visitorPortrait ? "visitor" : (context.comfortRequest ? (context.comfortSubject || "Mabel beside her visitor") : requestedArtworkDescriptionSubject(context.message)),
         visitorPortrait: visitorPortrait,
         visitorAppearance: appearanceDetails,
-        visitorPreferences: visitorProfile.facts.slice(0, 8).map(function (fact) { return fact.text; }),
+        visitorPreferences: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; }),
         artworkInstruction: visitorPortrait
           ? "Draw Mabel’s visitor as the subject. Use only the explicitly shared appearance details in visitorAppearance; do not invent gender, hair, glasses, facial hair, age, or other features that are not provided. Give the artwork the exact title “Mabel drew her visitor”."
           : context.comfortRequest
-            ? "Make this a small, personal comfort drawing. Use a preference the visitor explicitly shared, such as a cat or baking pies, and let Mabel acknowledge it gently without assuming more."
+            ? "Make a warm, happy comfort drawing for this visitor. First use a favorite animal, hobby, or interest explicitly stated in visitorPreferences if one is clearly available. If no such preference is present, draw Mabel the mouse holding a love heart, or Mabel beside the visitor with a bouquet of flowers and little hearts. Do not use unrelated things Mabel found as the subject. Do not invent the visitor's appearance; use only visitorAppearance details when drawing them. Keep the written title and description about the visitor's comfort, not about a random object."
             : requestedArtworkDescriptionSubject(context.message)
               ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
               : "Give the artwork a specific title and a short description grounded in the inspiration supplied.",
@@ -3047,6 +3302,14 @@ async function requestMabelArtwork(context, targetElement) {
   if (!artwork && explicitRequest) {
     artwork = makeMabelFallbackArtwork(context);
   }
+  if (!artwork && comfortRequest) {
+    artwork = makeMabelFallbackArtwork({ ...context, message: "" });
+    artwork.title = "A little picture to keep you company";
+    artwork.subject = "mabel";
+    artwork.selfPortrait = true;
+    artwork.motif = "hearts";
+    artwork.note = "A happy little picture Mabel made to keep you company.";
+  }
 
   if (!artwork && source === "autonomous" && context.inspiration) {
     artwork = makeMabelFallbackArtwork({
@@ -3060,26 +3323,27 @@ async function requestMabelArtwork(context, targetElement) {
   }
   if (!artwork) return null;
 
-  const artworkInspiration = context.inspiration || chooseCurrentArtworkInspiration();
-  if (!artwork.inspirationContext && artwork.inspirationConnection) {
+  const artworkInspiration = context.comfortRequest ? null : (context.inspiration || chooseCurrentArtworkInspiration());
+  if (context.comfortRequest) {
+    artwork.inspirationContext = "Made with care after the visitor shared that they were " + comfortMessageTopic(context.message) + ".";
+  } else if (!artwork.inspirationContext && artwork.inspirationConnection) {
     artwork.inspirationContext = artwork.inspirationConnection;
   } else if (artworkInspiration && !artwork.inspirationContext) {
     artwork.inspirationContext = artworkInspiration.question || artworkInspiration.title;
   }
   artwork = prepareArtworkForGallery(artwork, { ...context, source: source, inspiration: artworkInspiration });
+  if (context.comfortRequest) {
+    artwork.title = "A little picture to keep you company";
+    artwork.description = "Mabel made this happy little picture after your message about " + comfortMessageTopic(context.message) + ".";
+    artwork.note = artwork.description;
+    artwork.subject = artwork.subject || "mabel";
+    artwork.motif = artwork.motif || "hearts";
+  }
   if (source === "autonomous" && artworkInspiration && artworkInspiration.key) {
     artwork.inspirationKey = artworkInspiration.key;
   }
   const card = renderMabelCard(artwork);
-  if (source === "comfort") {
-    addMabelPostboxItem({
-      kind: "artwork",
-      title: "A little drawing just for you",
-      text: artwork.inspirationConnection || "Mabel made this drawing with something you enjoy in mind.",
-      artwork: artwork,
-      at: now()
-    });
-  } else {
+  if (source !== "comfort") {
     saveToMabelGallery(artwork);
   }
   if (card && targetElement) {
@@ -3117,6 +3381,9 @@ function separateSparkMarker(value) {
     }
     text = text.replace(editorialSpark[0], " ").replace(/\s+/g, " ").replace(/^[,;—\s]+|[,;—\s]+$/g, "").trim();
   }
+  text = text.replace(/\b(?:a\s+)?small question about (?:this |the )?hobby\b[\s\S]*$/i, "")
+    .replace(/\bwhy this caught (?:our|my|her) attention\b[\s\S]*$/i, "")
+    .replace(/\s+/g, " ").trim();
   return { text: text, sparkTitle: sparkTitle, sparkQuestion: sparkQuestion, sparkReason: sparkReason, sparkKind: sparkKind };
 }
 
@@ -3141,8 +3408,8 @@ function normalizeMabelReply(payload) {
     payload && payload.result && payload.result.response
   ];
   for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-    if (candidate && typeof candidate.text === "string" && candidate.text.trim()) return candidate.text.trim();
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim().replace(/(?:\r?\n\s*|\s+[—–-]\s*)(?:(?:best|love|with love|yours)[,!]?\s*)?Mabel[.!]?\s*$/i, "").trim();
+    if (candidate && typeof candidate.text === "string" && candidate.text.trim()) return candidate.text.trim().replace(/(?:\r?\n\s*|\s+[—–-]\s*)(?:(?:best|love|with love|yours)[,!]?\s*)?Mabel[.!]?\s*$/i, "").trim();
   }
   return "";
 }
@@ -3306,15 +3573,17 @@ async function handleVisitorMessage() {
       if (isArtworkRequest(message)) {
         await requestMabelArtwork({ source: "visitor", message: message, forceLocalFallback: true }, replyElement);
       } else if (visitorSeemsDistressed(message)) {
-        await requestMabelArtwork({
+        const comfortArt = await requestMabelArtwork({
           source: "comfort",
           comfortRequest: true,
           message: message,
+          comfortSubject: comfortDrawingSubject(message),
           mood: mabel.now.mood,
           activity: "making a small comfort drawing for a visitor",
           thought: "A little picture might be a kind thing to leave for them.",
           forceLocalFallback: true
-        }, replyElement);
+        }, null);
+        queueComfortPostboxMail(message, comfortArt);
       }
       if (chatStatusElement) {
         chatStatusElement.textContent = "The site has used its 10,000 free tokens for today. Try again later.";
@@ -3344,7 +3613,8 @@ async function handleVisitorMessage() {
         mood: mabel.now.mood,
         activity: "making a small comfort drawing for a visitor",
         thought: "A little picture might be a kind thing to leave for them."
-      }, replyElement);
+      }, null);
+      queueComfortPostboxMail(message, requestedArtwork);
     }
 
     if (data.artwork && !requestedArtwork) {
@@ -3475,6 +3745,16 @@ function makeGiftKeepsakeNote(gift) {
   return "How kind. I wonder what story brought it here.";
 }
 
+function makeGiftPostboxNote(gift) {
+  const name = String(gift && gift.name || "your little gift").trim();
+  const key = normalizeInterestTitle(name);
+  if (/sesame/.test(key)) return "Do you like sesame seeds too? I’ve started wondering what people make with them. Do you have a favourite recipe?";
+  if ((gift && gift.kind === "food") || /mushroom|hazelnut|seed|berry|focaccia|bread|fruit|nut/.test(key)) return "Do you enjoy " + name + " too? Do you have a favourite way to eat it? I’m curious what else people make with it.";
+  if (/nintendo|game cartridge|ds game/.test(key)) return "I found your old game cartridge and can’t stop wondering what game it belongs to. Did you have a favourite game to play?";
+  if (/candle|tea light/.test(key)) return "I noticed the little candle. What did you use it for? I wonder what the room felt like when it was lit.";
+  return "I’ve been turning " + name + " over in my paws. Does it have a story? I’d love to know why you chose it for me.";
+}
+
 function personalizeGiftReaction(reply, gift) {
   const text = String(reply || "").trim();
   const giftWords = normalizeInterestTitle(gift && gift.name).split(" ").filter(function (word) { return word.length > 2; });
@@ -3489,6 +3769,36 @@ function personalizeGiftReaction(reply, gift) {
 
 function isUncleanWater(name) {
   return /\b(?:dirty|muddy|murky|stagnant|cloudy)\b/i.test(String(name || ""));
+}
+
+function deliverDueGiftPostboxNotes() {
+  ensureHollowWorld();
+  const current = Date.now();
+  let changed = false;
+  mabel.world.objects.forEach(function (gift) {
+    if (!gift || gift.source !== "visitor" || !gift.noticedAt || gift.postboxNoteAt) return;
+    if (mabelPostboxItems.some(function (entry) { return entry && entry.relatedGiftId === gift.id; })) {
+      gift.postboxNoteAt = gift.noticedAt;
+      changed = true;
+      return;
+    }
+    if (!Number.isFinite(Date.parse(gift.postboxNoteReadyAt || ""))) {
+      gift.postboxNoteReadyAt = new Date(Date.parse(gift.noticedAt) + 3 * 60 * 1000).toISOString();
+      changed = true;
+    }
+    if (Date.parse(gift.postboxNoteReadyAt) > current) return;
+    addMabelPostboxItem({
+      id: "gift-note-" + gift.id,
+      kind: "gift-reaction",
+      title: "A little question about your gift",
+      text: makeGiftPostboxNote(gift),
+      relatedGiftId: gift.id,
+      at: now()
+    });
+    gift.postboxNoteAt = now();
+    changed = true;
+  });
+  if (changed) saveMabel();
 }
 
 async function noticeNextVisitorGift() {
@@ -3543,6 +3853,7 @@ async function noticeNextVisitorGift() {
     const researchableGift = ["object", "surprise", "treasure"].includes(gift.kind);
     const giftNeedsResearch = gift.kind === "object" || (parsedGiftReply.text !== rawGiftReply && researchableGift);
     gift.noticedAt = now();
+    gift.postboxNoteReadyAt = new Date(Date.now() + (3 + Math.random() * 5) * 60 * 1000).toISOString();
     gift.reaction = parsedGiftReply.text;
     gift.bindleNote = makeGiftKeepsakeNote(gift);
     gift.status = "noticed";
@@ -3591,14 +3902,6 @@ async function noticeNextVisitorGift() {
       why: gift.reaction,
       interest: data.spark && data.spark.id
     });
-    addMabelPostboxItem({
-      id: "gift-note-" + gift.id,
-      kind: "gift-reaction",
-      title: "Mabel noticed your " + gift.name,
-      text: gift.reaction,
-      relatedGiftId: gift.id,
-      at: gift.noticedAt
-    });
     saveBindle();
     saveMabel();
     updateHomeObjects();
@@ -3613,9 +3916,7 @@ async function noticeNextVisitorGift() {
         if (!existing) target.unshift({ name: gift.name, note: gift.bindleNote, giftId: gift.id, edible: Boolean(gift.edible) });
         if (gift.status === "noticed" || gift.status === "waiting") gift.status = gift.edible ? "packed as food" : "saved for later";
       }
-      if (!mabelPostboxItems.some(function (item) { return item && item.relatedGiftId === gift.id; })) {
-        addMabelPostboxItem({ id: "gift-note-" + gift.id, kind: "gift-reaction", title: "Mabel noticed your " + gift.name, text: gift.reaction || "Mabel turned your gift over carefully and wondered about it.", relatedGiftId: gift.id, at: gift.noticedAt });
-      }
+      if (!gift.postboxNoteReadyAt) gift.postboxNoteReadyAt = new Date(Date.parse(gift.noticedAt) + 3 * 60 * 1000).toISOString();
       saveBindle();
       updateHomeObjects();
       updatePage();
@@ -3635,17 +3936,21 @@ function visitorBoardNoteKey(note) {
 }
 
 async function noticeNextVisitorBoardNote() {
+  if (boardNoticeInProgress) return null;
+  let claimedBoardNote = false;
   try {
     const response = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
     if (!response.ok) return null;
     const data = await response.json();
     const notes = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
-    const next = notes.find(function (note) {
+    const next = notes.slice().reverse().find(function (note) {
       return note && String(note.message || "").trim() &&
         !boardReadKeys.includes(visitorBoardNoteKey(note));
     });
     if (!next) return null;
 
+    boardNoticeInProgress = true;
+    claimedBoardNote = true;
     const key = visitorBoardNoteKey(next);
     const message = String(next.message || "").trim().slice(0, 280);
     const name = String(next.name || "a visitor").trim().slice(0, 40);
@@ -3712,6 +4017,8 @@ async function noticeNextVisitorBoardNote() {
   } catch (error) {
     // Mabel will check again at a later quiet moment.
     return null;
+  } finally {
+    if (claimedBoardNote) boardNoticeInProgress = false;
   }
 }
 
@@ -4453,7 +4760,7 @@ function recordSpark(candidate) {
     isConcreteHumanHobby(previousInterest.title));
   const priorInterestStillFits = priorConcreteHobby && (durableCandidate || concreteHobby);
   const qualifies = priorInterestStillFits ||
-    (concreteHobby && durableCandidate && spark.evidence >= 3 && ageMs >= 24 * 60 * 60 * 1000);
+    (concreteHobby && (candidate.kind === "hobby" || (durableCandidate && spark.evidence >= 3 && ageMs >= 24 * 60 * 60 * 1000)));
 
   if (qualifies) {
     const newlyPromoted = !spark.interestPromotedAt;
@@ -4792,6 +5099,12 @@ Return only JSON like this:
 
 const diverseWanderFinds = [
   { kind: "treasure", name: "a tiny red Power Ranger figure with one missing boot", note: "It looked ready to defend a crumb from enormous danger." },
+  { kind: "treasure", name: "a grand piano abandoned in a garden shed", note: "Mabel climbed onto the pedals and wondered how a room could hold so many notes." },
+  { kind: "treasure", name: "an old makeup brush with a rose-gold handle", note: "Its bristles made a soft little broom, and Mabel wondered what colours it had once swept across." },
+  { kind: "treasure", name: "a one-eyed teddy bear with a loose blue ribbon", note: "Its remaining button eye seemed to be keeping watch for whoever lost it." },
+  { kind: "treasure", name: "a crinkled chocolate bar wrapper", note: "It smelled faintly sweet and flashed like a tiny silver blanket." },
+  { kind: "treasure", name: "a Magic: The Gathering trading card", note: "The picture showed a world Mabel had never seen, full of names she wanted to learn." },
+  { kind: "treasure", name: "a Nathan for You DVD box set", note: "The box was enormous beside Mabel; she wondered what sort of stories could fill so many discs." },
   { kind: "treasure", name: "the chewed cap of a blue felt-tip pen", note: "Its teeth marks made it look like a very small beaver had been writing." },
   { kind: "treasure", name: "a paper star from a forgotten piñata", note: "A little crease down the middle made it look as if it had flown here." },
   { kind: "treasure", name: "a bottle-cap with a faded lemon on it", note: "It was almost a moon, if Mabel squinted." },
@@ -5125,7 +5438,7 @@ async function handleWander(options) {
       sourceOriginText: focusInterest.originText || "",
       sourceOriginAt: focusInterest.originAt || "",
       searchQuestion: data.searchQuestion || searchTerm || focusInterest.question || "",
-      title: relevant ? (data.title || displayTitle) : "A question left on the library table",
+      title: relevant ? (data.title || displayTitle) : "A new question from this search",
       sourceTitle: relevant ? (relatedSources[0]?.title || data.sourceTitle || "") : "",
       researchSummary: relevant
         ? String(data.researchSummary || "").slice(0, 1200)
@@ -5137,7 +5450,8 @@ async function handleWander(options) {
         ? /\b(?:found|picked up|came across)\s+(?:a|an|the)\s+(?:coin|button|toy|lid|shell|stone|key|cap|figure|flower|fossil|marble|bead)\b/i.test(String(data.musing || ""))
           ? "Mabel stayed with the question about " + focusInterest.title + " and kept a note from the source."
           : String(data.musing || "").slice(0, 700)
-        : "Mabel didn’t find a page she wanted to keep, so she’ll look into this further later.",
+        : "This search sparked Mabel’s curiosity. She now wonders: " + followUpQuestionForResearch(focusInterest, data),
+      followUpQuestion: relevant ? String(data.followUpQuestion || data.nextQuestion || "").slice(0, 220) : followUpQuestionForResearch(focusInterest, data),
       researchMethod: researchMethod,
       related: relevant
     };
@@ -5151,6 +5465,17 @@ async function handleWander(options) {
 
     researchLog.unshift(research);
     researchLog = researchLog.slice(0, 30);
+    if (!relevant && research.followUpQuestion) {
+      addResearchIdea({
+        id: "research-tangent-" + normalizeInterestTitle(research.followUpQuestion),
+        title: String(data.title || focusInterest.title).slice(0, 90),
+        question: research.followUpQuestion,
+        searchTerm: researchKeywordFromFinding(research.followUpQuestion),
+        source: "research", grounded: true,
+        originText: "A search about " + (focusInterest.searchTerm || focusInterest.title) + " sparked this new question.",
+        originAt: research.at
+      });
+    }
     if (focusInterest.source === "exploration") {
       const sourceOuting = wanderings.find(function (outing) {
         return outing && outing.at === focusInterest.originAt &&
@@ -5252,12 +5577,12 @@ async function handleWander(options) {
         ? (researchMethod === "in the public encyclopedia"
           ? "Mabel found a useful encyclopedia page about “" + displayTitle + "” and kept a note."
           : "Mabel followed “" + displayTitle + "” through a few pages and kept a note.")
-        : "Mabel didn’t find what she was looking for, so she’ll look into this further later.";
+         : "This search sparked a new question for Mabel: “" + research.followUpQuestion + "”.";
     }
     return research;
   } catch (error) {
     if (wanderStatus) {
-      wanderStatus.textContent = "The Library connection is quiet for now. Mabel will look into this further later.";
+      wanderStatus.textContent = "The Library connection is quiet just now. Mabel will try another time.";
     }
     return null;
   }
@@ -5525,6 +5850,7 @@ function startMabel() {
   wanderings = loadWanderings();
   researchLog = loadResearchLog();
   mabelPostboxItems = loadMabelPostbox();
+  comfortPostboxQueue = loadComfortPostboxQueue();
   try {
     lastViewedPostboxId = localStorage.getItem(postboxSeenStorageKey) || "";
     const latestMail = latestPostboxMail();
@@ -5718,7 +6044,17 @@ function startMabel() {
     if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
   }, 30000);
 
+  // Read each shared board note once, independently of her longer autonomous moments.
+  setInterval(function () {
+    if (!mabel || document.visibilityState !== "visible") return;
+    noticeNextVisitorBoardNote();
+  }, 5 * 60 * 1000);
+
   // Check due visitor gifts separately from Mabel’s longer autonomous moments.
+  setInterval(function () {
+    if (mabel) deliverDueComfortPostboxMail();
+  }, 15000);
+
   setInterval(function () {
     if (!mabel || document.visibilityState !== "visible" || giftNoticeInProgress) return;
     ensureHollowWorld();
@@ -5726,6 +6062,8 @@ function startMabel() {
       const dueAt = Date.parse(gift && gift.noticeAfter || "");
       return gift && gift.source === "visitor" && !gift.noticedAt && Number.isFinite(dueAt) && Date.now() >= dueAt;
     });
+    deliverDueGiftPostboxNotes();
+    deliverDueComfortPostboxMail();
     if (dueGift) noticeNextVisitorGift();
   }, 60000);
 
