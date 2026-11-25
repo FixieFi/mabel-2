@@ -566,6 +566,39 @@ function isDurableInterestCandidate(candidate) {
   return (enduringKind && activityTitle) || explicitOngoingActivity || (activityTitle && enduringDetails);
 }
 
+function registerSharedDrawing(artwork, context) {
+  if (!artwork || !MABEL_BRAIN_URL) return;
+  const artworkId = String(artwork.id || artwork.seed || artwork.createdAt || artwork.at || "drawing") + "-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
+  return fetch(MABEL_BRAIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind: "drawing-practice",
+      artworkId: artworkId,
+      title: artwork.title || "A little drawing",
+      source: context && context.source || "autonomous"
+    })
+  }).then(async function (response) {
+    if (!response.ok) return;
+    const result = await response.json();
+    if (result.newlyHobby) {
+      recordSpark({
+        id: "drawing-hobby",
+        title: "Drawing",
+        kind: "hobby",
+        question: "What could Mabel express through drawing, and how might she keep learning to draw?",
+        reason: "After returning to making pictures, Mabel wants to keep practicing drawing.",
+        originText: "Mabel has made several different drawings across her days and visitors.",
+        evidenceText: "Mabel has made several drawings across separate moments.",
+        source: "creative practice",
+        grounded: true
+      });
+    } else {
+      refreshSharedMabelBrain();
+    }
+  }).catch(function () {});
+}
+
 function persistSharedHobbyInterest(interest) {
   if (!interest || interest.kind !== "hobby" || !isConcreteHumanHobby(interest.title)) return;
   fetch(MABEL_BRAIN_URL, {
@@ -1261,8 +1294,9 @@ function saveToMabelGallery(artwork) {
   updateArtExhibition();
   updateVisitorProfile();
   refreshGalleryNotice();
+  let sharedArtworkUpdate = Promise.resolve();
   if (artwork.source === "autonomous") {
-    fetch(MABEL_BRAIN_URL, {
+    sharedArtworkUpdate = fetch(MABEL_BRAIN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1288,6 +1322,7 @@ function saveToMabelGallery(artwork) {
       })
     }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
   }
+  return sharedArtworkUpdate;
 }
 
 function formatArtworkTime(isoTime) {
@@ -3557,7 +3592,7 @@ async function requestMabelArtwork(context, targetElement) {
     artwork.inspirationKey = artworkInspiration.key;
   }
   const card = renderMabelCard(artwork);
-  saveToMabelGallery(artwork);
+  const sharedArtworkUpdate = saveToMabelGallery(artwork);
   if (card && targetElement) {
     targetElement.appendChild(document.createElement("br"));
     targetElement.appendChild(card);
@@ -3574,6 +3609,8 @@ async function requestMabelArtwork(context, targetElement) {
       why: "Mabel was thinking about " + String(creativeThought).replace(/[.?!]+$/, "") + " and wanted to explore it more creatively."
     });
   }
+  if (source === "autonomous") await sharedArtworkUpdate;
+  await registerSharedDrawing(artwork, { source: source });
   return artwork;
 }
 
@@ -4761,7 +4798,7 @@ function textSharesSpecificDetail(text, evidenceText) {
 function isGroundedResearchTrigger(candidate) {
   if (!candidate || !candidate.title) return false;
   const source = normalizeInterestTitle(candidate.source || "");
-  const trustedSources = new Set(["conversation", "visitor board", "discovery", "exploration", "research"]);
+  const trustedSources = new Set(["conversation", "visitor board", "discovery", "exploration", "research", "creative practice"]);
   if (candidate.grounded === true && trustedSources.has(source)) return true;
   const evidenceText = String(candidate.evidenceText || "");
   const ideaText = [candidate.title, candidate.question, candidate.reason].filter(Boolean).join(" ");
