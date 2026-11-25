@@ -1603,3 +1603,25 @@ button#explore.explore-button:disabled {
 .gallery-detail-exhibition-date { color: var(--deep-plum); font-weight: 600; }
 .explore-follow-up { margin: 7px 0; padding: 8px 10px; color: var(--deep-plum); background: rgba(255, 240, 200, .62); border-left: 3px solid var(--soft-purple); border-radius: 8px; font-style: italic; }
 .crafting-materials { max-height: 180px; overflow-y: auto; overscroll-behavior: contain; }
+
+.wander-find {
+  color: #365c48;
+  background: rgba(229, 241, 225, 0.72);
+  border-left: 3px solid #719b75;
+  border-radius: 8px;
+}
+
+.wander-find-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  color: #294e39;
+  background: #d9ead6;
+  border: 1px solid rgba(72, 116, 79, 0.25);
+  border-radius: 999px;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: middle;
+}
