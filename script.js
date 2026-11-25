@@ -324,7 +324,11 @@ function updateMabelPostbox() {
       note.textContent = entry.text;
       item.appendChild(note);
     }
-    if (entry.relatedGiftId) {
+    const giftStillInBindle = entry.relatedGiftId &&
+      [bindle.food, bindle.water, bindle.treasures].some(function (items) {
+        return (items || []).some(function (gift) { return gift && gift.giftId === entry.relatedGiftId; });
+      });
+    if (giftStillInBindle) {
       const link = document.createElement("button");
       link.type = "button";
       link.className = "postbox-gift-link";
@@ -4487,7 +4491,9 @@ async function handleWander(options) {
     }
     return research;
   } catch (error) {
-    if (wanderStatus) wanderStatus.textContent = "The library connection is quiet for now. Mabel will try again later.";
+    if (wanderStatus) {
+      wanderStatus.textContent = "Mabel tried to research " + focusInterest.title + ", but the Library web connection failed. Her question is still on her list for another attempt.";
+    }
     return null;
   }
 }
