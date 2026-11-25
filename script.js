@@ -3793,7 +3793,9 @@ function shouldResearchArtworkReference(subject) {
   const sharedReferences = sharedMabelBrain && Array.isArray(sharedMabelBrain.artReferences) ? sharedMabelBrain.artReferences : [];
   if (sharedReferences.some(function (item) { return normalizeInterestTitle(item.subject || item.title) === key; })) return false;
   return !researchLog.some(function (entry) {
-    return entry && entry.requestType === "art-reference" && normalizeInterestTitle(entry.searchTerm || entry.focusTitle) === key;
+    return entry && entry.requestType === "art-reference" &&
+      normalizeInterestTitle(entry.searchTerm || entry.focusTitle) === key &&
+      entry.artReference && safeExternalUrl(entry.artReference.imageUrl);
   });
 }
 
@@ -3819,7 +3821,7 @@ function queueArtworkReferenceResearch(message, options) {
   addFeedEntry({
     kind: "did",
     source: "visitor",
-    text: "Mabel kept " + subject + " in mind for a later visit to the Library.",
+    text: "Mabel practised an initial drawing of " + subject + " and set it aside to study a visual reference at the Library.",
     why: "She wanted to return to the subject and explore it more creatively."
   });
   saveResearchIdeas();
