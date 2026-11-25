@@ -1044,7 +1044,9 @@ function renderMabelCard(artwork) {
     );
   }
 
-  if (motif === "rain") {
+  if (artwork.referenceRetry) {
+    // Keep the studied subject clear instead of layering an unrelated motif over it.
+  } else if (motif === "rain") {
     const drift = -8 + random() * 16;
     for (let i = 0; i < 11 + Math.floor(random() * 13); i += 1) {
       const x = 12 + random() * 136;
