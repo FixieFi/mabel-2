@@ -1291,6 +1291,11 @@ button#explore.explore-button:disabled {
 .chat-exchanges {
   display: grid;
   gap: 1rem;
+  max-height: min(66vh, 760px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding: 4px 10px 4px 4px;
   margin-top: 1.2rem;
 }
 .chat-exchange {
@@ -1347,8 +1352,13 @@ button#explore.explore-button:disabled {
   margin: 0.35rem 0;
 }
 .visitor-gift-notice-card {
+  color: #4a365f;
   background: linear-gradient(120deg, rgba(246, 237, 255, 0.98), rgba(255, 248, 238, 0.98));
   border-color: rgba(141, 103, 180, 0.42);
+}
+.visitor-gift-notice-card strong,
+.visitor-gift-notice-card p {
+  color: #4a365f;
 }
 .notice-dismiss {
   padding: 0.5rem 0.8rem;
@@ -1363,6 +1373,37 @@ button#explore.explore-button:disabled {
   background: #efe4fa;
   border: 1px solid rgba(107, 74, 143, 0.25);
   border-radius: 999px;
+}
+.postbox-notice-card {
+  color: #513a69;
+  background: linear-gradient(120deg, #fff2d9, #f0e4fb 78%);
+  border-color: rgba(143, 109, 163, 0.45);
+}
+.postbox-notice-card strong,
+.postbox-notice-card p {
+  color: #513a69;
+}
+#view-postbox {
+  padding: 9px 14px;
+  color: #fffaf2;
+  background: linear-gradient(135deg, #805d9e, #604477);
+  border: 1px solid rgba(73, 49, 95, 0.25);
+  border-radius: 999px;
+  box-shadow: 0 3px 0 #4f3768;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.edible-gift-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.45rem;
+  color: #426341;
+  background: #e5f1dc;
+  border: 1px solid rgba(83, 123, 74, 0.28);
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 @media (max-width: 560px) {
