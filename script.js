@@ -1384,11 +1384,17 @@ function openGalleryArtworkDetails(artwork) {
     : "Creation time not recorded";
   description.textContent = artwork.description || artwork.note || "A little drawing Mabel made.";
   const rawContext = artwork.inspirationContext || artwork.promptContext || "";
-  const contextText = rawContext && artwork.source === "autonomous"
-    ? (artwork.inspirationTitle
-      ? "Mabel was thinking about " + artwork.inspirationTitle + (rawContext ? " and wondering " + rawContext.replace(/[.!?]+$/, "") : "") + "."
-      : "Mabel was reflecting on " + rawContext.replace(/[.!?]+$/, "") + ".")
-    : rawContext;
+  const contextText = !rawContext
+    ? ""
+    : artwork.source === "autonomous"
+      ? (artwork.inspirationTitle
+        ? "A little thought about " + artwork.inspirationTitle + "."
+        : "Made during one of Mabel’s own quiet moments.")
+      : artwork.source === "comfort"
+        ? "Made after your message, with care."
+        : artwork.source === "visitor"
+          ? "Made in response to your drawing request."
+          : "";
   context.textContent = contextText;
   const contextBlock = document.getElementById("gallery-detail-context-block");
   if (contextLabel) contextLabel.hidden = !contextText;
