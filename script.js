@@ -100,6 +100,7 @@ let reflectionInProgress = false;
 let wanderings = [];
 let researchLog = [];
 let boardReadKeys = [];
+let boardNoticeInProgress = false;
 let sparks = [];
 let lastViewedSparkId = "";
 let lastViewedArtworkKey = "";
@@ -2383,6 +2384,12 @@ async function loadVisitorBoard() {
       const signoff = document.createElement("strong");
       signoff.textContent = message.name ? "— " + message.name : "— A visitor";
       item.appendChild(signoff);
+      if (message.mabelReaction) {
+        const mabelNote = document.createElement("p");
+        mabelNote.className = "visitor-board-mabel-reaction";
+        mabelNote.textContent = "Mabel wondered: " + message.mabelReaction;
+        item.appendChild(mabelNote);
+      }
       if (message.createdAt) {
         const time = document.createElement("time");
         time.dateTime = message.createdAt;
@@ -3727,17 +3734,21 @@ function visitorBoardNoteKey(note) {
 }
 
 async function noticeNextVisitorBoardNote() {
+  if (boardNoticeInProgress) return null;
+  let claimedBoardNote = false;
   try {
     const response = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
     if (!response.ok) return null;
     const data = await response.json();
     const notes = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
-    const next = notes.find(function (note) {
-      return note && String(note.message || "").trim() &&
+    const next = notes.slice().reverse().find(function (note) {
+      return note && String(note.message || "").trim() && !note.mabelNoticedAt &&
         !boardReadKeys.includes(visitorBoardNoteKey(note));
     });
     if (!next) return null;
 
+    boardNoticeInProgress = true;
+    claimedBoardNote = true;
     const key = visitorBoardNoteKey(next);
     const message = String(next.message || "").trim().slice(0, 280);
     const name = String(next.name || "a visitor").trim().slice(0, 40);
@@ -3765,6 +3776,10 @@ async function noticeNextVisitorBoardNote() {
     boardReadKeys.unshift(key);
     boardReadKeys = boardReadKeys.slice(0, 100);
     saveBoardReadKeys();
+    fetch(MABEL_BOARD_URL, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mabel-noticed", id: next.id, reaction: reaction })
+    }).catch(function () {});
 
     const parsedReaction = separateSparkMarker(normalizeMabelReply(result));
     const reaction = textSharesSpecificDetail(parsedReaction.text, message)
@@ -3804,6 +3819,8 @@ async function noticeNextVisitorBoardNote() {
   } catch (error) {
     // Mabel will check again at a later quiet moment.
     return null;
+  } finally {
+    if (claimedBoardNote) boardNoticeInProgress = false;
   }
 }
 
@@ -5821,6 +5838,12 @@ function startMabel() {
     const boardPanel = document.getElementById("visitor-board");
     if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
   }, 30000);
+
+  // Read each shared board note once, independently of her longer autonomous moments.
+  setInterval(function () {
+    if (!mabel || document.visibilityState !== "visible") return;
+    noticeNextVisitorBoardNote();
+  }, 5 * 60 * 1000);
 
   // Check due visitor gifts separately from Mabel’s longer autonomous moments.
   setInterval(function () {
