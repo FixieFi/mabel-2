@@ -125,9 +125,11 @@
       <section id="chat" class="tab-panel active">
         <h2>Chat with Mabel</h2>
         <p class="day-intro chat-one-turn-note">Each message and reply stays together in its own card, with the newest conversation at the top.</p>
-        <label for="message" class="chat-message-label">Your message</label>
-        <textarea id="message" rows="4" placeholder="Say hello to Mabel..."></textarea>
-        <button id="send">Send message</button>
+        <form id="chat-form" class="chat-form">
+          <label for="message" class="chat-message-label">Your message</label>
+          <textarea id="message" rows="4" placeholder="Say hello to Mabel..." enterkeyhint="send"></textarea>
+          <button id="send" type="submit">Send message</button>
+        </form>
         <p id="chat-status" class="chat-status" aria-live="polite"></p>
         <div id="chat-exchanges" class="chat-exchanges" aria-live="polite" aria-label="Conversations, newest first"></div>
       </section>
@@ -225,7 +227,7 @@
         <p class="day-intro">When a discovery, conversation, or visitor note catches Mabel’s attention, she can look into it here.</p>
         <h3>Research Mabel has done</h3>
         <p class="day-intro">Notes and sources from the questions Mabel has researched.</p>
-        <p id="wander-status" aria-live="polite">Mabel hasn’t brought back any research yet.</p>
+        <p id="wander-status" aria-live="polite"></p>
         <ul id="research-log" class="research-log" aria-live="polite"></ul>
       </section>
 
@@ -251,7 +253,7 @@
         <h3>Mabel’s wishes</h3>
         <ul id="wishes"></ul>
 
-        <h3>Mabel’s interests</h3>
+        <h3>Hobbies and interests</h3>
         <ul id="interests"></ul>
 
         <h3>How Mabel is changing</h3>
