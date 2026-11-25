@@ -2656,8 +2656,8 @@ async function loadVisitorBoard() {
               body: JSON.stringify({ action: "delete", id: message.id })
             });
             if (!deleteResponse.ok) throw new Error("The notice could not be deleted.");
-            if (visitorBoardStatus) visitorBoardStatus.textContent = "The notice has been removed for everyone.";
             await loadVisitorBoard();
+            if (visitorBoardStatus) visitorBoardStatus.textContent = "The notice has been removed for everyone.";
           } catch (error) {
             removeButton.disabled = false;
             if (visitorBoardStatus) visitorBoardStatus.textContent = "That notice could not be removed just now.";
