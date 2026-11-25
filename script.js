@@ -272,6 +272,9 @@ function addResearchIdea(candidate) {
       title: title,
       question: String(candidate.question || "What might Mabel discover about " + title + "?").trim().slice(0, 220),
       source: candidate.source || "Mabel’s thoughts",
+      originText: String(candidate.originText || candidate.evidenceText || candidate.reason || "A thought caught Mabel’s attention.").trim().slice(0, 260),
+      originType: candidate.source || "Mabel’s thoughts",
+      originAt: candidate.originAt || candidate.createdAt || now(),
       grounded: true,
       evidence: Math.max(1, Number(candidate.evidence) || 1),
       createdAt: candidate.createdAt || now(),
@@ -282,6 +285,11 @@ function addResearchIdea(candidate) {
   } else {
     idea.evidence = Math.max(idea.evidence || 1, Number(candidate.evidence) || 1);
     idea.question = String(candidate.question || idea.question).trim().slice(0, 220);
+    if (candidate.originText || candidate.evidenceText || candidate.reason) {
+      idea.originText = String(candidate.originText || candidate.evidenceText || candidate.reason).trim().slice(0, 260);
+    }
+    idea.originType = candidate.source || idea.originType || idea.source || "Mabel’s thoughts";
+    idea.originAt = candidate.originAt || candidate.createdAt || idea.originAt || idea.createdAt || now();
     idea.lastSeenAt = now();
     if (candidate.lastResearchedAt) idea.lastResearchedAt = candidate.lastResearchedAt;
   }
@@ -1892,6 +1900,26 @@ function updateResearchIdeas() {
       question.textContent = idea.question;
       item.appendChild(question);
     }
+    const origin = document.createElement("p");
+    origin.className = "research-idea-origin";
+    const relatedSpark = sparks.find(function (spark) {
+      return spark && (spark.id === idea.id || normalizeInterestTitle(spark.title) === normalizeInterestTitle(idea.title));
+    });
+    const originText = String(idea.originText || (relatedSpark && (relatedSpark.originText || relatedSpark.reason)) || "a thought Mabel wanted to return to").trim().slice(0, 260);
+    const originType = String(idea.originType || (relatedSpark && relatedSpark.source) || idea.source || "Mabel’s thoughts").toLowerCase();
+    const originLabel = originType === "conversation" ? "a conversation"
+      : originType === "visitor-board" ? "a Visitors’ board note"
+      : originType === "discovery" ? "something she noticed"
+      : originType === "exploration" ? "an exploration"
+      : originType === "research" ? "her research"
+      : originType === "autonomous" ? "an activity moment"
+      : originType;
+    const originTime = Date.parse(idea.originAt || (relatedSpark && (relatedSpark.lastEvidenceAt || relatedSpark.createdAt)) || idea.createdAt || "");
+    const originDate = Number.isFinite(originTime)
+      ? new Date(originTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : "time not recorded";
+    origin.textContent = "Mabel has been thinking about this because of “" + originText + "” — from " + originLabel + " at " + originDate + ".";
+    item.appendChild(origin);
     list.appendChild(item);
   });
 }
@@ -2953,6 +2981,8 @@ function recordSpark(candidate) {
 
   const timestamp = Date.now();
   const timestampText = new Date(timestamp).toISOString();
+  const originText = String(candidate.originText || candidate.evidenceText || candidate.reason || "A thought caught Mabel’s attention.").trim().slice(0, 260);
+  const originAt = candidate.originAt || timestampText;
   let spark = sparks.find(function (item) {
     return item.id === candidate.id || normalizeInterestTitle(item.title) === key;
   });
@@ -2967,6 +2997,8 @@ function recordSpark(candidate) {
       question: question,
       reason: String(candidate.reason || "A thought caught Mabel’s attention.").slice(0, 220),
       source: candidate.source || "Mabel’s thoughts",
+      originText: originText,
+      originAt: originAt,
       grounded: true,
       pull: 0.3,
       evidence: 1,
@@ -2987,11 +3019,14 @@ function recordSpark(candidate) {
     spark.grounded = true;
     spark.question = question || spark.question;
     spark.source = candidate.source || spark.source;
+    spark.originText = originText;
+    spark.originAt = originAt;
   }
 
   const idea = addResearchIdea({
     id: spark.id, title: spark.title, question: spark.question, source: spark.source, grounded: true,
-    evidence: spark.evidence, createdAt: spark.createdAt, lastResearchedAt: spark.lastResearchedAt
+    evidence: spark.evidence, createdAt: spark.createdAt, lastResearchedAt: spark.lastResearchedAt,
+    originText: spark.originText, originAt: spark.originAt
   });
   const ageMs = timestamp - Date.parse(spark.createdAt || timestampText);
   const qualifies = Boolean(previousInterest || spark.interestPromotedAt) ||
