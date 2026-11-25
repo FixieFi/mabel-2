@@ -282,8 +282,15 @@ function saveMabelPostbox() {
   try { localStorage.setItem(mabelPostboxStorageKey, JSON.stringify(mabelPostboxItems.slice(0, 30))); }
   catch (error) { /* Keep the notes available for this visit. */ }
 }
+function latestPostboxMail() {
+  if (!Array.isArray(mabelPostboxItems)) return null;
+  return mabelPostboxItems.find(function (entry) {
+    return entry && entry.id && (Boolean(entry.artwork) || (typeof entry.text === "string" && entry.text.trim().length > 0));
+  }) || null;
+}
+
 function markPostboxNoticeSeen() {
-  const latest = mabelPostboxItems[0];
+  const latest = latestPostboxMail();
   if (latest && latest.id) {
     lastViewedPostboxId = String(latest.id);
     try { localStorage.setItem(postboxSeenStorageKey, lastViewedPostboxId); } catch (error) {}
@@ -291,7 +298,7 @@ function markPostboxNoticeSeen() {
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
 function refreshPostboxNotice() {
-  const latest = mabelPostboxItems[0];
+  const latest = latestPostboxMail();
   if (!postboxNoticeCard || !latest || !latest.id) {
     if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
     return;
@@ -4161,7 +4168,7 @@ function updateVisitorGiftNotice() {
     return;
   }
   if (visitorGiftNoticeText) {
-    visitorGiftNoticeText.textContent = "Mabel has noticed your " + gift.name + ". The keepsake stays with the item in her bindle; her full note is in your postbox.";
+    visitorGiftNoticeText.textContent = "Mabel noticed the gift you left her.";
   }
   visitorGiftNoticeCard.classList.remove("hidden");
 }
@@ -5390,8 +5397,9 @@ function startMabel() {
   mabelPostboxItems = loadMabelPostbox();
   try {
     lastViewedPostboxId = localStorage.getItem(postboxSeenStorageKey) || "";
-    if (!lastViewedPostboxId && mabelPostboxItems[0] && mabelPostboxItems[0].id) {
-      lastViewedPostboxId = String(mabelPostboxItems[0].id);
+    const latestMail = latestPostboxMail();
+    if (!lastViewedPostboxId && latestMail && latestMail.id) {
+      lastViewedPostboxId = String(latestMail.id);
       localStorage.setItem(postboxSeenStorageKey, lastViewedPostboxId);
     }
   } catch (error) { lastViewedPostboxId = ""; }
