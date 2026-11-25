@@ -2601,7 +2601,7 @@ function updateActivityLog() {
     return;
   }
 
-  activityEntries.slice(0, 20).forEach(function (entry) {
+  activityEntries.slice(0, 20).reverse().forEach(function (entry) {
     const item = document.createElement("li");
     const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     item.textContent = time + " — " + entry.text;
