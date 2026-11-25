@@ -487,7 +487,7 @@ function isConcreteHumanHobby(title) {
     "chess", "acting", "theatre", "calligraphy", "origami", "model making",
     "model building", "stargazing", "language learning", "learning languages",
     "coding", "programming", "skateboarding", "surfing", "fishing", "DIY",
-    "home improvement"
+    "home improvement", "crafting", "crafting small objects"
   ];
   return concretePractices.includes(value);
 }
@@ -1067,7 +1067,8 @@ function prepareArtworkForGallery(artwork, context) {
   artwork.source = details.source || artwork.source || "autonomous";
   if (details.message) artwork.promptContext = String(details.message).trim().slice(0, 240);
   if (details.inspiration) {
-    artwork.inspirationContext = String(details.inspiration.question || details.inspiration.title || "").slice(0, 240);
+    artwork.inspirationTitle = String(details.inspiration.title || "").slice(0, 100);
+    artwork.inspirationContext = String(details.inspiration.question || "").slice(0, 240);
   }
   if (visitorPortrait) {
     const appearance = visitorAppearanceDetails(details.message);
@@ -1093,8 +1094,7 @@ function prepareArtworkForGallery(artwork, context) {
     artwork.description = artwork.note || artwork.caption || "";
   }
   if (!artwork.description && details.inspiration) {
-    artwork.description = "A little study of " + details.inspiration.title + ". " +
-      (details.inspiration.question || "Mabel followed a thought that stayed with her.");
+    artwork.description = "A little study of " + details.inspiration.title + ", in Mabel’s own colours.";
   }
   return artwork;
 }
@@ -1117,6 +1117,9 @@ function saveToMabelGallery(artwork) {
   updateGallery();
   updateVisitorProfile();
   refreshGalleryNotice();
+  if (artwork.source === "autonomous" && artwork.inspirationContext) {
+    fetch(MABEL_BRAIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "artwork", title: artwork.title, inspiration: artwork.inspirationContext }) }).catch(function () {});
+  }
 }
 
 function formatArtworkTime(isoTime) {
@@ -1186,7 +1189,12 @@ function openGalleryArtworkDetails(artwork) {
     ? date.toLocaleString([], { dateStyle: "long", timeStyle: "short" })
     : "Creation time not recorded";
   description.textContent = artwork.description || artwork.note || "A little drawing Mabel made.";
-  const contextText = artwork.promptContext || artwork.inspirationContext || "";
+  const rawContext = artwork.inspirationContext || artwork.promptContext || "";
+  const contextText = rawContext && artwork.source === "autonomous"
+    ? (artwork.inspirationTitle
+      ? "Mabel was thinking about " + artwork.inspirationTitle + (rawContext ? " and wondering " + rawContext.replace(/[.!?]+$/, "") : "") + "."
+      : "Mabel was reflecting on " + rawContext.replace(/[.!?]+$/, "") + ".")
+    : rawContext;
   context.textContent = contextText;
   const contextBlock = document.getElementById("gallery-detail-context-block");
   if (contextLabel) contextLabel.hidden = !contextText;
@@ -1572,7 +1580,7 @@ function scheduleWanderingResearch(researchLead) {
         try { localStorage.setItem(autonomousResearchStorageKey, String(lastAutonomousResearchAt)); } catch (error) {}
         if (exploreStatus) exploreStatus.textContent = "Mabel has come back from the Library with a little fact for your postbox.";
       } else if (exploreStatus) {
-        exploreStatus.textContent = "Mabel will look into this further later.";
+        exploreStatus.textContent = "Sometimes a finding sends Mabel to the Library; today, she has brought back a little wonder.";
       }
     });
   }, delay);
@@ -1594,6 +1602,7 @@ async function handleExplore() {
     wanderings.unshift(outing);
     wanderings.length = Math.min(wanderings.length, 30);
     applyExplorationFinds(finds);
+    fetch(MABEL_BRAIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "exploration", finds: finds.map(function (item) { return item && item.name; }).filter(Boolean) }) }).catch(function () {});
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
     mabel.now.doing = "exploring near her home";
     mabel.now.thought = finds.length
@@ -1695,10 +1704,20 @@ function updateWishes() {
   });
 }
 
+function sharedMabelInterestList() {
+  const shared = sharedMabelBrain && sharedMabelBrain.interests;
+  if (!Array.isArray(shared)) return Array.isArray(mabel.interests) ? mabel.interests : [];
+  return shared.map(function (interest) {
+    const events = Array.isArray(interest.events) ? interest.events : [];
+    const pull = Number(interest.pull) || 0;
+    return { ...interest, level: Math.max(1, Math.min(5, 1 + Math.floor(Math.max(0, pull - 0.45) * 5))), progress: events.length, steps: events, reason: events[0] && events[0].text || interest.reason || "", stage: interest.stage || "wondering" };
+  });
+}
+
 function updateInterests() {
   if (!interestsElement) return;
   interestsElement.replaceChildren();
-  const hobbies = (Array.isArray(mabel.interests) ? mabel.interests : [])
+  const hobbies = sharedMabelInterestList()
     .filter(function (interest) {
       return interest && interest.kind === "hobby" && isConcreteHumanHobby(interest.title);
     })
@@ -1766,15 +1785,19 @@ function updateMindTopics() {
     if (!entry || !entry.title) return;
     const key = normalizeInterestTitle(entry.title);
     if (!key || entries.some(function (saved) { return normalizeInterestTitle(saved.title) === key; })) return;
+    const questionText = String(entry.question || "").trim().slice(0, 240);
+    const whyText = String(entry.originText || entry.reason || (Array.isArray(entry.events) && entry.events[0] && entry.events[0].text) || "").trim().slice(0, 260);
+    const questionKey = normalizeInterestTitle(questionText);
+    const whyKey = normalizeInterestTitle(whyText);
     entries.push({
       title: String(entry.title).slice(0, 100),
-      question: String(entry.question || "").slice(0, 240),
-      why: String(entry.originText || entry.reason || "").slice(0, 260),
+      question: questionKey && questionKey !== key ? questionText : "",
+      why: whyKey && whyKey !== key && whyKey !== questionKey && !whyKey.includes(questionKey) && !questionKey.includes(whyKey) ? whyText : "",
       at: entry.originAt || entry.createdAt || entry.lastSeenAt || ""
     });
   };
 
-  (Array.isArray(mabel.interests) ? mabel.interests : []).forEach(function (interest) {
+  sharedMabelInterestList().forEach(function (interest) {
     if (interest && !(interest.kind === "hobby" && isConcreteHumanHobby(interest.title))) addEntry(interest);
   });
   (Array.isArray(sparks) ? sparks : []).forEach(function (spark) {
@@ -1865,6 +1888,30 @@ function updateChanges() {
   });
 }
 
+function updateCrafting() {
+  const list = document.getElementById("crafting-projects");
+  if (!list) return;
+  list.replaceChildren();
+  const crafting = sharedMabelBrain && sharedMabelBrain.crafting;
+  const level = document.getElementById("crafting-level");
+  const skillLevel = Number(crafting && crafting.skillLevel) || 0;
+  if (level) level.textContent = skillLevel > 0 ? "Crafting practice · Level " + skillLevel + " — Mabel is learning by trying her ideas." : "Mabel has not tried crafting yet; her first ideas will grow from things she finds.";
+  const projects = crafting && Array.isArray(crafting.projects) ? crafting.projects : [];
+  if (!projects.length) {
+    const empty = document.createElement("li"); empty.className = "brain-trait-empty";
+    empty.textContent = "No invention has taken shape yet. Mabel may start joining together things she finds when an idea catches her.";
+    list.appendChild(empty); return;
+  }
+  projects.slice(0, 8).forEach(function (project) {
+    const item = document.createElement("li"); item.className = "interest-item craft-project";
+    const title = document.createElement("strong"); title.className = "interest-title"; title.textContent = project.title || "A mouse-sized invention"; item.appendChild(title);
+    const materials = document.createElement("span"); materials.className = "interest-stage"; materials.textContent = "Using things she found: " + (Array.isArray(project.materials) ? project.materials.join(" + ") : ""); item.appendChild(materials);
+    const idea = document.createElement("p"); idea.className = "interest-reason"; idea.textContent = project.idea || ""; item.appendChild(idea);
+    const stage = document.createElement("span"); stage.className = "interest-stage"; stage.textContent = project.tried ? "Mabel tried making it" : "An idea Mabel wants to try"; item.appendChild(stage);
+    list.appendChild(item);
+  });
+}
+
 function updateBrain() {
   const mood = document.getElementById("brain-mood");
   const moodScore = document.getElementById("brain-mood-score");
@@ -1873,6 +1920,7 @@ function updateBrain() {
   const personality = shared.personality || (mabel && mabel.personality) || {};
   const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  updateCrafting();
   if (mood) mood.textContent = shared.mood || mabel.now.mood || "quiet";
   if (thought) thought.textContent = "“" + (shared.thought || mabel.now.thought || "Mabel is listening to the hollow.") + "”";
   if (moodScore) {
@@ -1928,6 +1976,9 @@ async function refreshSharedMabelBrain() {
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
       updateBrain();
+      updateInterests();
+      updateMindTopics();
+      updateCrafting();
     }
   } catch (error) {
     // Keep the browser's current Brain view if the shared Worker is unavailable.
@@ -2030,6 +2081,27 @@ function formatLibraryMethod(value) {
   return "on a library computer";
 }
 
+function libraryResourceMethod(source, fallback) {
+  const title = String(source && source.title || "").toLowerCase();
+  const url = String(source && source.url || "").toLowerCase();
+  if (/wikipedia|britannica|encyclop|reference/.test(title + " " + url)) return "the library’s online encyclopedia";
+  if (/journal|doi\.org|pubmed|nature\.com|sciencedirect|academic/.test(title + " " + url)) return "a journal archive";
+  if (/magazine|smithsonianmag|nationalgeographic|newyorker|atlasobscura/.test(title + " " + url)) return "a magazine archive";
+  if (/newspaper|news|bbc\.com|theguardian|nytimes|reuters|apnews/.test(title + " " + url)) return "an online newspaper archive";
+  const method = formatLibraryMethod(fallback);
+  if (method.includes("public computer by the window")) return "the public computer by the window";
+  if (method.includes("public PC")) return "the library’s public PC";
+  if (method.includes("web browser")) return "the library’s web browser";
+  return "a library computer";
+}
+
+function followUpQuestionForResearch(focusInterest, result) {
+  const supplied = String(result && (result.followUpQuestion || result.nextQuestion || (result.interest && result.interest.question)) || "").trim();
+  if (supplied.length >= 12 && supplied.length <= 220) return supplied;
+  const subject = String(result && (result.title || result.searchQuestion) || focusInterest && focusInterest.title || "that subject").trim();
+  return "What might people want to know next about " + subject + "?";
+}
+
 function updateResearchLog() {
   const list = document.getElementById("research-log");
   if (!list) return;
@@ -2057,8 +2129,7 @@ function updateResearchLog() {
       const timestamp = document.createElement("time");
       timestamp.className = "research-entry-time";
       timestamp.dateTime = entry.at;
-      timestamp.textContent = new Date(entry.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) +
-        " · " + formatLibraryMethod(entry.researchMethod);
+      timestamp.textContent = new Date(entry.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
       item.appendChild(timestamp);
     }
     const sourceEntries = Array.isArray(entry.sources) && entry.sources.length
@@ -2076,9 +2147,15 @@ function updateResearchLog() {
       String(entry.researchSummary || "").replace(/\s+/g, " ").trim().slice(0, 180);
     const sentence = document.createElement("p");
     sentence.className = "research-one-sentence";
-    sentence.appendChild(document.createTextNode("After wondering about “" + inspiration + "”, Mabel looked it up online"));
+    if (entry.related === false) {
+      sentence.textContent = "This search sparked Mabel’s curiosity. She now wonders: “" + (entry.followUpQuestion || "What might people want to know next about this?") + "”";
+      item.appendChild(sentence);
+      list.appendChild(item);
+      return;
+    }
+    sentence.appendChild(document.createTextNode("Mabel looked up "));
     if (firstSource) {
-      sentence.appendChild(document.createTextNode(" using "));
+      sentence.appendChild(document.createTextNode("the page "));
       const sourceUrl = safeExternalUrl(firstSource.url);
       if (sourceUrl) {
         const link = document.createElement("a");
@@ -2091,8 +2168,10 @@ function updateResearchLog() {
         sentence.appendChild(document.createTextNode(firstSource.title));
       }
     } else {
-      sentence.appendChild(document.createTextNode(" with the library search"));
+      sentence.appendChild(document.createTextNode("the topic"));
     }
+    const resourceMethod = libraryResourceMethod(firstSource, entry.researchMethod);
+    sentence.appendChild(document.createTextNode((firstSource ? " from " : " using ") + resourceMethod + (inspiration ? " while thinking about “" + inspiration + "”" : "")));
     if (fact) sentence.appendChild(document.createTextNode(" and learned: " + fact.replace(/[.!?]+$/, "") + "."));
     else sentence.appendChild(document.createTextNode(" and kept exploring the topic."));
     item.appendChild(sentence);
@@ -2813,7 +2892,9 @@ function chooseGift(event) {
   const gifts = {
     food: [
       "a blackberry", "three sunflower seeds", "a fallen hazelnut", "a little oat crumb",
-      "a small piece of plain pizza crust", "a crumb from an old bakery roll", "a dried edible porcini mushroom",
+      "a small piece of plain pizza crust", "a crumb from an old bakery roll", "a piece of stale artisan focaccia", "a dried edible porcini mushroom",
+      "a dried shiitake mushroom", "a piece of cultivated oyster mushroom", "a pistachio kernel", "a pine nut",
+      "a fresh basil leaf", "a mint leaf", "a raspberry", "a blueberry",
       "a sliver of apple", "half a dried cranberry", "a corner of plain cracker",
       "a crumb of oat biscuit", "a sesame seed", "a little strawberry top", "a crumb of mild cheese"
     ],
@@ -2826,7 +2907,8 @@ function chooseGift(event) {
       "a dried flower tied with thread", "a smooth shell", "a little brass bell", "a pale green glass pebble",
       "a scrap of soft blue cloth", "a tiny wooden bead", "a pressed four-leaf clover", "a tiny wooden spool",
       "a miniature paper star", "a little copper key", "a worn postage stamp", "a small piece of sea glass",
-      "a tiny thimble", "a green ribbon bow", "a little carved acorn"
+      "a tiny thimble", "a green ribbon bow", "a little carved acorn",
+      "an old faded Nintendo DS game cartridge", "a used tea-light candle with cool wax"
     ]
   };
   const options = gifts[kind] || gifts.surprise;
@@ -3141,8 +3223,8 @@ function normalizeMabelReply(payload) {
     payload && payload.result && payload.result.response
   ];
   for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-    if (candidate && typeof candidate.text === "string" && candidate.text.trim()) return candidate.text.trim();
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim().replace(/(?:\r?\n\s*|\s+[—–-]\s*)(?:(?:best|love|with love|yours)[,!]?\s*)?Mabel[.!]?\s*$/i, "").trim();
+    if (candidate && typeof candidate.text === "string" && candidate.text.trim()) return candidate.text.trim().replace(/(?:\r?\n\s*|\s+[—–-]\s*)(?:(?:best|love|with love|yours)[,!]?\s*)?Mabel[.!]?\s*$/i, "").trim();
   }
   return "";
 }
@@ -3475,6 +3557,16 @@ function makeGiftKeepsakeNote(gift) {
   return "How kind. I wonder what story brought it here.";
 }
 
+function makeGiftPostboxNote(gift) {
+  const name = String(gift && gift.name || "your little gift").trim();
+  const key = normalizeInterestTitle(name);
+  if (/sesame/.test(key)) return "Do you like sesame seeds too? I’ve started wondering what people make with them. Do you have a favourite recipe?";
+  if ((gift && gift.kind === "food") || /mushroom|hazelnut|seed|berry|focaccia|bread|fruit|nut/.test(key)) return "Do you enjoy " + name + " too? Do you have a favourite way to eat it? I’m curious what else people make with it.";
+  if (/nintendo|game cartridge|ds game/.test(key)) return "I found your old game cartridge and can’t stop wondering what game it belongs to. Did you have a favourite game to play?";
+  if (/candle|tea light/.test(key)) return "I noticed the little candle. What did you use it for? I wonder what the room felt like when it was lit.";
+  return "I’ve been turning " + name + " over in my paws. Does it have a story? I’d love to know why you chose it for me.";
+}
+
 function personalizeGiftReaction(reply, gift) {
   const text = String(reply || "").trim();
   const giftWords = normalizeInterestTitle(gift && gift.name).split(" ").filter(function (word) { return word.length > 2; });
@@ -3594,8 +3686,8 @@ async function noticeNextVisitorGift() {
     addMabelPostboxItem({
       id: "gift-note-" + gift.id,
       kind: "gift-reaction",
-      title: "Mabel noticed your " + gift.name,
-      text: gift.reaction,
+      title: "A little question about your gift",
+      text: makeGiftPostboxNote(gift),
       relatedGiftId: gift.id,
       at: gift.noticedAt
     });
@@ -3614,7 +3706,7 @@ async function noticeNextVisitorGift() {
         if (gift.status === "noticed" || gift.status === "waiting") gift.status = gift.edible ? "packed as food" : "saved for later";
       }
       if (!mabelPostboxItems.some(function (item) { return item && item.relatedGiftId === gift.id; })) {
-        addMabelPostboxItem({ id: "gift-note-" + gift.id, kind: "gift-reaction", title: "Mabel noticed your " + gift.name, text: gift.reaction || "Mabel turned your gift over carefully and wondered about it.", relatedGiftId: gift.id, at: gift.noticedAt });
+        addMabelPostboxItem({ id: "gift-note-" + gift.id, kind: "gift-reaction", title: "A little question about your gift", text: makeGiftPostboxNote(gift), relatedGiftId: gift.id, at: gift.noticedAt });
       }
       saveBindle();
       updateHomeObjects();
@@ -5125,7 +5217,7 @@ async function handleWander(options) {
       sourceOriginText: focusInterest.originText || "",
       sourceOriginAt: focusInterest.originAt || "",
       searchQuestion: data.searchQuestion || searchTerm || focusInterest.question || "",
-      title: relevant ? (data.title || displayTitle) : "A question left on the library table",
+      title: relevant ? (data.title || displayTitle) : "A new question from this search",
       sourceTitle: relevant ? (relatedSources[0]?.title || data.sourceTitle || "") : "",
       researchSummary: relevant
         ? String(data.researchSummary || "").slice(0, 1200)
@@ -5137,7 +5229,8 @@ async function handleWander(options) {
         ? /\b(?:found|picked up|came across)\s+(?:a|an|the)\s+(?:coin|button|toy|lid|shell|stone|key|cap|figure|flower|fossil|marble|bead)\b/i.test(String(data.musing || ""))
           ? "Mabel stayed with the question about " + focusInterest.title + " and kept a note from the source."
           : String(data.musing || "").slice(0, 700)
-        : "Mabel didn’t find a page she wanted to keep, so she’ll look into this further later.",
+        : "This search sparked Mabel’s curiosity. She now wonders: " + followUpQuestionForResearch(focusInterest, data),
+      followUpQuestion: relevant ? String(data.followUpQuestion || data.nextQuestion || "").slice(0, 220) : followUpQuestionForResearch(focusInterest, data),
       researchMethod: researchMethod,
       related: relevant
     };
@@ -5151,6 +5244,17 @@ async function handleWander(options) {
 
     researchLog.unshift(research);
     researchLog = researchLog.slice(0, 30);
+    if (!relevant && research.followUpQuestion) {
+      addResearchIdea({
+        id: "research-tangent-" + normalizeInterestTitle(research.followUpQuestion),
+        title: String(data.title || focusInterest.title).slice(0, 90),
+        question: research.followUpQuestion,
+        searchTerm: researchKeywordFromFinding(research.followUpQuestion),
+        source: "research", grounded: true,
+        originText: "A search about " + (focusInterest.searchTerm || focusInterest.title) + " sparked this new question.",
+        originAt: research.at
+      });
+    }
     if (focusInterest.source === "exploration") {
       const sourceOuting = wanderings.find(function (outing) {
         return outing && outing.at === focusInterest.originAt &&
@@ -5252,12 +5356,12 @@ async function handleWander(options) {
         ? (researchMethod === "in the public encyclopedia"
           ? "Mabel found a useful encyclopedia page about “" + displayTitle + "” and kept a note."
           : "Mabel followed “" + displayTitle + "” through a few pages and kept a note.")
-        : "Mabel didn’t find what she was looking for, so she’ll look into this further later.";
+         : "This search sparked a new question for Mabel: “" + research.followUpQuestion + "”.";
     }
     return research;
   } catch (error) {
     if (wanderStatus) {
-      wanderStatus.textContent = "The Library connection is quiet for now. Mabel will look into this further later.";
+      wanderStatus.textContent = "The Library connection is quiet just now. Mabel will try another time.";
     }
     return null;
   }
