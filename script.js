@@ -3584,6 +3584,36 @@ function isUncleanWater(name) {
   return /\b(?:dirty|muddy|murky|stagnant|cloudy)\b/i.test(String(name || ""));
 }
 
+function deliverDueGiftPostboxNotes() {
+  ensureHollowWorld();
+  const current = Date.now();
+  let changed = false;
+  mabel.world.objects.forEach(function (gift) {
+    if (!gift || gift.source !== "visitor" || !gift.noticedAt || gift.postboxNoteAt) return;
+    if (mabelPostboxItems.some(function (entry) { return entry && entry.relatedGiftId === gift.id; })) {
+      gift.postboxNoteAt = gift.noticedAt;
+      changed = true;
+      return;
+    }
+    if (!Number.isFinite(Date.parse(gift.postboxNoteReadyAt || ""))) {
+      gift.postboxNoteReadyAt = new Date(Date.parse(gift.noticedAt) + 3 * 60 * 1000).toISOString();
+      changed = true;
+    }
+    if (Date.parse(gift.postboxNoteReadyAt) > current) return;
+    addMabelPostboxItem({
+      id: "gift-note-" + gift.id,
+      kind: "gift-reaction",
+      title: "A little question about your gift",
+      text: makeGiftPostboxNote(gift),
+      relatedGiftId: gift.id,
+      at: now()
+    });
+    gift.postboxNoteAt = now();
+    changed = true;
+  });
+  if (changed) saveMabel();
+}
+
 async function noticeNextVisitorGift() {
   ensureHollowWorld();
   const pendingGifts = mabel.world.objects.filter(function (item) {
@@ -3636,6 +3666,7 @@ async function noticeNextVisitorGift() {
     const researchableGift = ["object", "surprise", "treasure"].includes(gift.kind);
     const giftNeedsResearch = gift.kind === "object" || (parsedGiftReply.text !== rawGiftReply && researchableGift);
     gift.noticedAt = now();
+    gift.postboxNoteReadyAt = new Date(Date.now() + (3 + Math.random() * 5) * 60 * 1000).toISOString();
     gift.reaction = parsedGiftReply.text;
     gift.bindleNote = makeGiftKeepsakeNote(gift);
     gift.status = "noticed";
@@ -3684,14 +3715,6 @@ async function noticeNextVisitorGift() {
       why: gift.reaction,
       interest: data.spark && data.spark.id
     });
-    addMabelPostboxItem({
-      id: "gift-note-" + gift.id,
-      kind: "gift-reaction",
-      title: "A little question about your gift",
-      text: makeGiftPostboxNote(gift),
-      relatedGiftId: gift.id,
-      at: gift.noticedAt
-    });
     saveBindle();
     saveMabel();
     updateHomeObjects();
@@ -3706,9 +3729,7 @@ async function noticeNextVisitorGift() {
         if (!existing) target.unshift({ name: gift.name, note: gift.bindleNote, giftId: gift.id, edible: Boolean(gift.edible) });
         if (gift.status === "noticed" || gift.status === "waiting") gift.status = gift.edible ? "packed as food" : "saved for later";
       }
-      if (!mabelPostboxItems.some(function (item) { return item && item.relatedGiftId === gift.id; })) {
-        addMabelPostboxItem({ id: "gift-note-" + gift.id, kind: "gift-reaction", title: "A little question about your gift", text: makeGiftPostboxNote(gift), relatedGiftId: gift.id, at: gift.noticedAt });
-      }
+      if (!gift.postboxNoteReadyAt) gift.postboxNoteReadyAt = new Date(Date.parse(gift.noticedAt) + 3 * 60 * 1000).toISOString();
       saveBindle();
       updateHomeObjects();
       updatePage();
@@ -5843,6 +5864,7 @@ function startMabel() {
       const dueAt = Date.parse(gift && gift.noticeAfter || "");
       return gift && gift.source === "visitor" && !gift.noticedAt && Number.isFinite(dueAt) && Date.now() >= dueAt;
     });
+    deliverDueGiftPostboxNotes();
     if (dueGift) noticeNextVisitorGift();
   }, 60000);
 
