@@ -353,6 +353,8 @@ function addResearchIdea(candidate) {
       title: title,
       question: String(candidate.question || "What might Mabel discover about " + title + "?").trim().slice(0, 220),
       source: candidate.source || "Mabel’s thoughts",
+      searchTerm: String(candidate.searchTerm || "").trim().slice(0, 100),
+      requestType: candidate.requestType || "",
       originText: String(candidate.originText || candidate.evidenceText || candidate.reason || "A thought caught Mabel’s attention.").trim().slice(0, 260),
       originType: candidate.source || "Mabel’s thoughts",
       originAt: candidate.originAt || candidate.createdAt || now(),
@@ -366,6 +368,8 @@ function addResearchIdea(candidate) {
   } else {
     idea.evidence = Math.max(idea.evidence || 1, Number(candidate.evidence) || 1);
     idea.question = String(candidate.question || idea.question).trim().slice(0, 220);
+    if (candidate.searchTerm) idea.searchTerm = String(candidate.searchTerm).trim().slice(0, 100);
+    if (candidate.requestType) idea.requestType = candidate.requestType;
     if (candidate.originText || candidate.evidenceText || candidate.reason) {
       idea.originText = String(candidate.originText || candidate.evidenceText || candidate.reason).trim().slice(0, 260);
     }
@@ -1319,7 +1323,7 @@ function applyExplorationFinds(findings) {
   saveBindle();
 }
 
-function handleExplore() {
+async function handleExplore() {
   if (!mabel || (exploreButton && exploreButton.disabled)) return;
   if (exploreButton) exploreButton.disabled = true;
   if (exploreStatus) exploreStatus.textContent = "Mabel has set off to see what turns up.";
@@ -1346,15 +1350,37 @@ function handleExplore() {
       text: "Mabel went exploring and found " + (finds.map(function (item) { return item.name; }).join(" and ") || "a new path") + ".",
       why: finds.map(function (item) { return item.note; }).filter(Boolean).join(" ")
     });
+    const researchIdeasFromFinds = finds.map(function (found) {
+      const evidence = "Mabel found " + found.name + " while wandering. " + String(found.note || "");
+      return addResearchIdea({
+        id: "found-" + normalizeInterestTitle(found.name) + "-" + String(outing.at).replace(/[^0-9]/g, "").slice(-8),
+        title: found.name,
+        question: "Mabel found " + found.name + " while exploring. Research what this exact object is, why it might be made or used, or what surprising story it might have.",
+        searchTerm: researchKeywordFromFinding(found.name),
+        source: "exploration",
+        originText: evidence,
+        evidenceText: evidence,
+        originAt: outing.at,
+        grounded: true
+      });
+    }).filter(Boolean);
     saveWanderings();
     saveMabel();
     updatePage();
-    if (exploreStatus) exploreStatus.textContent = "Mabel came home with " + finds.map(function (item) { return item.name; }).join(" and ") + ".";
+    if (exploreStatus) exploreStatus.textContent = "Mabel found " + finds.map(function (item) { return item.name; }).join(" and ") + ". One discovery caught her attention; she is taking it to the Library.";
+    const researchLead = researchIdeasFromFinds[0];
+    if (researchLead) {
+      const result = await handleWander({ focusInterest: researchLead });
+      if (result && result.related) {
+        if (exploreStatus) exploreStatus.textContent = "Mabel found " + finds.map(function (item) { return item.name; }).join(" and ") + ", then looked into " + result.focusTitle + ". Her source and notes are in the Library.";
+      } else if (exploreStatus) {
+        exploreStatus.textContent = "Mabel found " + finds.map(function (item) { return item.name; }).join(" and ") + ". She kept a question about it for another Library visit.";
+      }
+    }
   } finally {
     if (exploreButton) exploreButton.disabled = false;
   }
 }
-
 function updateNeeds() {
   if (needComfort) {
     needComfort.value = mabel.needs.comfort;
@@ -1799,6 +1825,25 @@ function updateWanderings() {
         item.appendChild(detail);
       }
     });
+    if (trip.research) {
+      const research = document.createElement("p");
+      research.className = "explore-research";
+      research.textContent = trip.research.related
+        ? "Mabel followed this discovery to the Library: " + (trip.research.researchSummary || trip.research.searchQuestion)
+        : "Mabel kept a question about this discovery for another Library visit.";
+      item.appendChild(research);
+      const source = Array.isArray(trip.research.sources) ? trip.research.sources.find(function (entry) {
+        return entry && entry.title && safeExternalUrl(entry.url);
+      }) : null;
+      if (source) {
+        const link = document.createElement("a");
+        link.href = safeExternalUrl(source.url);
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = source.title;
+        item.appendChild(link);
+      }
+    }
     wanderingsElement.appendChild(item);
   });
 }
@@ -2417,6 +2462,49 @@ function normalizeMabelReply(payload) {
   return "";
 }
 
+function parseExplicitResearchRequest(message) {
+  const text = String(message || "").trim();
+  const requestPatterns = [
+    /\b(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:research|look into|look up|investigate|find out(?: more)?(?: about)?|learn about|read about)\s+(.+?)(?:[?.!]|$)/i,
+    /\b(?:i want|i'd like|i would like)\s+you\s+to\s+(?:please\s+)?(?:research|look into|look up|investigate|find out(?: more)?(?: about)?|learn about|read about)\s+(.+?)(?:[?.!]|$)/i,
+    /\bplease\s+(?:research|look into|look up|investigate|find out(?: more)?(?: about)?|learn about|read about)\s+(.+?)(?:[?.!]|$)/i,
+    /^(?:research|look into|look up|investigate|find out(?: more)?(?: about)?|learn about|read about)\s+(.+?)(?:[?.!]|$)/i
+  ];
+  let topic = "";
+  for (const pattern of requestPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) { topic = match[1].trim(); break; }
+  }
+  if (!topic) return null;
+  topic = topic
+    .replace(/\b(?:for me|when you can|and tell me what you find|and let me know)\b.*$/i, "")
+    .replace(/[\s,;:]+$/, "")
+    .trim();
+  if (/^(?:this|that|it|this more|that more|what we discussed)$/i.test(topic)) {
+    const previousVisitorMessage = conversation.slice().reverse().find(function (entry) {
+      return entry && entry.role === "user" && typeof entry.content === "string" && entry.content.trim();
+    });
+    if (previousVisitorMessage) topic = previousVisitorMessage.content.trim().slice(0, 90);
+  }
+  if (!topic || /^(?:this|that|it|something|anything)$/i.test(topic)) return null;
+  topic = topic.slice(0, 90);
+  const searchTerm = deriveResearchKeyword({ title: topic }) || topic;
+  return {
+    id: "visitor-request-" + Date.now(),
+    title: topic,
+    ideaTitle: topic,
+    question: "Mabel was asked to research " + topic + ". Find a useful fact that answers the request, then follow one surprising or amusing detail that a curious mouse might notice.",
+    searchTerm: searchTerm,
+    requestType: "visitor-request",
+    isManualResearchRequest: true,
+    source: "conversation",
+    originText: "A visitor asked Mabel to research: “" + text.slice(0, 180) + "”",
+    originAt: now(),
+    evidenceText: text,
+    grounded: true
+  };
+}
+
 async function handleVisitorMessage() {
   if (messagePending || !messageElement || !replyElement) return;
   const message = messageElement.value.trim();
@@ -2426,6 +2514,7 @@ async function handleVisitorMessage() {
     return;
   }
 
+  const explicitResearchRequest = parseExplicitResearchRequest(message);
   messagePending = true;
   if (sendButton) sendButton.disabled = true;
   if (chatStatusElement) chatStatusElement.textContent = "";
@@ -2454,7 +2543,9 @@ async function handleVisitorMessage() {
         visitorProfile: {
           facts: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; })
         },
-        replyGuidance: "Answer the newest visitor message directly and warmly. Use visitor facts to recognize them, but do not let older topics take over. Treat prior assistant replies as unverified and do not repeat details unless the visitor brings them up again.",
+        replyGuidance: explicitResearchRequest
+          ? "Answer the visitor directly. They have asked you to research “" + explicitResearchRequest.title + "”. Acknowledge the question warmly and say you will look into it; do not claim findings before the library search returns. Use recent turns to understand what they mean."
+          : "Answer the newest visitor message directly and warmly. Use visitor facts to recognize them, but do not let older topics take over. Treat prior assistant replies as unverified and do not repeat details unless the visitor brings them up again.",
         wanderings: wanderings.slice(0, 10).map(function (item) {
           return {
             title: item.title,
@@ -2541,6 +2632,47 @@ async function handleVisitorMessage() {
       mabelReply: parsedReply.text,
       sparkCandidate: data.spark || inlineSpark || null
     });
+
+    if (explicitResearchRequest) {
+      const researchIdea = addResearchIdea(explicitResearchRequest);
+      if (researchIdea) {
+        if (chatStatusElement) chatStatusElement.textContent = "Mabel is following that question to the Library…";
+        const result = await handleWander({
+          focusInterest: {
+            ...researchIdea,
+            ...explicitResearchRequest,
+            isManualResearchRequest: true
+          }
+        });
+        if (result && result.related) {
+          const followUp = document.createElement("div");
+          followUp.className = "chat-research-followup";
+          const heading = document.createElement("strong");
+          heading.textContent = "Mabel looked into " + result.focusTitle + " at the Library";
+          followUp.appendChild(heading);
+          if (result.researchSummary) {
+            const note = document.createElement("p");
+            note.textContent = result.researchSummary;
+            followUp.appendChild(note);
+          }
+          const source = Array.isArray(result.sources) ? result.sources.find(function (item) {
+            return item && safeExternalUrl(item.url) && item.title;
+          }) : null;
+          if (source) {
+            const link = document.createElement("a");
+            link.href = safeExternalUrl(source.url);
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = "Mabel’s library source: " + source.title;
+            followUp.appendChild(link);
+          }
+          replyElement.appendChild(followUp);
+          if (chatStatusElement) chatStatusElement.textContent = "Mabel has brought a research note back to the Library.";
+        } else if (chatStatusElement) {
+          chatStatusElement.textContent = "Mabel kept that question for another search; she couldn’t find a useful page just yet.";
+        }
+      }
+    }
 
     if (data.interest && data.interest.title) {
       recordSpark({ ...data.interest, source: "conversation", evidenceText: message + " " + parsedReply.text });
@@ -2781,6 +2913,16 @@ function deriveResearchKeyword(candidate) {
   return (ranked[0] && ranked[0][0]) || evidenceWords[0] || "";
 }
 
+function researchKeywordFromFinding(value) {
+  const core = String(value || "").split(/\b(?:with|that|which|near|beside)\b/i)[0];
+  const words = researchWords(core);
+  const genericLastWords = new Set(["thing", "item", "object", "piece", "figure", "toy", "scrap", "bit", "fragment"]);
+  for (let i = words.length - 1; i >= 0; i -= 1) {
+    if (!genericLastWords.has(words[i])) return words[i];
+  }
+  return deriveResearchKeyword({ title: value });
+}
+
 function researchMatchesFocus(text, focusInterest) {
   if (!focusInterest) return true;
   // Match the page against the specific source keyword, not the broad wording of Mabel's question.
@@ -2829,7 +2971,8 @@ function chooseAutonomousResearchFocus(boardNote) {
         question: idea.question,
         originText: idea.originText || "",
         originAt: idea.originAt || "",
-        searchTerm: searchTerm || idea.title,
+        searchTerm: idea.searchTerm || searchTerm || idea.title,
+        isManualResearchRequest: idea.requestType === "visitor-request",
         source: idea.source || "Mabel’s thoughts"
       });
     }
@@ -2844,11 +2987,17 @@ function chooseAutonomousResearchFocus(boardNote) {
   wanderings.slice(0, 8).forEach(function (outing) {
     (Array.isArray(outing.finds) ? outing.finds : []).forEach(function (find) {
       if (find && find.name) {
+        const originText = "During her wander on " + (outing.at || "recently") + ", Mabel found " + find.name + (find.note ? ": " + find.note : ".");
         candidates.push({
-          id: "found-" + normalizeInterestTitle(find.name),
+          id: "found-" + normalizeInterestTitle(find.name) + "-" + String(outing.at || "").replace(/[^0-9]/g, "").slice(-8),
           title: find.name,
-          question: "Mabel found " + find.name + " while exploring. Research what this exact object is, why it might be made or used, or what its history could be.",
-          source: "exploration"
+          question: "Mabel found " + find.name + " while exploring. Research what this exact object is, why it might be made or used, or what surprising story it might have.",
+          searchTerm: researchKeywordFromFinding(find.name),
+          originText: originText,
+          originAt: outing.at || now(),
+          evidenceText: originText,
+          source: "exploration",
+          grounded: true
         });
       }
     });
@@ -2886,7 +3035,9 @@ function chooseAutonomousResearchFocus(boardNote) {
     });
   }
 
-  const recentFocus = new Set(researchLog.slice(0, 6).map(function (entry) {
+  const recentFocus = new Set(researchLog.slice(0, 8).filter(function (entry) {
+    return entry.related !== false;
+  }).map(function (entry) {
     return normalizeInterestTitle(entry.focusTitle || entry.searchQuestion);
   }));
   const fresh = candidates.filter(function (item, index) {
@@ -2896,10 +3047,16 @@ function chooseAutonomousResearchFocus(boardNote) {
   });
   if (!fresh.length) return guidingAimResearchFocus();
 
+  const freshManualRequest = fresh.find(function (item) { return item.isManualResearchRequest; });
+  if (freshManualRequest) return freshManualRequest;
+
   const freshBoardNote = fresh.find(function (item) { return item.source === "visitor-board"; });
   if (freshBoardNote) return freshBoardNote;
   const freshFoodQuestion = fresh.find(function (item) { return String(item.id || "").startsWith("food-conversation-"); });
   if (freshFoodQuestion) return freshFoodQuestion;
+
+  const freshWanderingFind = fresh.find(function (item) { return item.source === "exploration"; });
+  if (freshWanderingFind) return freshWanderingFind;
 
   const ongoingGoals = fresh.filter(function (item) { return item.isOngoingGoal; });
   if (ongoingGoals.length) {
@@ -3078,8 +3235,12 @@ async function handleAutonomousMoment() {
     const researchInterval = 10 * 60 * 1000;
     const researchIsDue = Date.now() - lastAutonomousResearchAt >= researchInterval;
     if (canResearch && researchFocus && researchIsDue) {
-      await handleWander({ autonomous: true, focusInterest: researchFocus });
-      lastAutonomousResearchAt = Date.now();
+      const researchResult = await handleWander({ autonomous: true, focusInterest: researchFocus });
+      if (researchResult && researchResult.related) {
+        lastAutonomousResearchAt = Date.now();
+      } else {
+        lastAutonomousResearchAt = Date.now() - researchInterval + 60 * 1000;
+      }
       try { localStorage.setItem(autonomousResearchStorageKey, String(lastAutonomousResearchAt)); } catch (error) {}
     }
 
@@ -3698,10 +3859,14 @@ async function handleWander(options) {
         guidingAim: MABEL_GUIDING_AIM,
         researchInstruction: focusInterest.isGuidingAimStep
           ? "For this step in Mabel’s broad wish to understand life beyond her woods, choose one concrete, verifiable subject she has not researched recently. Let the web search choose a varied subject rather than using a fixed topic list. Search the public web, open relevant pages where possible, and return the actual specific subject as title, a search question, a useful fact, and a source URL/title. Keep it a one-time discovery unless it later keeps drawing her attention. Do not invent results or say she found an object."
-          : "Start with the specific keyword Mabel picked from the real source. Ask what an autonomous little mouse who has come to life might find funniest, strangest, or most unexpectedly relatable about this particular thing; let that angle shape a real question, rather than inserting a stock joke or returning to a fixed topic. Keep the keyword central. If food or an ingredient is involved, consider recipes or surprising food facts. Search the public web, compare two or three relevant search results, and return their real titles, URLs, and snippets. If the first search is off-topic, try a different question that still contains and follows the same keyword. Keep every claim tied to supplied sources. Do not switch to an unrelated object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
+          : focusInterest.isManualResearchRequest
+            ? "A visitor explicitly asked Mabel to research this topic. Answer the requested question directly with one useful finding grounded in real search results, then follow one naturally amusing, surprising, or curious detail from a mouse’s point of view. Keep the visitor’s topic central and return real source titles, URLs, and snippets. Do not claim anything the sources do not support."
+            : "Start with the specific keyword Mabel picked from the real source. Ask what an autonomous little mouse who has come to life might find funniest, strangest, or most unexpectedly relatable about this particular thing; let that angle shape a real question, rather than inserting a stock joke or returning to a fixed topic. Keep the keyword central. If food or an ingredient is involved, consider recipes or surprising food facts. Search the public web, compare two or three relevant search results, and return their real titles, URLs, and snippets. If the first search is off-topic, try a different question that still contains and follows the same keyword. Keep every claim tied to supplied sources. Do not switch to an unrelated object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
         autonomyPlan: focusInterest.isGuidingAimStep
           ? "This is one small step toward Mabel’s open-ended wish to build a fulfilling life by learning about the wider world. Choose a varied subject, keep the finding as a passing discovery, and do not turn it into an interest, career, or fixed trait unless it continues to matter across real moments."
-          : focusInterest.isOngoingGoal
+          : focusInterest.isManualResearchRequest
+            ? "Complete the visitor’s specific research request now. Give a concise, grounded answer and one natural follow-up thought. Treat this as a useful shared investigation, not an automatic new hobby."
+            : focusInterest.isOngoingGoal
             ? "This is one step in Mabel's longer-running interest. Continue from its saved steps and next action. Take one small, useful step, record what changed in her understanding, and suggest one next question. She may pause or change this interest if the evidence no longer draws her."
             : "This is a passing question, not automatically a hobby or long-term goal. Explore it once, record a useful fact and source, and only suggest a next step if there is a natural open question.",
         priorGoalSteps: Array.isArray(focusInterest.steps) ? focusInterest.steps.slice(0, 8) : [],
@@ -3788,6 +3953,25 @@ async function handleWander(options) {
 
     researchLog.unshift(research);
     researchLog = researchLog.slice(0, 30);
+    if (focusInterest.source === "exploration") {
+      const sourceOuting = wanderings.find(function (outing) {
+        return outing && outing.at === focusInterest.originAt &&
+          Array.isArray(outing.finds) && outing.finds.some(function (found) {
+            return normalizeInterestTitle(found.name) === normalizeInterestTitle(focusInterest.title);
+          });
+      });
+      if (sourceOuting) {
+        sourceOuting.research = {
+          at: research.at,
+          focusTitle: research.focusTitle,
+          searchQuestion: research.searchQuestion,
+          researchSummary: research.researchSummary,
+          sources: research.sources,
+          related: research.related
+        };
+        saveWanderings();
+      }
+    }
     saveResearchLog();
     if (relevant && typeof data.visitorNote === "string" && data.visitorNote.trim()) {
       addMabelPostboxItem({
@@ -3877,8 +4061,10 @@ async function handleWander(options) {
         ? "Mabel followed “" + displayTitle + "” through a few pages and kept a note."
         : "Mabel set that search aside and will try a clearer keyword next time.";
     }
+    return research;
   } catch (error) {
     if (wanderStatus) wanderStatus.textContent = "The library connection is quiet for now. Mabel will try again later.";
+    return null;
   }
 }
 
