@@ -661,6 +661,20 @@ footer {
   opacity: 0.7;
   font-size: 0.9em;
 }
+.visitor-board-messages .board-delete-button {
+  display: block;
+  margin-top: 0.55rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--lilac);
+  border-radius: 999px;
+  background: #fffafc;
+  color: #76577e;
+  font: inherit;
+  font-size: 0.86rem;
+}
+.visitor-board-messages .board-delete-button:hover {
+  background: var(--lavender-mist);
+}
 .interest-progress-note,
 .interest-source {
   display: block;
