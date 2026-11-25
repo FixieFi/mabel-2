@@ -1934,7 +1934,7 @@ function formatLibraryMethod(value) {
   if (method.includes("browser")) return "in the library’s web browser";
   if (method.includes("links")) return "following links on a library computer";
   if (method.includes("public pc")) return "on the library’s public PC";
-  if (method.includes("encyclopedia")) return "in a public encyclopedia";
+  if (method.includes("encyclopedia")) return "on a public encyclopedia website";
   return "on a library computer";
 }
 
@@ -1984,8 +1984,9 @@ function updateResearchLog() {
       String(entry.researchSummary || "").replace(/\s+/g, " ").trim().slice(0, 180);
     const sentence = document.createElement("p");
     sentence.className = "research-one-sentence";
-    sentence.appendChild(document.createTextNode("After thinking about “" + inspiration + "”, Mabel read "));
+    sentence.appendChild(document.createTextNode("After wondering about “" + inspiration + "”, Mabel looked into it"));
     if (firstSource) {
+      sentence.appendChild(document.createTextNode(" using "));
       const sourceUrl = safeExternalUrl(firstSource.url);
       if (sourceUrl) {
         const link = document.createElement("a");
@@ -1998,10 +1999,10 @@ function updateResearchLog() {
         sentence.appendChild(document.createTextNode(firstSource.title));
       }
     } else {
-      sentence.appendChild(document.createTextNode(entry.focusTitle || subject));
+      sentence.appendChild(document.createTextNode(" with a library search"));
     }
     if (fact) sentence.appendChild(document.createTextNode(" and learned: " + fact.replace(/[.!?]+$/, "") + "."));
-    else sentence.appendChild(document.createTextNode(" to learn a little more."));
+    else sentence.appendChild(document.createTextNode(" and kept exploring the topic."));
     item.appendChild(sentence);
     list.appendChild(item);
   });
@@ -4936,12 +4937,12 @@ async function handleWander(options) {
         interests: [focusInterest],
         guidingAim: MABEL_GUIDING_AIM,
         researchInstruction: focusInterest.isGiftResearch
-          ? "Research this exact visitor gift: " + focusInterest.title + ". Find a reliable source about what it is. If reliable sources confirm it is ordinary edible food, return edibleFood true and a brief source-grounded edibleReason. If it is not food or you cannot confirm it is safe to eat, return edibleFood false. Never guess that an unfamiliar object, plant, or mushroom is edible. Return real source titles, URLs, and snippets."
+          ? "Research this exact visitor gift: " + focusInterest.title + ". Search online for reliable web pages about what it is; do not describe the physical gift itself as something Mabel read. If reliable sources confirm it is ordinary edible food, return edibleFood true and a brief source-grounded edibleReason. If it is not food or you cannot confirm it is safe to eat, return edibleFood false. Never guess that an unfamiliar object, plant, or mushroom is edible. Return real webpage titles, URLs, and snippets."
           : focusInterest.isGuidingAimStep
-          ? "For this step in Mabel’s broad wish to understand life beyond her woods, choose one concrete, verifiable subject she has not researched recently. Let the web search choose a varied subject rather than using a fixed topic list. Search the public web, open relevant pages where possible, and return the actual specific subject as title, a search question, a useful fact, and a source URL/title. Keep it a one-time discovery unless it later keeps drawing her attention. Do not invent results or say she found an object."
+          ? "For this step in Mabel’s broad wish to understand life beyond her woods, choose one concrete, verifiable subject she has not researched recently. Let the web search choose a varied subject rather than using a fixed topic list. Search the public web, open relevant pages where possible, and return the actual specific subject as title, a search question, a useful fact, and a source URL/title. Treat sources as web pages she explored through the library computer, not as physical objects she found or necessarily as books she read. Keep it a one-time discovery unless it later keeps drawing her attention. Do not invent results or say she found an object."
           : focusInterest.isManualResearchRequest
             ? "A visitor explicitly asked Mabel to research this topic. Answer the requested question directly with one useful finding grounded in real search results, then follow one naturally amusing, surprising, or curious detail from a mouse’s point of view. Keep the visitor’s topic central and return real source titles, URLs, and snippets. Do not claim anything the sources do not support."
-            : "Start with the specific keyword Mabel picked from the real source. Ask what an autonomous little mouse who has come to life might find funniest, strangest, or most unexpectedly relatable about this particular thing; let that angle shape a real question, rather than inserting a stock joke or returning to a fixed topic. Keep the keyword central. If food or an ingredient is involved, consider recipes or surprising food facts. Search the public web, compare two or three relevant search results, and return their real titles, URLs, and snippets. If the first search is off-topic, try a different question that still contains and follows the same keyword. Keep every claim tied to supplied sources. Do not switch to an unrelated object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
+            : "Start with the specific keyword Mabel picked from the real source. Ask what an autonomous little mouse who has come to life might find funniest, strangest, or most unexpectedly relatable about this particular thing; let that angle shape a real question, rather than inserting a stock joke or returning to a fixed topic. Keep the keyword central. If food or an ingredient is involved, consider recipes or surprising food facts. Search the public web, compare two or three relevant search results, and return their real webpage titles, URLs, and snippets. If the first search is off-topic, try a different question that still contains and follows the same keyword. Keep every claim tied to supplied sources. Describe Mabel as looking something up or exploring web pages through the library computer; do not say she read the physical object or imply every source is a book. Do not switch to an unrelated object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
         autonomyPlan: focusInterest.isGuidingAimStep
           ? "This is one small step toward Mabel’s open-ended wish to build a fulfilling life by learning about the wider world. Choose a varied subject, keep the finding as a passing discovery, and do not turn it into an interest, career, or fixed trait unless it continues to matter across real moments."
           : focusInterest.isManualResearchRequest
