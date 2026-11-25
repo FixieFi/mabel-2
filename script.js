@@ -8,6 +8,7 @@ const activityLogElement = document.getElementById("activity-log");
 const messageElement = document.getElementById("message");
 const sendButton = document.getElementById("send");
 const replyElement = document.getElementById("reply");
+const chatStatusElement = document.getElementById("chat-status");
 const sparkNoticeCard = document.getElementById("spark-notice-card");
 const viewSparkButton = document.getElementById("view-spark");
 const galleryNoticeCard = document.getElementById("gallery-notice-card");
@@ -1934,6 +1935,7 @@ async function handleVisitorMessage() {
 
   messagePending = true;
   if (sendButton) sendButton.disabled = true;
+  if (chatStatusElement) chatStatusElement.textContent = "";
 
   try {
     captureVisitorFacts(message);
@@ -2062,6 +2064,9 @@ async function handleVisitorMessage() {
   } catch (error) {
     console.warn("Mabel chat request failed.", error);
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
+    if (chatStatusElement) {
+      chatStatusElement.textContent = "Connection detail: " + String(error && error.message || "unknown chat error");
+    }
     if (isArtworkRequest(message)) {
       await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
     }
@@ -2493,7 +2498,7 @@ function recordSpark(candidate) {
       title: title,
       question: question,
       reason: String(candidate.reason || "A thought kept catching at Mabel’s attention.").slice(0, 220),
-      source: "conversation",
+      source: candidate.source || "conversation",
       pull: 0.34,
       evidence: 1,
       stage: "noticed",
@@ -2522,7 +2527,7 @@ function recordSpark(candidate) {
       pull: spark.pull,
       evidence: spark.evidence,
       stage: spark.stage,
-      source: "conversation",
+      source: candidate.source || "conversation",
       createdAt: spark.createdAt
     };
     mabel.interests.unshift(interest);
