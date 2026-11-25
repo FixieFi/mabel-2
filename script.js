@@ -1248,7 +1248,7 @@ function saveToMabelGallery(artwork) {
   updateArtExhibition();
   updateVisitorProfile();
   refreshGalleryNotice();
-  if (artwork.source === "autonomous" && artwork.inspirationContext) {
+  if (artwork.source === "autonomous") {
     fetch(MABEL_BRAIN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
