@@ -6464,7 +6464,6 @@ async function handleWander(options) {
         referenceFact: reference.fact || "",
         referenceRetry: true,
         referenceImageInstruction: "Study the actual image at the supplied reference URL. Use its visible shape and distinguishing details to guide a fresh drawing of " + focusInterest.title + " in Mabel’s handmade style; do not paste, trace, or embed the reference image.",
-        referenceRetry: true,
         inspiration: inspiration
       };
       let refinedArtwork = await requestMabelArtwork(artContext, null);
