@@ -1202,7 +1202,7 @@ function loadBindle() {
   };
 }
 
-function loadLastAutonomousMoment {
+function loadLastAutonomousMoment() {
   try {
     const saved = localStorage.getItem(autonomousStorageKey);
 
