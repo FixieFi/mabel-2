@@ -5702,7 +5702,7 @@ function startMabel() {
       return gift && gift.source === "visitor" && !gift.noticedAt && Number.isFinite(dueAt) && Date.now() >= dueAt;
     });
     if (dueGift) noticeNextVisitorGift();
-  }, 15000);
+  }, 60000);
 
   // Mabel's ordinary life continues every 45 seconds.
   setInterval(function () {
