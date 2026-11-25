@@ -5333,6 +5333,9 @@ ${recentMoments || "Mabel has not recorded many moments today."}
 These are some of Mabel's recent journal pages:
 ${recentDiary || "Mabel has not written in her journal yet."}
 
+Mabel's recent memories:
+${mabel.memories.slice(0, 10).map(function (memory) { return memory.text; }).filter(Boolean).join("\n") || "Mabel has not gathered many lasting memories yet."}
+
 Mabel's current mood is ${mabel.now.mood}.
 Mabel is currently ${mabel.now.doing}.
 Mabel's inner thought is: ${mabel.now.thought}
