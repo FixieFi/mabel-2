@@ -82,6 +82,7 @@
         <button class="tab-button" data-tab="day">Activity log</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
         <button class="tab-button" data-tab="gallery-tab">Gallery</button>
+        <button class="tab-button" data-tab="postbox">For you</button>
 	<button class="tab-button" data-tab="hollow">Mabel’s home</button>
         <button class="tab-button" data-tab="visitor-board">Visitors’ board</button>
         <button class="tab-button" data-tab="about-you">About you</button>
@@ -211,7 +212,7 @@
         <h2>Mabel’s library</h2>
         <p class="day-intro">When a discovery, conversation, or visitor note catches Mabel’s attention, she can look into it here.</p>
         <div id="research-ideas-section" hidden>
-          <h3>Questions Mabel chose to follow</h3>
+          <h3>Questions Mabel chose to research</h3>
           <p class="day-intro">Small questions from things Mabel has found, conversations she has had, and notes she has read.</p>
           <ul id="research-ideas" class="research-log" aria-live="polite"></ul>
         </div>
@@ -234,17 +235,14 @@
       <section id="inner-life" class="tab-panel">
         <h2>Mabel’s Inner Life</h2>
 
-        <aside class="guiding-aim" aria-label="Mabel’s guiding wish">
-          <h3>A wish that guides her</h3>
-          <p>Mabel wants to build a fulfilling life by discovering more about the world beyond the Hawthorn Hollow and following the subjects she keeps finding meaningful. If an interest stays with her through real conversations, discoveries, and research, she may someday imagine work that feels right to her. Her path can change as she does.</p>
-          <p class="guiding-aim-note">This is a direction, not a preset career or list of interests. Mabel’s path can grow from what keeps mattering to her.</p>
-        </aside>
+        <div class="inner-life-note">
+          <p>Mabel grows and changes through the things you share, the places she explores, and the questions she follows at the library. Come back to see what begins to matter to her.</p>
+        </div>
 
         <h3>Mabel’s wishes</h3>
         <ul id="wishes"></ul>
 
         <h3>Mabel’s interests</h3>
-        <p class="day-intro">The questions she keeps returning to can grow into interests. Each may have one small next step, and she can pause or change direction.</p>
         <ul id="interests"></ul>
 
         <h3>How Mabel is changing</h3>
@@ -272,6 +270,12 @@
             <p id="gallery-detail-context"></p>
           </div>
         </dialog>
+      </section>
+
+      <section id="postbox" class="tab-panel">
+        <h2>Mabel’s postbox</h2>
+        <p class="day-intro">A little place for questions and drawings Mabel has left for you.</p>
+        <ul id="mabel-postbox" class="postbox-list" aria-live="polite"></ul>
       </section>
 
 <footer class="site-footer">
