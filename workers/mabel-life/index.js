@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   interests: [],
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
   artExhibition: { weekOf: null, candidates: [], works: [] },
+  artReferences: [],
   personality: {
     core_traits: ["gentle", "curious", "thoughtful", "quietly playful"],
     evolved_traits: [],
@@ -132,6 +133,7 @@ async function loadState(env) {
   state.personality.last_reflection_date = cleanText(state.personality.last_reflection_date, 10) || null;
   state.memories = Array.isArray(state.memories) ? state.memories.slice(0, MAX_MEMORIES) : [];
   state.knowledge = Array.isArray(state.knowledge) ? state.knowledge.slice(0, 40) : [];
+  state.artReferences = Array.isArray(state.artReferences) ? state.artReferences.slice(0, 40) : [];
   state.reflections = Array.isArray(state.reflections) ? state.reflections.slice(0, 16) : [];
   state.interests = Array.isArray(state.interests)
     ? state.interests.filter(item => item && !LEGACY_SEEDS.has(item.id)).slice(0, MAX_INTERESTS)
@@ -616,6 +618,34 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
+  if (kind === "art-reference") {
+    const supplied = data.artReference && typeof data.artReference === "object" ? data.artReference : {};
+    const subject = cleanText(supplied.subject, 100);
+    const imageUrl = cleanText(supplied.imageUrl, 500);
+    const pageUrl = cleanText(supplied.pageUrl, 500);
+    let imageHost = "";
+    let pageHost = "";
+    try { imageHost = new URL(imageUrl).hostname; pageHost = new URL(pageUrl).hostname; } catch {}
+    if (!subject || !(imageHost === "wikipedia.org" || imageHost.endsWith(".wikipedia.org") || imageHost === "wikimedia.org" || imageHost.endsWith(".wikimedia.org")) ||
+        !(pageHost === "wikipedia.org" || pageHost.endsWith(".wikipedia.org") || pageHost === "wikimedia.org" || pageHost.endsWith(".wikimedia.org"))) {
+      return jsonResponse({ error: "A verified encyclopedia reference is needed." }, 400);
+    }
+    const key = makeId(subject);
+    const saved = {
+      subject,
+      imageUrl,
+      pageUrl,
+      sourceTitle: cleanText(supplied.sourceTitle, 160),
+      fact: cleanText(supplied.fact, 260),
+      at: cleanText(supplied.at, 40) || new Date().toISOString()
+    };
+    state.artReferences = Array.isArray(state.artReferences) ? state.artReferences : [];
+    state.artReferences = state.artReferences.filter(item => makeId(item.subject || "") !== key);
+    state.artReferences.unshift(saved);
+    state.artReferences = state.artReferences.slice(0, 40);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, artReference: saved });
+  }
   if (kind === "hobby") {
     const supplied = data.interest && typeof data.interest === "object" ? data.interest : {};
     const title = cleanText(supplied.title, 100);
@@ -701,6 +731,17 @@ async function handleVisitorBoard(request, env) {
     return jsonResponse({ error: "Please write a note first." }, 400);
   }
 
+  if (data?.action === "delete") {
+    const id = cleanText(data?.id, 100);
+    const before = messages.length;
+    messages = messages.filter(item => item && item.id !== id);
+    if (!id || messages.length === before) {
+      return jsonResponse({ error: "That notice could not be found." }, 404);
+    }
+    await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+    return jsonResponse({ ok: true });
+  }
+
   const message = cleanText(data?.message, 280);
   const name = cleanText(data?.name, 40);
   if (!message) {
@@ -751,6 +792,7 @@ export default {
           interests: state.interests,
           crafting: state.crafting,
           artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
+          artReferences: state.artReferences,
           updatedAt: state.lastLifeUpdate
         }
       });
