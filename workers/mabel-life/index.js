@@ -94,7 +94,9 @@ function cleanExhibitionArtwork(raw) {
     selfPortrait: Boolean(raw.selfPortrait),
     symbols: Array.isArray(raw.symbols) ? raw.symbols.map(item => cleanText(item, 30)).filter(Boolean).slice(0, 3) : [],
     at: cleanText(raw.at, 40, new Date().toISOString()),
-    score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 0
+    score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 0,
+    votes: Math.max(0, Number(raw.votes) || 0),
+    votedBy: Array.isArray(raw.votedBy) ? raw.votedBy.map(item => cleanText(item, 100)).filter(Boolean).slice(0, 200) : []
   };
 }
 
@@ -111,7 +113,7 @@ function addArtExhibitionCandidate(state, raw) {
   exhibition.candidates.push(artwork);
   exhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
   exhibition.candidates = exhibition.candidates.slice(0, 24);
-  exhibition.works = exhibition.candidates.slice(0, 8).map(({ score, ...item }) => item);
+  exhibition.works = exhibition.candidates.slice(0, 8).map(({ score, votedBy, ...item }) => item);
   return true;
 }
 
@@ -157,7 +159,7 @@ async function loadState(env) {
   } else {
     const candidates = Array.isArray(state.artExhibition.candidates) ? state.artExhibition.candidates.map(cleanExhibitionArtwork).filter(Boolean) : [];
     state.artExhibition.candidates = candidates.slice(0, 24);
-    state.artExhibition.works = state.artExhibition.candidates.slice(0, 8).map(({ score, ...item }) => item);
+    state.artExhibition.works = state.artExhibition.candidates.slice(0, 8).map(({ score, votedBy, ...item }) => item);
   }
   return state;
 }
@@ -624,6 +626,24 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
+  if (kind === "exhibition-vote") {
+    const artworkId = makeId(cleanText(data.artworkId, 140));
+    const visitorId = cleanText(data.visitorId, 100);
+    const bond = Math.max(0, Number(data.bond) || 0);
+    if (!visitorId || bond < 35) return jsonResponse({ error: "A closer friendship with Mabel is needed before voting." }, 403);
+    const candidate = state.artExhibition.candidates.find(item => item && item.id === artworkId);
+    if (!candidate) return jsonResponse({ error: "That drawing is not in this week’s exhibition shortlist." }, 404);
+    candidate.votedBy = Array.isArray(candidate.votedBy) ? candidate.votedBy : [];
+    if (candidate.votedBy.includes(visitorId)) return jsonResponse({ ok: true, alreadyVoted: true });
+    candidate.votedBy.push(visitorId);
+    candidate.votedBy = candidate.votedBy.slice(-200);
+    candidate.votes = Math.max(0, Number(candidate.votes) || 0) + 1;
+    candidate.score = (Number(candidate.score) || 0) + 0.75;
+    state.artExhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
+    state.artExhibition.works = state.artExhibition.candidates.slice(0, 8).map(({ score, votedBy, ...item }) => item);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, votes: candidate.votes });
+  }
   if (kind === "art-reference") {
     const supplied = data.artReference && typeof data.artReference === "object" ? data.artReference : {};
     const subject = cleanText(supplied.subject, 100);
