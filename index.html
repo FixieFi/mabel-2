@@ -88,36 +88,39 @@
         <button class="tab-button" data-tab="about-you">About you</button>
       </div>
 
+      <aside id="spark-notice-card" class="spark-notice-card hidden" aria-live="polite" aria-atomic="true">
+        <span class="spark-notice-star" aria-hidden="true">✧</span>
+        <div>
+          <strong id="spark-notice-heading">A new hobby spark has appeared</strong>
+          <p id="spark-notice-text">Mabel is curious about a new hobby.</p>
+        </div>
+        <button id="view-spark" type="button">See in Inner Life</button>
+      </aside>
+      <aside id="gallery-notice-card" class="spark-notice-card gallery-notice-card hidden" aria-live="polite" aria-atomic="true">
+        <span class="spark-notice-star" aria-hidden="true">✧</span>
+        <div>
+          <strong>A new painting has entered the Gallery</strong>
+          <p id="gallery-notice-text">Mabel made something while following her own curiosity.</p>
+        </div>
+        <button id="view-gallery" type="button">See the Gallery</button>
+      </aside>
+      <aside id="visitor-gift-notice-card" class="spark-notice-card visitor-gift-notice-card hidden" aria-live="polite" aria-atomic="true">
+        <span class="spark-notice-star" aria-hidden="true">✧</span>
+        <div>
+          <strong>Mabel noticed your gift</strong>
+          <p id="visitor-gift-notice-text"></p>
+        </div>
+        <button id="view-visitor-gift" type="button">See her bindle</button>
+        <button id="dismiss-visitor-gift" type="button" class="notice-dismiss">Dismiss</button>
+      </aside>
       <section id="chat" class="tab-panel active">
-        <h2>Leave Mabel a message</h2>
-
-        <textarea
-          id="message"
-          rows="4"
-          placeholder="Say hello to Mabel..."
-        ></textarea>
-
-        <button id="send">Send</button>
+        <h2>One visit with Mabel</h2>
+        <p class="day-intro chat-one-turn-note">Leave one message. Mabel replies once, then this visit ends. Start another visit whenever you have something else to share.</p>
+        <label for="message" class="chat-message-label">Your message</label>
+        <textarea id="message" rows="4" placeholder="Say hello to Mabel..."></textarea>
+        <button id="send">Send message</button>
         <p id="chat-status" class="chat-status" aria-live="polite"></p>
-
-        <div id="reply" class="reply"></div>
-
-        <aside id="spark-notice-card" class="spark-notice-card hidden" aria-live="polite" aria-atomic="true">
-          <span class="spark-notice-star" aria-hidden="true">✧</span>
-          <div>
-            <strong>A new spark has appeared</strong>
-            <p>Mabel’s Inner Life has changed.</p>
-          </div>
-          <button id="view-spark" type="button">View in Inner Life</button>
-        </aside>
-        <aside id="gallery-notice-card" class="spark-notice-card gallery-notice-card hidden" aria-live="polite" aria-atomic="true">
-          <span class="spark-notice-star" aria-hidden="true">✧</span>
-          <div>
-            <strong>A new painting has entered the Gallery</strong>
-            <p id="gallery-notice-text">Mabel made something while following her own curiosity.</p>
-          </div>
-          <button id="view-gallery" type="button">See the Gallery</button>
-        </aside>
+        <div id="chat-exchanges" class="chat-exchanges" aria-live="polite"></div>
       </section>
 
 <div id="hollow" class="tab-panel">
@@ -212,11 +215,17 @@
         <h2>Mabel’s library</h2>
         <p class="day-intro">When a discovery, conversation, or visitor note catches Mabel’s attention, she can look into it here.</p>
         <div id="research-ideas-section" hidden>
-          <h3>Questions Mabel chose to research</h3>
-          <p class="day-intro">Small questions from things Mabel has found, conversations she has had, and notes she has read.</p>
+          <h3>Thoughts Mabel may follow up on</h3>
+          <p class="day-intro">Small questions and curiosities gathered from things she finds, people she meets, and notes she reads.</p>
           <ul id="research-ideas" class="research-log" aria-live="polite"></ul>
         </div>
-        <p id="wander-status" aria-live="polite">Mabel will add a note here when she visits the library.</p>
+        <section class="item-knowledge-section">
+          <h3>Things Mabel has learned about</h3>
+          <p class="day-intro">Little facts visitors have shared about objects and ideas that caught her attention.</p>
+          <ul id="item-knowledge" class="research-log"></ul>
+        </section>
+        <h3>Research Mabel has done</h3>
+        <p id="wander-status" aria-live="polite">The Library is quiet until Mabel has a question she wants to look into.</p>
         <ul id="research-log" class="research-log" aria-live="polite"></ul>
       </section>
 
