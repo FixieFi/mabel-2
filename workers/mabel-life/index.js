@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
   memories: [],
   interests: [],
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
+  artExhibition: { weekOf: null, candidates: [], works: [] },
   personality: {
     core_traits: ["gentle", "curious", "thoughtful", "quietly playful"],
     evolved_traits: [],
@@ -64,6 +65,54 @@ function makeId(value) {
     .replace(/^-+|-+$/g, "") || "thread-" + Date.now();
 }
 
+function artExhibitionWeekOf(date = new Date()) {
+  const monday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  return monday.toISOString().slice(0, 10);
+}
+
+function cleanExhibitionArtwork(raw) {
+  if (!raw || typeof raw !== "object" || raw.source !== "autonomous") return null;
+  const title = cleanText(raw.title, 100);
+  if (!title) return null;
+  const palette = Array.isArray(raw.palette)
+    ? raw.palette.filter(colour => typeof colour === "string" && /^#[0-9a-fA-F]{6}$/.test(colour)).slice(0, 3)
+    : [];
+  const seed = Number(raw.seed);
+  return {
+    id: makeId(cleanText(raw.id, 140, title + "-" + (Number.isFinite(seed) ? seed : ""))),
+    source: "autonomous",
+    title,
+    description: "A little drawing Mabel chose for this week’s exhibition.",
+    kind: cleanText(raw.kind, 30, "moment"),
+    palette,
+    motif: cleanText(raw.motif, 30, "memory"),
+    seed: Number.isInteger(seed) ? seed >>> 0 : 0,
+    subject: cleanText(raw.subject, 60),
+    selfPortrait: Boolean(raw.selfPortrait),
+    symbols: Array.isArray(raw.symbols) ? raw.symbols.map(item => cleanText(item, 30)).filter(Boolean).slice(0, 3) : [],
+    at: cleanText(raw.at, 40, new Date().toISOString()),
+    score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 0
+  };
+}
+
+function addArtExhibitionCandidate(state, raw) {
+  const artwork = cleanExhibitionArtwork(raw);
+  if (!artwork) return false;
+  const exhibition = state.artExhibition;
+  if (exhibition.candidates.some(item => item.id === artwork.id)) return true;
+  const words = (artwork.title + " " + artwork.description + " " + cleanText(raw.inspirationContext, 180)).toLowerCase().match(/[a-z]{4,}/g) || [];
+  const interestWords = state.interests
+    .filter(item => item && (item.kind === "hobby" || item.stage === "growing" || item.stage === "pursuing"))
+    .flatMap(item => String(item.title || "").toLowerCase().match(/[a-z]{4,}/g) || []);
+  artwork.score = Math.random() * 0.35 + interestWords.filter(word => words.includes(word)).length * 0.5;
+  exhibition.candidates.push(artwork);
+  exhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
+  exhibition.candidates = exhibition.candidates.slice(0, 24);
+  exhibition.works = exhibition.candidates.slice(0, 8).map(({ score, ...item }) => item);
+  return true;
+}
+
 async function loadState(env) {
   const saved = await env.MABEL_STATE.get(MABEL_KEY);
   let state = structuredClone(DEFAULT_STATE);
@@ -93,6 +142,15 @@ async function loadState(env) {
   state.crafting.projects = Array.isArray(state.crafting.projects) ? state.crafting.projects.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
   state.crafting.artInspirations = Array.isArray(state.crafting.artInspirations) ? state.crafting.artInspirations.filter(item => item && typeof item.key === "string").slice(0, 12) : [];
   state.crafting.lastIdeaAt = cleanText(state.crafting.lastIdeaAt, 40) || null;
+  const currentExhibitionWeek = artExhibitionWeekOf();
+  state.artExhibition = state.artExhibition && typeof state.artExhibition === "object" ? state.artExhibition : structuredClone(DEFAULT_STATE.artExhibition);
+  if (state.artExhibition.weekOf !== currentExhibitionWeek) {
+    state.artExhibition = { weekOf: currentExhibitionWeek, candidates: [], works: [] };
+  } else {
+    const candidates = Array.isArray(state.artExhibition.candidates) ? state.artExhibition.candidates.map(cleanExhibitionArtwork).filter(Boolean) : [];
+    state.artExhibition.candidates = candidates.slice(0, 24);
+    state.artExhibition.works = state.artExhibition.candidates.slice(0, 8).map(({ score, ...item }) => item);
+  }
   return state;
 }
 
@@ -599,12 +657,15 @@ async function handleSharedWorldEvent(request, env) {
   } else if (kind === "artwork") {
     const title = cleanText(data.title, 100);
     const inspiration = cleanText(data.inspiration, 220);
-    if (!title || !inspiration) return jsonResponse({ error: "The artwork needs a title and inspiration." }, 400);
-    const key = makeId(title + " " + inspiration);
-    if (!state.crafting.artInspirations.some(item => item.key === key)) {
-      state.crafting.artInspirations.unshift({ key, title, inspiration, at: new Date().toISOString() });
-      state.crafting.artInspirations = state.crafting.artInspirations.slice(0, 12);
+    if (!title || (!inspiration && !data.exhibitionArtwork)) return jsonResponse({ error: "The artwork needs a title and inspiration." }, 400);
+    if (inspiration) {
+      const key = makeId(title + " " + inspiration);
+      if (!state.crafting.artInspirations.some(item => item.key === key)) {
+        state.crafting.artInspirations.unshift({ key, title, inspiration, at: new Date().toISOString() });
+        state.crafting.artInspirations = state.crafting.artInspirations.slice(0, 12);
+      }
     }
+    if (data.exhibitionArtwork) addArtExhibitionCandidate(state, data.exhibitionArtwork);
   } else return jsonResponse({ error: "That world event is not recognized." }, 400);
   await saveState(env, state);
   return jsonResponse({ ok: true });
@@ -689,6 +750,7 @@ export default {
           personality: state.personality,
           interests: state.interests,
           crafting: state.crafting,
+          artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
           updatedAt: state.lastLifeUpdate
         }
       });

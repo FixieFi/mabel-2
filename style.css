@@ -395,6 +395,10 @@ footer {
 }
 
 .bindle-card {
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   margin-top: 14px;
   padding: 18px;
   background:
@@ -437,6 +441,35 @@ footer {
   color: var(--plum);
   font-size: 0.9rem;
   font-style: italic;
+}
+
+.exhibition-period {
+  margin: 0 0 14px;
+  color: var(--plum);
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.art-exhibition-stream {
+  min-height: 120px;
+}
+
+.browser-reset {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px dashed rgba(107, 74, 143, 0.36);
+  border-radius: 16px;
+  background: rgba(255, 248, 238, 0.7);
+}
+
+.browser-reset h3 {
+  margin-top: 0;
+}
+
+.browser-reset p {
+  margin-bottom: 12px;
+  color: var(--plum);
+  font-size: 0.92rem;
 }
 
 .site-footer {
