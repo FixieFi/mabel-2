@@ -232,7 +232,7 @@
           <div class="explore-scene-mark" aria-hidden="true">🍃 ✦ 🍓</div>
           <div class="explore-scene-copy">
             <h3>A little wander</h3>
-            <p>The path beyond Mabel’s door is full of oddments, snacks, and small surprises. Sometimes a finding catches Mabel’s interest enough to be researched at the library.</p>
+            <p>The path beyond Mabel’s door is full of oddments, snacks, and small surprises. Mabel may decide for herself which discoveries stay on her mind.</p>
             <button id="explore" class="explore-button" type="button"><span aria-hidden="true">✿</span> Go exploring <span aria-hidden="true">✿</span></button>
             <p id="explore-status" aria-live="polite">Mabel hasn’t set out just yet.</p>
           </div>
@@ -241,6 +241,11 @@
           <h3>Along Mabel’s path</h3>
           <p class="day-intro">A little trail of what she found and what caught her eye.</p>
           <ul id="wanderings" class="wandering-trail"></ul>
+        </div>
+        <div class="explore-trail-card autonomous-explorer-card">
+          <h3>Mabel’s own wanderings</h3>
+          <p class="day-intro">Sometimes she sets out because of what she needs or what is pulling at her curiosity.</p>
+          <ul id="autonomous-explorer-log" class="autonomous-explorer-log"></ul>
         </div>
       </section>
 
@@ -280,8 +285,11 @@
         <ul id="interests"></ul>
 
         <h3>Mabel’s making</h3>
-        <p class="day-intro">Small invention ideas made from things Mabel has actually found. Her skill and ideas live in the shared Brain, so they can grow across visitors.</p>
+        <p class="day-intro">No button is needed: Mabel gathers materials on her own wanders. When she has at least two and an idea catches her, she may try joining them into a useful mouse-sized object. The shared Brain keeps her materials and projects across visitors.</p>
         <p id="crafting-level" class="day-intro">Mabel has not tried crafting yet.</p>
+        <h4>Things she could use</h4>
+        <ul id="crafting-materials" class="brain-trait-list crafting-materials"></ul>
+        <h4>Ideas she is trying</h4>
         <ul id="crafting-projects" class="brain-trait-list"></ul>
 
         <h3>What’s on Mabel’s mind?</h3>
@@ -336,6 +344,7 @@
           <div id="gallery-detail-image" class="gallery-detail-image"></div>
           <h3 id="gallery-detail-title"></h3>
           <time id="gallery-detail-time"></time>
+          <time id="gallery-detail-exhibition-date" class="gallery-detail-exhibition-date" hidden></time>
           <p id="gallery-detail-description"></p>
           <div id="gallery-detail-context-block" class="gallery-detail-context">
             <strong id="gallery-detail-context-label">What led to it</strong>

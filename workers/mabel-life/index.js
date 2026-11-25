@@ -86,6 +86,11 @@ function cleanExhibitionArtwork(raw) {
     source: "autonomous",
     title,
     description: "A little drawing Mabel chose for this week’s exhibition.",
+    exhibitionReason: cleanText(raw.exhibitionReason, 220, cleanText(raw.inspirationTitle, 100)
+      ? "Mabel chose this because a thought about " + cleanText(raw.inspirationTitle, 100) + " stayed with her."
+      : "She was especially pleased with the colours and little details in this one."),
+    exhibitionAddedAt: cleanText(raw.exhibitionAddedAt, 40),
+    inspirationTitle: cleanText(raw.inspirationTitle, 100),
     kind: cleanText(raw.kind, 30, "moment"),
     palette,
     motif: cleanText(raw.motif, 30, "memory"),
@@ -98,6 +103,23 @@ function cleanExhibitionArtwork(raw) {
     votes: Math.max(0, Number(raw.votes) || 0),
     votedBy: Array.isArray(raw.votedBy) ? raw.votedBy.map(item => cleanText(item, 100)).filter(Boolean).slice(0, 200) : []
   };
+}
+
+function refreshArtExhibitionWorks(exhibition) {
+  const previousIds = new Set((Array.isArray(exhibition.works) ? exhibition.works : []).map(item => item && item.id).filter(Boolean));
+  const selected = (Array.isArray(exhibition.candidates) ? exhibition.candidates : []).slice(0, 8);
+  const selectedAt = new Date().toISOString();
+  selected.forEach(item => {
+    if (!item.exhibitionAddedAt) item.exhibitionAddedAt = previousIds.has(item.id)
+      ? (item.at || selectedAt)
+      : selectedAt;
+    if (!item.exhibitionReason) {
+      item.exhibitionReason = item.inspirationTitle
+        ? "Mabel chose this because a thought about " + item.inspirationTitle + " stayed with her."
+        : "She was especially pleased with the colours and little details in this one.";
+    }
+  });
+  exhibition.works = selected.map(({ score, votedBy, ...item }) => item);
 }
 
 function addArtExhibitionCandidate(state, raw) {
@@ -113,7 +135,7 @@ function addArtExhibitionCandidate(state, raw) {
   exhibition.candidates.push(artwork);
   exhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
   exhibition.candidates = exhibition.candidates.slice(0, 24);
-  exhibition.works = exhibition.candidates.slice(0, 8).map(({ score, votedBy, ...item }) => item);
+  refreshArtExhibitionWorks(exhibition);
   return true;
 }
 
@@ -159,7 +181,7 @@ async function loadState(env) {
   } else {
     const candidates = Array.isArray(state.artExhibition.candidates) ? state.artExhibition.candidates.map(cleanExhibitionArtwork).filter(Boolean) : [];
     state.artExhibition.candidates = candidates.slice(0, 24);
-    state.artExhibition.works = state.artExhibition.candidates.slice(0, 8).map(({ score, votedBy, ...item }) => item);
+    refreshArtExhibitionWorks(state.artExhibition);
   }
   return state;
 }
@@ -640,7 +662,7 @@ async function handleSharedWorldEvent(request, env) {
     candidate.votes = Math.max(0, Number(candidate.votes) || 0) + 1;
     candidate.score = (Number(candidate.score) || 0) + 0.75;
     state.artExhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
-    state.artExhibition.works = state.artExhibition.candidates.slice(0, 8).map(({ score, votedBy, ...item }) => item);
+    refreshArtExhibitionWorks(state.artExhibition);
     await saveState(env, state);
     return jsonResponse({ ok: true, votes: candidate.votes });
   }

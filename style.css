@@ -1559,3 +1559,26 @@ button#explore.explore-button:disabled {
   cursor: pointer;
 }
 .gallery-exhibition-vote:disabled { opacity: .62; cursor: not-allowed; }
+
+.autonomous-explorer-card { margin-top: 16px; }
+
+.autonomous-explorer-log {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  margin: 0;
+  padding: 8px 14px 8px 28px;
+  background: rgba(243, 234, 255, 0.45);
+  border: 1px solid rgba(107, 74, 143, 0.12);
+  border-radius: 16px;
+}
+
+.autonomous-explorer-log > li { padding: 11px 10px 13px; border-bottom: 1px dashed rgba(127, 155, 109, 0.32); }
+.autonomous-explorer-log > li:last-child { border-bottom: 0; }
+.autonomous-explorer-log time { color: var(--plum); font-size: .88rem; }
+.autonomous-wander-motive { margin: 6px 0; color: var(--plum); font-style: italic; }
+
+.gallery-detail-exhibition-date { color: var(--deep-plum); font-weight: 600; }
+.explore-follow-up { margin: 7px 0; padding: 8px 10px; color: var(--deep-plum); background: rgba(255, 240, 200, .62); border-left: 3px solid var(--soft-purple); border-radius: 8px; font-style: italic; }
+.crafting-materials { max-height: 180px; overflow-y: auto; overscroll-behavior: contain; }
