@@ -62,6 +62,7 @@ const MABEL_WANDER_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-wan
 const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
 const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
+const MABEL_BRAIN_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-brain";
 
 const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-session-v3";
@@ -90,6 +91,8 @@ const legacySeedInterestIds = new Set([
 let mabel = null;
 let viewedVisitorGiftNoticeKeys = new Set();
 let giftNoticeInProgress = false;
+let sharedMabelBrain = null;
+let sharedMabelBrainLoading = false;
 let conversation = [];
 let reflectionQueue = [];
 let messagePending = false;
@@ -1866,13 +1869,14 @@ function updateBrain() {
   const mood = document.getElementById("brain-mood");
   const moodScore = document.getElementById("brain-mood-score");
   const thought = document.getElementById("brain-thought");
-  const personality = mabel && mabel.personality ? mabel.personality : {};
+  const shared = sharedMabelBrain || {};
+  const personality = shared.personality || (mabel && mabel.personality) || {};
   const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
-  if (mood) mood.textContent = mabel.now.mood || "quiet";
-  if (thought) thought.textContent = "“" + (mabel.now.thought || "Mabel is listening to the hollow.") + "”";
+  if (mood) mood.textContent = shared.mood || mabel.now.mood || "quiet";
+  if (thought) thought.textContent = "“" + (shared.thought || mabel.now.thought || "Mabel is listening to the hollow.") + "”";
   if (moodScore) {
-    const needs = Object.values(mabel.needs || {}).map(Number).filter(Number.isFinite);
+    const needs = Object.values(shared.needs || mabel.needs || {}).map(Number).filter(Number.isFinite);
     const balance = needs.length ? Math.round(needs.reduce(function (sum, value) { return sum + clampNeed(value); }, 0) / needs.length * 100) : 0;
     moodScore.textContent = balance + " / 100";
   }
@@ -1911,6 +1915,24 @@ function updateBrain() {
         brainEvolvedTraitsElement.appendChild(item);
       });
     }
+  }
+}
+
+async function refreshSharedMabelBrain() {
+  if (sharedMabelBrainLoading) return;
+  sharedMabelBrainLoading = true;
+  try {
+    const response = await fetch(MABEL_BRAIN_URL, { method: "GET", cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data && data.brain && data.brain.personality) {
+      sharedMabelBrain = data.brain;
+      updateBrain();
+    }
+  } catch (error) {
+    // Keep the browser's current Brain view if the shared Worker is unavailable.
+  } finally {
+    sharedMabelBrainLoading = false;
   }
 }
 
@@ -5688,6 +5710,8 @@ function startMabel() {
   const forgetProfileButton = document.getElementById("forget-visitor-profile");
   if (forgetProfileButton) forgetProfileButton.addEventListener("click", forgetVisitorProfile);
   loadVisitorBoard();
+  refreshSharedMabelBrain();
+  setInterval(refreshSharedMabelBrain, 60000);
   setInterval(function () {
     const boardPanel = document.getElementById("visitor-board");
     if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
