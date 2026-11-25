@@ -209,10 +209,12 @@
 
       <section id="research" class="tab-panel">
         <h2>Mabel’s library</h2>
-        <p class="day-intro">Mabel follows questions from her wanderings, conversations, and the visitors’ board. She searches online and keeps useful sources here.</p>
-        <h3>Questions for another visit</h3>
-        <p class="day-intro">Passing thoughts can lead to research before they become lasting interests.</p>
-        <ul id="research-ideas" class="research-log" aria-live="polite"></ul>
+        <p class="day-intro">When a discovery, conversation, or visitor note catches Mabel’s attention, she can look into it here.</p>
+        <div id="research-ideas-section" hidden>
+          <h3>Questions Mabel chose to follow</h3>
+          <p class="day-intro">Small questions from things Mabel has found, conversations she has had, and notes she has read.</p>
+          <ul id="research-ideas" class="research-log" aria-live="polite"></ul>
+        </div>
         <p id="wander-status" aria-live="polite">Mabel will add a note here when she visits the library.</p>
         <ul id="research-log" class="research-log" aria-live="polite"></ul>
       </section>
@@ -250,7 +252,20 @@
       <section id="gallery-tab" class="tab-panel">
         <h2>Mabel’s Gallery</h2>
         <p class="gallery-intro">Little drawings Mabel made when a thought or moment felt worth keeping.</p>
-        <ul id="gallery"></ul>
+        <ul id="gallery" class="gallery-stream"></ul>
+        <dialog id="gallery-detail" class="gallery-detail" aria-labelledby="gallery-detail-title">
+          <form method="dialog" class="gallery-detail-close">
+            <button type="submit" aria-label="Close artwork details">✕</button>
+          </form>
+          <div id="gallery-detail-image" class="gallery-detail-image"></div>
+          <h3 id="gallery-detail-title"></h3>
+          <time id="gallery-detail-time"></time>
+          <p id="gallery-detail-description"></p>
+          <div id="gallery-detail-context-block" class="gallery-detail-context">
+            <strong id="gallery-detail-context-label">What led to it</strong>
+            <p id="gallery-detail-context"></p>
+          </div>
+        </dialog>
       </section>
 
 <footer class="site-footer">
