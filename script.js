@@ -2116,7 +2116,15 @@ async function requestMabelArtwork(context, targetElement) {
         recentArtworks: gallery.slice(0, 6).map(function (item) {
           return { title: item.title, motif: item.motif };
         }),
-        artisticInspiration: context.inspiration || null
+        recentConversation: conversation.slice(-14).filter(function (entry) {
+          return entry && entry.role === "user" && typeof entry.content === "string";
+        }).slice(-7).map(function (entry) { return entry.content; }),
+        recentReflections: mabel.feed.filter(function (entry) {
+          return entry && entry.kind === "mind" && entry.text;
+        }).slice(0, 8).map(function (entry) {
+          return { text: entry.text, personalityCue: entry.personalityCue || "" };
+        }),
+        artisticInspiration: context.inspiration || chooseCurrentArtworkInspiration()
       })
     });
 
@@ -2152,7 +2160,13 @@ async function requestMabelArtwork(context, targetElement) {
   }
   if (!artwork) return null;
 
-  artwork = prepareArtworkForGallery(artwork, { ...context, source: source });
+  const artworkInspiration = context.inspiration || chooseCurrentArtworkInspiration();
+  if (!artwork.inspirationContext && artwork.inspirationConnection) {
+    artwork.inspirationContext = artwork.inspirationConnection;
+  } else if (artworkInspiration && !artwork.inspirationContext) {
+    artwork.inspirationContext = artworkInspiration.question || artworkInspiration.title;
+  }
+  artwork = prepareArtworkForGallery(artwork, { ...context, source: source, inspiration: artworkInspiration });
   const card = renderMabelCard(artwork);
   saveToMabelGallery(artwork);
   if (card && targetElement) {
@@ -2615,27 +2629,66 @@ function chooseAutonomousResearchFocus(boardNote) {
 }
 
 function chooseAutonomousArtworkInspiration() {
-  const activeSparks = sparks.filter(function (spark) {
-    return spark && spark.title && ["noticed", "growing", "pursuing"].includes(spark.stage);
-  });
   const activeInterests = mabel.interests.filter(function (interest) {
     return interest && interest.title && ["growing", "pursuing"].includes(interest.stage);
   });
-  const inspirations = activeSparks.map(function (spark) {
-    return { title: spark.title, question: spark.question || spark.reason || "A thought Mabel wants to keep." };
-  }).concat(activeInterests.map(function (interest) {
-    return { title: interest.title, question: interest.question || "A question Mabel wants to follow." };
-  }));
-  if (inspirations.length && Math.random() < 0.7) {
-    return inspirations[Math.floor(Math.random() * inspirations.length)];
+  const groundedReflections = mabel.feed.filter(function (entry) {
+    return entry && entry.kind === "mind" && entry.text;
+  }).slice(0, 8);
+  const returnedSparks = sparks.filter(function (spark) {
+    return spark && spark.title && (Number(spark.evidence) >= 2 || ["growing", "pursuing"].includes(spark.stage));
+  });
+
+  if (activeInterests.length && (!groundedReflections.length || Math.random() < 0.6)) {
+    const interest = activeInterests[Math.floor(Math.random() * activeInterests.length)];
+    return {
+      title: interest.title,
+      question: interest.nextAction || interest.nextQuestion || interest.question || "A subject Mabel has returned to more than once.",
+      source: "interest"
+    };
   }
-  if (Math.random() < 0.18) {
+
+  if (groundedReflections.length) {
+    const reflection = groundedReflections[Math.floor(Math.random() * Math.min(groundedReflections.length, 4))];
+    return {
+      title: reflection.personalityCue || "a thought from a conversation",
+      question: reflection.text,
+      source: "conversation"
+    };
+  }
+
+  if (returnedSparks.length && Math.random() < 0.5) {
+    const spark = returnedSparks[Math.floor(Math.random() * returnedSparks.length)];
+    return { title: spark.title, question: spark.question || spark.reason, source: "returning-spark" };
+  }
+
+  if (Math.random() < 0.12) {
     return {
       title: "a moment from today",
-      question: mabel.now.thought || "A small feeling Mabel wants to remember."
+      question: mabel.now.thought || "A small feeling Mabel wants to remember.",
+      source: "today"
     };
   }
   return null;
+}
+
+function chooseCurrentArtworkInspiration() {
+  const interest = mabel.interests.find(function (item) {
+    return item && item.title && ["growing", "pursuing"].includes(item.stage);
+  });
+  if (interest) {
+    return {
+      title: interest.title,
+      question: interest.nextAction || interest.nextQuestion || interest.question || "A subject Mabel has returned to.",
+      source: "interest"
+    };
+  }
+  const reflection = mabel.feed.find(function (entry) { return entry && entry.kind === "mind" && entry.text; });
+  return reflection ? {
+    title: reflection.personalityCue || "a thought from a conversation",
+    question: reflection.text,
+    source: "conversation"
+  } : null;
 }
 
 async function handleAutonomousMoment() {
