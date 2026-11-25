@@ -273,8 +273,6 @@ async function handleArtwork(request, env) {
     artworkInstruction: shortText(data.artworkInstruction, 500),
     referenceImageInstruction: shortText(data.referenceImageInstruction, 300),
     referenceImageUrl,
-    referenceTitle,
-    referenceFact,
     mood: shortText(data.mood, 60, "wondering"),
     activity: shortText(data.activity, 180, "listening beneath the hawthorn"),
     thought: shortText(data.thought, 220, "Nothing in particular."),
