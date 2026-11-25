@@ -2873,7 +2873,7 @@ function chooseAutonomousResearchFocus(boardNote) {
       title: "food and recipes",
       ideaTitle: "food and recipes",
       question: "A visitor mentioned food in this conversation. Mabel wants to follow one interesting ingredient or food idea and see whether it leads to a recipe, a surprising fact, or a funny question.",
-      searchTerm: namedFood ? namedFood[1] : "food recipes",
+      searchTerm: namedFood ? namedFood[1] : "recipes",
       source: "conversation",
       originText: "A visitor talked with Mabel about: “" + foodPhrase + "”",
       originAt: latestFoodConversation.at || now(),
@@ -3693,7 +3693,7 @@ async function handleWander(options) {
         guidingAim: MABEL_GUIDING_AIM,
         researchInstruction: focusInterest.isGuidingAimStep
           ? "For this step in Mabel’s broad wish to understand life beyond her woods, choose one concrete, verifiable subject she has not researched recently. Let the web search choose a varied subject rather than using a fixed topic list. Search the public web, open relevant pages where possible, and return the actual specific subject as title, a search question, a useful fact, and a source URL/title. Keep it a one-time discovery unless it later keeps drawing her attention. Do not invent results or say she found an object."
-          : "Start with the specific keyword Mabel picked from the real source. Use AI to follow it toward an interesting, funny, or unexpected angle a curious little mouse might genuinely explore, without forcing a joke or switching topics. If food or an ingredient is involved, consider recipes or surprising food facts. Search the public web, compare two or three relevant search results, and return their real titles, URLs, and snippets. Keep every claim tied to the supplied sources. If no useful page appears, try a clearer query using the keyword before giving up. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
+          : "Start with the specific keyword Mabel picked from the real source. Ask what an autonomous little mouse who has come to life might find funniest, strangest, or most unexpectedly relatable about this particular thing; let that angle shape a real question, rather than inserting a stock joke or returning to a fixed topic. Keep the keyword central. If food or an ingredient is involved, consider recipes or surprising food facts. Search the public web, compare two or three relevant search results, and return their real titles, URLs, and snippets. If the first search is off-topic, try a different question that still contains and follows the same keyword. Keep every claim tied to supplied sources. Do not switch to an unrelated object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
         autonomyPlan: focusInterest.isGuidingAimStep
           ? "This is one small step toward Mabel’s open-ended wish to build a fulfilling life by learning about the wider world. Choose a varied subject, keep the finding as a passing discovery, and do not turn it into an interest, career, or fixed trait unless it continues to matter across real moments."
           : focusInterest.isOngoingGoal
@@ -3753,7 +3753,8 @@ async function handleWander(options) {
     );
     const relevant = focusInterest.isGuidingAimStep
       ? aimResearchRelevant
-      : relatedSources.length > 0 || researchMatchesFocus(returnedText, { ...focusInterest, searchTerm: searchTerm });
+      : relatedSources.length > 0 || (!rawSources.length &&
+          researchMatchesFocus(String(data.title || "") + " " + String(data.researchSummary || ""), { ...focusInterest, searchTerm: searchTerm }));
     const research = {
       kind: "research",
       at: now(),
