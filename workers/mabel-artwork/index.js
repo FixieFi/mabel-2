@@ -229,7 +229,14 @@ async function handleArtwork(request, env) {
   );
 
   let referenceObservation = "";
-  if (referenceRetry && referenceImageUrl) {
+  if (referenceRetry) {
+    if (!referenceImageUrl) {
+      return jsonResponse({
+        artwork: null,
+        referenceUnavailable: true,
+        reason: "The Library did not provide a supported public image URL."
+      });
+    }
     try {
       const visual = await env.AI.run(VISION_MODEL, {
         messages: [
@@ -241,8 +248,13 @@ async function handleArtwork(request, env) {
         temperature: 0.15
       });
       referenceObservation = shortText(visual?.response, 700);
+      if (!referenceObservation) throw new Error("Vision returned no description.");
     } catch (error) {
-      referenceObservation = "";
+      return jsonResponse({
+        artwork: null,
+        referenceUnavailable: true,
+        reason: "Cloudflare could not inspect the Library image. Check that the Workers AI vision model is enabled and that its Meta license has been accepted."
+      });
     }
   }
 
