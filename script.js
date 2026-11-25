@@ -697,7 +697,7 @@ function trimBindleItems(items, limit) {
         : null;
       const receivedAt = Date.parse(gift && (gift.noticedAt || gift.at) || item.at || item.addedAt || "");
       const isVisitorGift = Boolean(gift || item.giftId || item.source === "visitor");
-      const protectedGift = isVisitorGift && (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 24 * 60 * 60 * 1000);
+      const protectedGift = isVisitorGift && (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 30 * 60 * 1000);
       if (!protectedGift) { leavingIndex = index; break; }
     }
     if (leavingIndex < 0) break;
