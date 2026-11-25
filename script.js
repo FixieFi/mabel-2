@@ -99,6 +99,7 @@ function currentVisitorSessionId() {
 const galleryStorageKey = "mabel-gallery-v1";
 const visitorProfileStorageKey = "mabel-visitor-profile-v1";
 const visitorGiftSeenStorageKey = "mabel-viewed-visitor-gift-v1";
+const visitorGiftHighlightStorageKey = "mabel-highlight-visitor-gift-v1";
 
 const legacySeedInterestIds = new Set([
   "silver-thread",
@@ -2830,8 +2831,25 @@ function updateBindle() {
         row.classList.add("visitor-gift");
         const badge = document.createElement("span");
         badge.className = "visitor-gift-badge";
-        badge.textContent = "visitor gift";
+        badge.textContent = "Gift from a visitor";
         row.appendChild(badge);
+      }
+      const highlightGiftId = getVisitorGiftHighlightId();
+      if (value && value.giftId && highlightGiftId === String(value.giftId)) {
+        const newBadge = document.createElement("span");
+        newBadge.className = "newly-noticed-gift-badge";
+        newBadge.textContent = "✧ Newly noticed";
+        row.appendChild(newBadge);
+        row.classList.add("newly-noticed-gift");
+        if (typeof IntersectionObserver === "function") {
+          const observer = new IntersectionObserver(function (entries) {
+            if (entries.some(function (entry) { return entry.isIntersecting && entry.intersectionRatio >= 0.65; })) {
+              observer.disconnect();
+              window.setTimeout(function () { clearVisitorGiftHighlight(value.giftId); }, 1200);
+            }
+          }, { threshold: [0.65] });
+          observer.observe(row);
+        }
       }
       if (value && value.action) {
         const status = document.createElement("span");
@@ -5305,12 +5323,29 @@ function currentVisitorGiftNotice() {
   } catch (error) {}
   const gifts = mabel.world.objects.filter(function (item) {
     return item && item.source === "visitor" && item.visitSessionId === currentVisitorSessionId() && item.noticedAt;
+  }).sort(function (a, b) {
+    return Date.parse(b.noticedAt || 0) - Date.parse(a.noticedAt || 0);
   });
   for (const gift of gifts) {
     const key = String(gift.id || gift.name) + "|" + String(gift.noticedAt);
     if (!seen.includes(key) && !viewedVisitorGiftNoticeKeys.has(key)) return { ...gift, noticeKey: key };
   }
   return null;
+}
+
+function setVisitorGiftHighlight(gift) {
+  if (!gift || !gift.id) return;
+  try { sessionStorage.setItem(visitorGiftHighlightStorageKey, String(gift.id)); } catch (error) {}
+}
+
+function getVisitorGiftHighlightId() {
+  try { return sessionStorage.getItem(visitorGiftHighlightStorageKey) || ""; } catch (error) { return ""; }
+}
+
+function clearVisitorGiftHighlight(giftId) {
+  if (!giftId || getVisitorGiftHighlightId() !== String(giftId)) return;
+  try { sessionStorage.removeItem(visitorGiftHighlightStorageKey); } catch (error) {}
+  updateBindle();
 }
 
 function updateVisitorGiftNotice() {
@@ -6886,7 +6921,8 @@ function startMabel() {
   if (viewVisitorGiftButton) {
     viewVisitorGiftButton.addEventListener("click", function () {
       const gift = currentVisitorGiftNotice();
-      markVisitorGiftNoticeSeen(true);
+      setVisitorGiftHighlight(gift);
+      markVisitorGiftNoticeSeen(false);
       switchTab("hollow");
       const safeId = gift && gift.id ? String(gift.id).replace(/[^a-z0-9_-]/gi, "") : "";
       const giftRow = safeId && (document.getElementById("bindle-gift-" + safeId) || document.getElementById("home-gift-" + safeId));
@@ -6896,7 +6932,7 @@ function startMabel() {
     });
   }
   if (dismissVisitorGiftButton) {
-    dismissVisitorGiftButton.addEventListener("click", markVisitorGiftNoticeSeen);
+    dismissVisitorGiftButton.addEventListener("click", function () { markVisitorGiftNoticeSeen(false); });
   }
   if (viewPostboxButton) viewPostboxButton.addEventListener("click", function () { switchTab("postbox"); });
   if (dismissPostboxButton) dismissPostboxButton.addEventListener("click", markPostboxNoticeSeen);
