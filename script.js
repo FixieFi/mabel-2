@@ -2740,7 +2740,7 @@ function syncNoticedItemsIntoBindle() {
     });
   });
   mabel.world.objects.forEach(function (gift) {
-    if (!gift || gift.source !== "visitor" || !gift.noticedAt || !gift.id) return;
+    if (!gift || gift.source !== "visitor" || gift.visitSessionId !== currentVisitorSessionId() || !gift.noticedAt || !gift.id) return;
     const alreadyInPostbox = mabelPostboxItems.some(function (item) { return item && item.relatedGiftId === gift.id; });
     if (!alreadyInPostbox) {
       gift.reaction = gift.reaction || personalizeGiftReaction("", gift);
@@ -2773,7 +2773,7 @@ function updateBindle() {
   inventory.history = Array.isArray(inventory.history) ? inventory.history : [];
   let historyRepaired = false;
   (mabel.world && Array.isArray(mabel.world.objects) ? mabel.world.objects : [])
-    .filter(function (gift) { return gift && gift.source === "visitor" && ["eaten", "drank", "discarded"].includes(gift.status); })
+    .filter(function (gift) { return gift && gift.source === "visitor" && gift.visitSessionId === currentVisitorSessionId() && ["eaten", "drank", "discarded"].includes(gift.status); })
     .forEach(function (gift) {
       if (!inventory.history.some(function (entry) { return entry && entry.giftId === gift.id; })) {
         inventory.history.unshift({
@@ -2791,7 +2791,7 @@ function updateBindle() {
   if (historyRepaired) saveBindle();
   const waitingGifts = mabel.world && Array.isArray(mabel.world.objects)
     ? mabel.world.objects.filter(function (object) {
-        return object.source === "visitor" && !object.noticedAt;
+        return object.source === "visitor" && object.visitSessionId === currentVisitorSessionId() && !object.noticedAt;
       })
     : [];
 
@@ -3574,7 +3574,9 @@ function updateHomeObjects() {
   const list = document.getElementById("hollow-objects");
   if (!list) return;
   list.replaceChildren();
-  const objects = mabel.world.objects.slice(0, 10);
+  const objects = mabel.world.objects.filter(function (object) {
+    return !object || object.source !== "visitor" || object.visitSessionId === currentVisitorSessionId();
+  }).slice(0, 10);
   if (!objects.length) {
     const empty = document.createElement("li");
     empty.textContent = "The shelf is empty for now.";
@@ -4474,7 +4476,7 @@ function deliverDueGiftPostboxNotes() {
   const current = Date.now();
   let changed = false;
   mabel.world.objects.forEach(function (gift) {
-    if (!gift || gift.source !== "visitor" || !gift.noticedAt || gift.postboxNoteAt) return;
+    if (!gift || gift.source !== "visitor" || gift.visitSessionId !== currentVisitorSessionId() || !gift.noticedAt || gift.postboxNoteAt) return;
     if (mabelPostboxItems.some(function (entry) { return entry && entry.relatedGiftId === gift.id; })) {
       gift.postboxNoteAt = gift.noticedAt;
       changed = true;
@@ -6946,7 +6948,7 @@ function startMabel() {
     ensureHollowWorld();
     const dueGift = mabel.world.objects.some(function (gift) {
       const dueAt = Date.parse(gift && gift.noticeAfter || "");
-      return gift && gift.source === "visitor" && !gift.noticedAt && Number.isFinite(dueAt) && Date.now() >= dueAt;
+      return gift && gift.source === "visitor" && gift.visitSessionId === currentVisitorSessionId() && !gift.noticedAt && Number.isFinite(dueAt) && Date.now() >= dueAt;
     });
     deliverDueGiftPostboxNotes();
     deliverDueComfortPostboxMail();
