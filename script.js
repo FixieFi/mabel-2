@@ -211,6 +211,95 @@ function loadSparks() {
   return [];
 }
 
+const researchIdeasStorageKey = "mabel-research-ideas-v1";
+let researchIdeas = [];
+
+function saveResearchIdeas() {
+  try { localStorage.setItem(researchIdeasStorageKey, JSON.stringify(researchIdeas.slice(0, 40))); }
+  catch (error) { /* Keep the queue in memory for this visit. */ }
+}
+
+function loadResearchIdeas() {
+  try {
+    const saved = localStorage.getItem(researchIdeasStorageKey);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed.slice(0, 40) : [];
+  } catch (error) { return []; }
+}
+
+function addResearchIdea(candidate) {
+  if (!candidate || !candidate.title) return null;
+  const title = String(candidate.title).trim().slice(0, 90);
+  const key = normalizeInterestTitle(title);
+  if (!key) return null;
+  let idea = researchIdeas.find(function (item) { return normalizeInterestTitle(item.title) === key; });
+  if (!idea) {
+    idea = {
+      id: candidate.id || "idea-" + Date.now(),
+      title: title,
+      question: String(candidate.question || "What might Mabel discover about " + title + "?").trim().slice(0, 220),
+      source: candidate.source || "Mabel’s thoughts",
+      evidence: Math.max(1, Number(candidate.evidence) || 1),
+      createdAt: candidate.createdAt || now(),
+      lastSeenAt: now(),
+      lastResearchedAt: candidate.lastResearchedAt || ""
+    };
+    researchIdeas.unshift(idea);
+  } else {
+    idea.evidence = Math.max(idea.evidence || 1, Number(candidate.evidence) || 1);
+    idea.question = String(candidate.question || idea.question).trim().slice(0, 220);
+    idea.lastSeenAt = now();
+    if (candidate.lastResearchedAt) idea.lastResearchedAt = candidate.lastResearchedAt;
+  }
+  researchIdeas = researchIdeas.slice(0, 40);
+  saveResearchIdeas();
+  return idea;
+}
+
+function isDurableInterestCandidate(candidate) {
+  if (!candidate) return false;
+  const title = String(candidate.title || "").trim().toLowerCase();
+  const details = title + " " + String(candidate.question || "") + " " + String(candidate.reason || "");
+  const kind = String(candidate.kind || candidate.category || "").toLowerCase();
+  if (!title || /^(a|an|the)\s+/.test(title)) return false;
+  if (/\b(pebble|button|coin|cap|lid|shell|stone|toy|crayon|twig|leaf|moss|flower|fossil|key|bead)\b/i.test(title) &&
+      !/\b(collecting|collection|making|crafting|studying|learning|playing|listening|practising|practicing)\b/i.test(title)) return false;
+  const enduringKind = /\b(hobby|activity|practice|practise|preference|pursuit|interest|pastime)\b/.test(kind);
+  const activityTitle = /\b(playing|play|listening|music|singing|dance|dancing|exercise|exercising|walk|walks|walking|hiking|cooking|baking|painting|drawing|gardening|reading|writing|crafting|making|practising|practicing|learn|learning|swimming|running|stretching)\b/i.test(title);
+  const explicitOngoingActivity = /^(playing|listening to|going for|walking|exercising|dancing|singing|cooking|baking|painting|drawing|gardening|reading|writing|practising|practicing|learning|swimming|running)\b/i.test(title);
+  const enduringDetails = /\b(enjoys|keeps returning|wants to practice|wants to practise|wants to learn|would like to learn|often|regularly|again and again|favorite|favourite|likes doing)\b/i.test(details);
+  return enduringKind || explicitOngoingActivity || (activityTitle && enduringDetails);
+}
+
+function promoteResearchIdeaToInterest(candidate, spark) {
+  const existing = mabel.interests.find(function (item) {
+    return item.id === spark.id || normalizeInterestTitle(item.title) === normalizeInterestTitle(spark.title);
+  });
+  if (existing) return existing;
+  const interest = {
+    id: spark.id,
+    title: spark.title,
+    kind: candidate.kind || candidate.category || "activity",
+    question: spark.question,
+    curiosity: 0.62,
+    pull: spark.pull,
+    evidence: spark.evidence,
+    stage: "growing",
+    source: spark.source,
+    createdAt: spark.createdAt,
+    interestPromotedAt: now(),
+    actions: []
+  };
+  mabel.interests.unshift(interest);
+  addFeedEntry({
+    kind: "mind",
+    text: "Mabel has kept returning to " + spark.title + "; it is becoming an interest of hers.",
+    why: spark.question,
+    interest: spark.id
+  });
+  return interest;
+}
+
 function saveBindle() {
   try {
     localStorage.setItem(bindleStorageKey, JSON.stringify(bindle));
@@ -798,15 +887,17 @@ function createDefaultMabel() {
 }
 
 function addFeedEntry(entry) {
-  mabel.feed.unshift({
-    at: now(),
-    ...entry,
-    ok: true
-  });
-
-  if (mabel.feed.length > 80) {
-    mabel.feed.length = 80;
+  if (entry && entry.kind === "did" && entry.text) {
+    const latestAction = mabel.feed.find(function (item) { return item.kind === "did"; });
+    const normalizeAction = function (value) {
+      return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    };
+    if (latestAction && normalizeAction(latestAction.text) === normalizeAction(entry.text)) return latestAction;
   }
+  const savedEntry = { at: now(), ...entry, ok: true };
+  mabel.feed.unshift(savedEntry);
+  if (mabel.feed.length > 80) mabel.feed.length = 80;
+  return savedEntry;
 }
 
 function addDiaryEntry(entry) {
@@ -1516,14 +1607,31 @@ async function submitVisitorBoardMessage(event) {
   }
 }
 
+function visitorNoteKey(value) {
+  return String(value || "").toLowerCase()
+    .replace(/\b(?:i|me|my|they|them|their|she|he|we|you|really|like|likes|love|loves|enjoy|enjoys|adore|adores|am|are|is|the|a|an)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function deduplicateVisitorNotes(notes) {
+  const seen = new Set();
+  return notes.filter(function (note) {
+    if (!note || !note.text) return false;
+    const key = visitorNoteKey(note.text);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 25);
+}
+
 function loadVisitorProfile() {
   try {
     const saved = localStorage.getItem(visitorProfileStorageKey);
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
-        facts: Array.isArray(parsed.facts) ? parsed.facts.slice(0, 25) : [],
-        moments: Array.isArray(parsed.moments) ? parsed.moments.slice(0, 25) : []
+        facts: deduplicateVisitorNotes(Array.isArray(parsed.facts) ? parsed.facts : []),
+        moments: deduplicateVisitorNotes(Array.isArray(parsed.moments) ? parsed.moments : [])
       };
     }
   } catch (error) {
@@ -1543,8 +1651,9 @@ function saveVisitorProfile() {
 function addVisitorProfileNote(listName, value) {
   const text = String(value || "").trim().slice(0, 240);
   if (!text || !["facts", "moments"].includes(listName)) return;
+  const key = visitorNoteKey(text);
   const existing = visitorProfile[listName].some(function (item) {
-    return item.text.toLowerCase() === text.toLowerCase();
+    return visitorNoteKey(item.text) === key;
   });
   if (existing) return;
   visitorProfile[listName].unshift({
@@ -1639,6 +1748,7 @@ function updatePage() {
   updateChanges();
 
   updateResearchLog();
+  updateResearchIdeas();
   updateWanderings();
   updateBindle();
   updateHomeObjects();
@@ -1646,6 +1756,32 @@ function updatePage() {
   updateVisitorProfile();
   showSparkNotice();
   refreshGalleryNotice();
+}
+
+function updateResearchIdeas() {
+  const list = document.getElementById("research-ideas");
+  if (!list) return;
+  list.replaceChildren();
+  const waiting = researchIdeas.filter(function (idea) { return !idea.lastResearchedAt; }).slice(0, 10);
+  if (!waiting.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No small questions are waiting for the library just now.";
+    list.appendChild(empty);
+    return;
+  }
+  waiting.forEach(function (idea) {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    title.textContent = idea.title;
+    item.appendChild(title);
+    if (idea.question) {
+      const question = document.createElement("span");
+      question.className = "interest-question";
+      question.textContent = idea.question;
+      item.appendChild(question);
+    }
+    list.appendChild(item);
+  });
 }
 
 function ensureHollowWorld() {
@@ -2030,38 +2166,8 @@ async function handleVisitorMessage() {
 
     saveConversation();
 
-    if (data.interest) {
-      const existing = mabel.interests.find(function (interest) {
-        return interest.id === data.interest.id ||
-          normalizeInterestTitle(interest.title) === normalizeInterestTitle(data.interest.title);
-      });
-
-      if (existing) {
-        existing.pull = clampNeed(existing.pull + 0.15);
-
-        if (existing.pull > 0.65 && existing.stage === "dormant") {
-          existing.stage = "pursuing";
-        }
-      } else {
-        mabel.interests.push({
-          id: data.interest.id,
-          title: data.interest.title,
-          kind: data.interest.kind || "wonder",
-          question: data.interest.question || "What does this mean to Mabel?",
-          actions: [],
-          curiosity: data.interest.curiosity || 0.6,
-          pull: data.interest.pull || 0.5,
-          stage: data.interest.stage || "pursuing"
-        });
-
-        addFeedEntry({
-          kind: "mind",
-          text: "Mabel began a new thread: " + data.interest.title + ".",
-          why: data.interest.question,
-          interest: data.interest.id
-        });
-        recordSpark({ ...data.interest, source: "conversation" });
-      }
+    if (data.interest && data.interest.title) {
+      recordSpark({ ...data.interest, source: "conversation" });
     }
 
     mabel.needs.connection = clampNeed(mabel.needs.connection + 0.18);
@@ -2091,6 +2197,18 @@ async function handleVisitorMessage() {
   }
 }
 
+function personalizeGiftReaction(reply, gift) {
+  const text = String(reply || "").trim();
+  const giftWords = normalizeInterestTitle(gift && gift.name).split(" ").filter(function (word) { return word.length > 2; });
+  const replyKey = normalizeInterestTitle(text);
+  const namesObject = giftWords.some(function (word) { return replyKey.includes(word); });
+  const onlyAcknowledgesPresence = !text || text.length < 28 || !namesObject ||
+    /\b(?:a visitor|someone) left (?:this|it|that)|\b(?:noticed|found) (?:the|a) gift\b/i.test(text);
+  if (!onlyAcknowledgesPresence) return text;
+  const name = String(gift && gift.name || "the little gift").trim();
+  return "Mabel turns the " + name + " over carefully, noticing its shape and small details. She wonders what it might be for and what sort of journey brought it here.";
+}
+
 async function noticeNextVisitorGift() {
   ensureHollowWorld();
   const gift = mabel.world.objects.find(function (item) {
@@ -2098,7 +2216,7 @@ async function noticeNextVisitorGift() {
   });
   if (!gift) return;
 
-  const eventText = "During her own day, Mabel notices that someone left " + gift.name + " at home.";
+  const eventText = "During her own day, Mabel notices a " + gift.name + " left at home. React to this specific object itself: describe a detail or possible use suggested by the object, then give Mabel a small feeling or question about it. Do not answer with only a generic acknowledgement that a visitor left something.";
   try {
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
@@ -2119,8 +2237,9 @@ async function noticeNextVisitorGift() {
     const data = await response.json();
     const parsedGiftReply = separateSparkMarker(normalizeMabelReply(data));
     const inlineGiftSpark = sparkFromMarker(parsedGiftReply, "discovery", gift.name);
+    parsedGiftReply.text = personalizeGiftReaction(parsedGiftReply.text, gift);
     gift.noticedAt = now();
-    gift.reaction = parsedGiftReply.text || "Mabel has noticed the gift.";
+    gift.reaction = parsedGiftReply.text;
     gift.status = "noticed";
     if (parsedGiftReply.text) showHollowSpeech(parsedGiftReply.text);
     if (data.mood) mabel.now.mood = data.mood;
@@ -2283,6 +2402,12 @@ function chooseAutonomousResearchFocus(boardNote) {
     });
   }
 
+  researchIdeas.slice(0, 16).forEach(function (idea) {
+    if (idea && idea.title) candidates.push({
+      id: idea.id, title: idea.title, question: idea.question, source: idea.source || "Mabel’s thoughts"
+    });
+  });
+
   mabel.interests.forEach(function (interest) {
     if (interest && interest.title) candidates.push(interest);
   });
@@ -2370,6 +2495,8 @@ async function handleAutonomousMoment() {
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
         feed: mabel.feed.slice(0, 15),
+        diaryContext: mabel.feed.slice(0, 10).map(function (entry) { return entry.text; }),
+        diaryGuidance: "Anchor diary details to the supplied memories and recent events. If referring to a visitor note, object, person, or earlier conversation, include the actual detail from that context. Do not invent named visitors, poems, or past events that are not in the supplied context.",
 	sparks: sparks.slice(0, 10)
       })
     });
@@ -2407,37 +2534,8 @@ async function handleAutonomousMoment() {
       });
     }
 
-    if (data.interest) {
-      const existing = mabel.interests.find(function (interest) {
-        return interest.id === data.interest.id;
-      });
-
-      if (existing) {
-        existing.pull = clampNeed(existing.pull + (data.interest.pullChange || 0.1));
-
-        if (existing.pull > 0.65 && existing.stage === "dormant") {
-          existing.stage = "pursuing";
-        }
-      } else {
-        mabel.interests.push({
-          id: data.interest.id,
-          title: data.interest.title,
-          kind: data.interest.kind || "wonder",
-          question: data.interest.question || "What does this mean to Mabel?",
-          actions: [],
-          curiosity: data.interest.curiosity || 0.6,
-          pull: data.interest.pull || 0.5,
-          stage: data.interest.stage || "pursuing"
-        });
-
-        addFeedEntry({
-          kind: "mind",
-          text: "Mabel began a new thread: " + data.interest.title + ".",
-          why: data.interest.question,
-          interest: data.interest.id
-        });
-        recordSpark({ ...data.interest, source: "autonomous" });
-      }
+    if (data.interest && data.interest.title) {
+      recordSpark({ ...data.interest, source: "autonomous" });
     }
 
     saveMabel();
@@ -2482,8 +2580,11 @@ function normalizeInterestTitle(value) {
 }
 
 function currentSparkNoticeKey() {
-  const latest = sparks[0];
-  return latest ? String(latest.id || normalizeInterestTitle(latest.title)) : "";
+  const latest = sparks.reduce(function (best, spark) {
+    if (!spark || !spark.interestPromotedAt) return best;
+    return !best || Date.parse(spark.interestPromotedAt) > Date.parse(best.interestPromotedAt) ? spark : best;
+  }, null);
+  return latest ? String(latest.id || normalizeInterestTitle(latest.title)) + "|" + String(latest.interestPromotedAt) : "";
 }
 
 function currentAutonomousArtwork() {
@@ -2557,75 +2658,80 @@ function recordSpark(candidate) {
   if (!candidate || !candidate.title) return;
 
   const title = String(candidate.title).trim().slice(0, 90);
-  const question = String(candidate.question || "What might Mabel discover about this?").trim().slice(0, 180);
+  const question = String(candidate.question || "What might Mabel discover about " + title + "?").trim().slice(0, 220);
   const key = normalizeInterestTitle(title);
   if (!key) return;
 
+  const timestamp = Date.now();
+  const timestampText = new Date(timestamp).toISOString();
   let spark = sparks.find(function (item) {
     return item.id === candidate.id || normalizeInterestTitle(item.title) === key;
   });
-  const isNewSpark = !spark;
-
-  if (spark) {
-    spark.evidence = (spark.evidence || 1) + 1;
-    spark.pull = clampNeed((spark.pull || 0.32) + 0.14);
-    spark.lastSeenAt = now();
-    spark.stage = spark.evidence >= 3 ? "pursuing" : "growing";
-    spark.question = question || spark.question;
-  } else {
-    spark = {
-      id: candidate.id || "spark-" + Date.now(),
-      title: title,
-      question: question,
-      reason: String(candidate.reason || "A thought kept catching at Mabel’s attention.").slice(0, 220),
-      source: candidate.source || "conversation",
-      pull: 0.34,
-      evidence: 1,
-      stage: "noticed",
-      createdAt: now(),
-      lastSeenAt: now()
-    };
-    sparks.unshift(spark);
-  }
-
-  let interest = mabel.interests.find(function (item) {
-    return item.id === spark.id || normalizeInterestTitle(item.title) === key;
+  const previousInterest = mabel.interests.find(function (item) {
+    return item.id === (spark && spark.id || candidate.id) || normalizeInterestTitle(item.title) === key;
   });
 
-  if (interest) {
-    interest.evidence = Math.max(interest.evidence || 0, spark.evidence);
-    interest.pull = spark.pull;
-    interest.stage = spark.stage;
-    interest.question = spark.question || interest.question;
-  } else {
-    interest = {
-      id: spark.id,
-      title: spark.title,
-      kind: candidate.kind || "wonder",
-      question: spark.question,
-      curiosity: 0.55,
-      pull: spark.pull,
-      evidence: spark.evidence,
-      stage: spark.stage,
-      source: candidate.source || "conversation",
-      createdAt: spark.createdAt
+  if (!spark) {
+    spark = {
+      id: candidate.id || "spark-" + timestamp,
+      title: title,
+      question: question,
+      reason: String(candidate.reason || "A thought caught Mabel’s attention.").slice(0, 220),
+      source: candidate.source || "Mabel’s thoughts",
+      pull: 0.3,
+      evidence: 1,
+      stage: "idea",
+      createdAt: timestampText,
+      lastSeenAt: timestampText,
+      lastEvidenceAt: timestampText
     };
-    mabel.interests.unshift(interest);
-    addFeedEntry({
-      kind: "mind",
-      text: "A small question caught Mabel’s attention: " + spark.title + ".",
-      why: spark.question,
-      interest: spark.id
-    });
+    sparks.unshift(spark);
+  } else {
+    const lastEvidence = Date.parse(spark.lastEvidenceAt || spark.createdAt || 0);
+    if (!lastEvidence || timestamp - lastEvidence >= 30 * 60 * 1000) {
+      spark.evidence = (Number(spark.evidence) || 1) + 1;
+      spark.lastEvidenceAt = timestampText;
+      spark.pull = clampNeed((spark.pull || 0.3) + 0.08);
+    }
+    spark.lastSeenAt = timestampText;
+    spark.question = question || spark.question;
+    spark.source = candidate.source || spark.source;
   }
 
-  if (sparks.length > 30) sparks.length = 30;
-  if (mabel.interests.length > 30) mabel.interests.length = 30;
+  const idea = addResearchIdea({
+    id: spark.id, title: spark.title, question: spark.question, source: spark.source,
+    evidence: spark.evidence, createdAt: spark.createdAt, lastResearchedAt: spark.lastResearchedAt
+  });
+  const ageMs = timestamp - Date.parse(spark.createdAt || timestampText);
+  const qualifies = Boolean(previousInterest || spark.interestPromotedAt) ||
+    (isDurableInterestCandidate(candidate) && spark.evidence >= 3 && ageMs >= 60 * 60 * 1000);
+
+  if (qualifies) {
+    const newlyPromoted = !spark.interestPromotedAt;
+    spark.interestPromotedAt = spark.interestPromotedAt || timestampText;
+    spark.stage = "growing";
+    const interest = promoteResearchIdeaToInterest(candidate, spark);
+    if (interest) {
+      interest.evidence = spark.evidence;
+      interest.pull = spark.pull;
+      interest.stage = interest.stage === "pursuing" ? "pursuing" : "growing";
+      interest.question = spark.question || interest.question;
+      interest.lastSeenAt = timestampText;
+    }
+    if (idea) {
+      researchIdeas = researchIdeas.filter(function (item) { return normalizeInterestTitle(item.title) !== key; });
+      saveResearchIdeas();
+    }
+    if (newlyPromoted) showSparkNotice();
+  } else {
+    spark.stage = "idea";
+  }
+
+  sparks = sparks.slice(0, 40);
+  mabel.interests = mabel.interests.slice(0, 30);
   saveSparks();
   saveMabel();
   updatePage();
-  if (isNewSpark) showSparkNotice();
-
 }
 
 async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate) {
@@ -2685,20 +2791,10 @@ if (reflection.spark && reflection.spark.title && !sparkCandidate) {
       const existing = mabel.interests.find(function (interest) {
         return interest.id === update.id;
       });
-
-      if (existing) {
-        existing.pull = clampNeed(existing.pull + (update.pullChange || 0));
-      } else if (update.newInterest) {
-        mabel.interests.unshift({
-          id: update.id || "interest-" + Date.now(),
-          title: update.newInterest.title,
-          kind: update.newInterest.kind || "wonder",
-          question: update.newInterest.question || "What does this mean to Mabel?",
-          curiosity: 0.6,
-          pull: update.pull || 0.45,
-          stage: "pursuing"
-        });
+      if (update.newInterest && update.newInterest.title) {
         recordSpark({ ...update.newInterest, source: "conversation" });
+      } else if (existing) {
+        existing.pull = clampNeed(existing.pull + (update.pullChange || 0));
       }
     }
 
@@ -2916,7 +3012,7 @@ async function handleWander(options) {
       body: JSON.stringify({
         focusInterest: focusInterest,
         interests: [focusInterest],
-        researchInstruction: "Research only the exact subject in focusInterest.title. Keep the search query, sources, and summary directly related to that subject. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
+        researchInstruction: "Search the public web for the exact subject and two or three closely related questions. Open at least two relevant pages where possible, compare what they say, and keep the search query, source titles, URLs, and summary directly related to focusInterest.title. Include a concrete fact and cite the actual source URL/title. If web search is unavailable, say that plainly instead of inventing a source. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
         memories: [],
         mood: mabel.now.mood,
         energy: mabel.now.energy,
@@ -2960,6 +3056,14 @@ async function handleWander(options) {
     researchLog.unshift(research);
     researchLog = researchLog.slice(0, 30);
     saveResearchLog();
+
+    const researchedIdea = researchIdeas.find(function (item) {
+      return normalizeInterestTitle(item.title) === normalizeInterestTitle(focusInterest.title);
+    });
+    if (researchedIdea) {
+      researchedIdea.lastResearchedAt = research.at;
+      saveResearchIdeas();
+    }
 
     const existing = mabel.interests.find(function (item) {
       return normalizeInterestTitle(item.title) === normalizeInterestTitle(focusInterest.title);
@@ -3133,6 +3237,7 @@ It should feel like Mabel looking back on the day from her mossy nest.
 Mention one or two small things that may not have appeared in the Activity Log.
 Include a gentle feeling, a small question, or something Mabel wants to remember tomorrow.
 Do not repeat the Activity Log word for word.
+Keep every reference to a visitor, note, object, or earlier conversation tied to details present in the supplied moments or memories. Name what the note or object actually was. Do not invent named visitors, poems, or past events.
 Do not mention that you are an AI.
 Do not mention Wikipedia, the internet, or searching.
 Use 4 to 7 sentences.
@@ -3248,6 +3353,34 @@ function startMabel() {
   researchLog = loadResearchLog();
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks();
+  researchIdeas = loadResearchIdeas();
+  const previousInterests = mabel.interests.slice();
+  const retainedInterests = [];
+  previousInterests.forEach(function (interest) {
+    const associatedSpark = sparks.find(function (spark) {
+      return spark && (spark.id === interest.id || normalizeInterestTitle(spark.title) === normalizeInterestTitle(interest.title));
+    });
+    const evidence = Math.max(Number(interest.evidence) || 0, Number(associatedSpark && associatedSpark.evidence) || 0);
+    const created = Date.parse(interest.createdAt || (associatedSpark && associatedSpark.createdAt) || 0);
+    const mature = isDurableInterestCandidate(interest) && evidence >= 3 && created && Date.now() - created >= 60 * 60 * 1000;
+    if (mature) {
+      interest.interestPromotedAt = interest.interestPromotedAt || (associatedSpark && associatedSpark.interestPromotedAt) || now();
+      retainedInterests.push(interest);
+    } else {
+      addResearchIdea({
+        id: interest.id, title: interest.title, question: interest.question,
+        source: interest.source || "Mabel’s thoughts", evidence: evidence || 1, createdAt: interest.createdAt
+      });
+      if (associatedSpark) {
+        associatedSpark.stage = "idea";
+        delete associatedSpark.interestPromotedAt;
+      }
+    }
+  });
+  mabel.interests = retainedInterests;
+  saveMabel();
+  saveSparks();
+  saveResearchIdeas();
   try {
     lastViewedSparkId = localStorage.getItem(viewedSparkStorageKey) || "";
     lastViewedArtworkKey = localStorage.getItem(viewedArtworkStorageKey) || "";
