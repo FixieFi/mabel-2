@@ -1782,6 +1782,11 @@ function captureVisitorFacts(message) {
   if (nameMatch && !/^(not|just|anonymous|visitor|mabel)$/i.test(nameMatch[1])) {
     addVisitorProfileNote("facts", "Their name is " + nameMatch[1].trim() + ".");
   }
+  const ageMatch = text.match(/\b(?:my age is|i am|i'm|im)\s+(\d{1,3})(?=\s*(?:years? old|yrs? old|[.!?,;]|$))/i);
+  if (ageMatch) {
+    const age = Number(ageMatch[1]);
+    if (age >= 1 && age <= 110) addVisitorProfileNote("facts", "They are " + age + " years old.");
+  }
   const favoriteMatch = text.match(/\bmy favorite\s+([a-z ]{2,24})\s+is\s+([^.!?\n]{2,100})/i);
   if (favoriteMatch) {
     addVisitorProfileNote("facts", "Their favorite " + favoriteMatch[1].trim() + " is " + favoriteMatch[2].trim() + ".");
@@ -2221,8 +2226,16 @@ async function handleVisitorMessage() {
         activity: mabel.now.doing,
         energy: mabel.now.energy,
         interests: mabel.interests,
-        memories: mabel.memories.slice(0, 8),
-        conversation: conversation.slice(-10),
+        memories: visitorProfile.facts.slice(0, 8).map(function (fact) {
+          return { kind: "visitor-fact", text: fact.text };
+        }),
+        conversation: conversation.slice(-14).filter(function (entry) {
+          return entry && entry.role === "user" && typeof entry.content === "string";
+        }).slice(-7),
+        visitorProfile: {
+          facts: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; })
+        },
+        replyGuidance: "Answer the newest visitor message directly and warmly. Use visitor facts to recognize them, but do not let older topics take over. Treat prior assistant replies as unverified and do not repeat details unless the visitor brings them up again.",
         wanderings: wanderings.slice(0, 10).map(function (item) {
           return {
             title: item.title,
