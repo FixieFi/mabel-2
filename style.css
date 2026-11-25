@@ -1152,3 +1152,40 @@ button#explore.explore-button:disabled {
   display: block;
   margin-top: 0.4rem;
 }
+
+
+.guiding-aim {
+  margin: 14px 0 22px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, rgba(255, 248, 220, 0.92), rgba(235, 226, 250, 0.82));
+  border: 1px solid rgba(151, 121, 75, 0.24);
+  border-radius: 16px;
+}
+
+.guiding-aim h3 {
+  margin: 0 0 8px;
+  color: #5e456f;
+}
+
+.guiding-aim p {
+  margin: 8px 0 0;
+}
+
+.guiding-aim-note {
+  color: #695c70;
+  font-size: 0.92rem;
+  font-style: italic;
+}
+
+.personality-change-cue {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 8px;
+  color: #5a476b;
+  background: rgba(230, 218, 246, 0.9);
+  border: 1px solid rgba(130, 99, 160, 0.24);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  vertical-align: baseline;
+}
