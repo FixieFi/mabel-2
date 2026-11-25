@@ -37,6 +37,8 @@ const visitorBoardStatus = document.getElementById("visitor-board-status");
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
 
+const MABEL_GUIDING_AIM = "Mabel wants to build a fulfilling life by discovering more about the world beyond the Hawthorn Hollow and following the subjects she keeps finding meaningful. If an interest stays with her through real conversations, discoveries, and research, she may someday imagine work that feels right to her. Her path can change as she does.";
+
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 const MABEL_ART_URL = "https://mabel-ai-artwork.fianna-b-murphy.workers.dev/mabel-art";
 const MABEL_WANDER_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-wander";
@@ -1380,12 +1382,25 @@ function updateInterests() {
 }
 
 
-function updateChanges() {
-  if (!changesElement) {
-    return;
-  }
+function personalityCueLabel(candidate, evidence, source) {
+  const key = String(candidate || "").trim().toLowerCase();
+  const labels = {
+    empathy: { label: "Empathy taking shape", evidence: /\b(feel|feeling|feelings|kind|kindness|mean|unkind|hurt|upset|empath)\b/i },
+    curiosity: { label: "Curiosity growing", evidence: /\b(wonder|curious|question|learn|why|how|discover)\b/i },
+    creativity: { label: "Creativity growing", evidence: /\b(draw|paint|create|make|imagin|art)\w*/i },
+    patience: { label: "Patience growing", evidence: /\b(wait|patient|slowly|stay with)\b/i },
+    courage: { label: "Courage growing", evidence: /\b(brave|afraid|try|nervous|dare)\b/i },
+    playfulness: { label: "Playfulness growing", evidence: /\b(play|joke|fun|silly|laugh)\w*/i }
+  };
+  const cue = labels[key];
+  const text = String(evidence || "");
+  if (!cue || !cue.evidence.test(text) || !textSharesSpecificDetail(text, String(source || ""))) return "";
+  return cue.label;
+}
 
-  changesElement.innerHTML = "";
+function updateChanges() {
+  if (!changesElement) return;
+  changesElement.replaceChildren();
 
   const changeEntries = mabel.feed.filter(function (entry) {
     return entry.kind === "mind";
@@ -1400,12 +1415,20 @@ function updateChanges() {
 
   changeEntries.slice(0, 8).forEach(function (entry) {
     const item = document.createElement("li");
-    const time = new Date(entry.at).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const line = document.createElement("span");
+    line.textContent = time + " — ";
+    item.appendChild(line);
 
-    item.textContent = time + " - " + entry.text;
+    if (entry.personalityCue) {
+      const cue = document.createElement("span");
+      cue.className = "personality-change-cue";
+      cue.textContent = entry.personalityCue;
+      item.appendChild(cue);
+      item.appendChild(document.createTextNode(" "));
+    }
+
+    item.appendChild(document.createTextNode(entry.text || ""));
     changesElement.appendChild(item);
   });
 }
@@ -2065,7 +2088,7 @@ function requestedArtworkSubject(message) {
     ["moon", "moon"], ["star", "star"], ["fish", "fish"], ["house|cottage", "house"]
   ];
   for (const [pattern, subject] of subjects) {
-    if (new RegExp("\\b(?:" + pattern + ")\\b", "i").test(text)) return subject;
+    if (new RegExp("\b(?:" + pattern + ")\b", "i").test(text)) return subject;
   }
   return "";
 }
@@ -2577,6 +2600,20 @@ function researchMatchesFocus(text, focusInterest) {
   return requiredMatches > 0 && matchedWords.length >= requiredMatches;
 }
 
+function guidingAimResearchFocus() {
+  const priorSteps = researchLog.slice(0, 8).map(function (entry) {
+    return [entry.focusTitle, entry.searchQuestion].filter(Boolean).join(": ");
+  });
+  return {
+    id: "guiding-aim-" + new Date().toISOString().slice(0, 10),
+    title: "Life beyond the Hawthorn Hollow",
+    question: "Choose one specific, surprising subject from life beyond Mabel’s woods that is absent from her recent research. Search it once, bring back a useful fact, and leave it as a passing discovery unless it continues to matter to her.",
+    source: "guiding-aim",
+    isGuidingAimStep: true,
+    steps: priorSteps
+  };
+}
+
 function chooseAutonomousResearchFocus(boardNote) {
   const candidates = [];
   if (boardNote) {
@@ -2634,7 +2671,7 @@ function chooseAutonomousResearchFocus(boardNote) {
     return key && !recentFocus.has(key) &&
       candidates.findIndex(function (other) { return normalizeInterestTitle(other.title) === key; }) === index;
   });
-  if (!fresh.length && !candidates.length) return null;
+  if (!fresh.length) return guidingAimResearchFocus();
 
   const freshBoardNote = fresh.find(function (item) { return item.source === "visitor-board"; });
   if (freshBoardNote) return freshBoardNote;
@@ -2749,7 +2786,8 @@ async function handleAutonomousMoment() {
             lastPursuedAt: interest.lastPursuedAt || ""
           };
         }),
-        autonomyPlan: "Choose a small next action from Mabel's active interests when appropriate. Interests are earned from repeated attention, may develop through evidence, and may pause or change. Do not invent a fixed personality or treat every passing observation as a lasting goal.",
+        guidingAim: MABEL_GUIDING_AIM,
+        autonomyPlan: "Mabel's broad aim is to build a fulfilling life by learning about the world beyond the Hawthorn Hollow and following subjects she repeatedly finds meaningful. Choose a small next action from active interests when appropriate. When no grounded interest is ready, she may take a gentle step toward learning about life beyond the woods through real conversations, discoveries, or research; do not seed a list of questions or invent a discovery. A career or vocation may only be imagined after an interest has remained important across multiple grounded moments and research steps. Never assign her a career in advance, and let her change direction.",
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
         feed: mabel.feed.slice(0, 15),
@@ -3071,7 +3109,7 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate,
         visitorMessage: visitorMessage,
         mabelReply: mabelReply,
         sparkCandidate: sparkCandidate,
-        reflectionGuidance: "This is a later reflection on a real exchange. Think about the actual words and feelings in it, and what Mabel might genuinely keep wondering about. A broader interest may emerge, but do not invent objects, people, memories, or events. Only keep details supported by the exchange. Do not assign her a fixed career or personality.",
+        reflectionGuidance: "This is a later reflection on a real exchange. Think about the actual words and feelings in it, and what Mabel might genuinely keep wondering about. A broader interest may emerge, but do not invent objects, people, memories, or events. Only keep details supported by the exchange. Do not assign her a fixed career or personality. If this real moment clearly shows a small emerging quality such as empathy, curiosity, patience, creativity, courage, or playfulness, you may return a short personalityCue and the exact personalityEvidence from this exchange; otherwise return no cue.",
         needs: mabel.needs,
         mood: mabel.now.mood,
         activity: mabel.now.doing,
@@ -3090,10 +3128,16 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate,
       addVisitorProfileNote("facts", reflection.visitorNote);
     }
     if (reflection.sharedMoment && textSharesSpecificDetail(reflection.sharedMoment, visitorMessage + " " + mabelReply)) {
+      const personalityCue = personalityCueLabel(
+        reflection.personalityCue,
+        reflection.personalityEvidence || reflection.sharedMoment,
+        visitorMessage + " " + mabelReply
+      );
       addFeedEntry({
         kind: "mind",
         text: (deferred ? "Later, Mabel thought back to your conversation: " : "") + reflection.sharedMoment,
-        why: "A thought grounded in what was actually said."
+        why: "A thought grounded in what was actually said.",
+        personalityCue: personalityCue
       });
     }
 
@@ -3157,7 +3201,7 @@ async function reflectOnVisitorBoardNote(reflection) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        event: "Later, Mabel quietly thinks again about the exact visitor note below and her first reaction. Consider the words and tone that are actually there. She may wonder what might lead someone to write this or what kindness and empathy mean, but do not assume facts about the author or invent any other events. Return one short, grounded thought.",
+        event: "Later, Mabel quietly thinks again about the exact visitor note below and her first reaction. Consider the words and tone that are actually there. She may wonder what might lead someone to write this or what kindness and empathy mean, but do not assume facts about the author or invent any other events. Return one short, grounded thought. If the thought clearly shows Mabel considering another person's feelings or intentions, also return personalityCue as empathy or curiosity and personalityEvidence using only a phrase grounded in the note and thought; otherwise return no cue.",
         eventDetails: {
           kind: "later-noticeboard-reflection",
           note: note,
@@ -3175,10 +3219,20 @@ async function reflectOnVisitorBoardNote(reflection) {
     const thought = textSharesSpecificDetail(parts.text, note)
       ? parts.text
       : "Later, Mabel thought again about the words “" + note + "”. She wondered what might lead someone to write them.";
+    let personalityCue = personalityCueLabel(
+      data.personalityCue,
+      data.personalityEvidence || thought,
+      note + " " + String(reflection.reaction || "")
+    );
+    if (!personalityCue && /\b(what might lead someone|why someone would|thinking about how someone|wondered what someone)\b/i.test(thought) &&
+        textSharesSpecificDetail(thought, note)) {
+      personalityCue = "Thoughtfulness about others";
+    }
     addFeedEntry({
       kind: "mind",
       text: "Mabel thought again about a Visitors’ board note: " + thought,
-      why: "She returned to the exact words she had read."
+      why: "She returned to the exact words she had read.",
+      personalityCue: personalityCue
     });
     if (data.spark) {
       recordSpark({ ...data.spark, source: "visitor-board", evidenceText: note + " " + thought });
@@ -3412,18 +3466,30 @@ async function handleWander(options) {
       body: JSON.stringify({
         focusInterest: focusInterest,
         interests: [focusInterest],
-        researchInstruction: "Search the public web for the exact subject and two or three closely related questions. Open at least two relevant pages where possible, compare what they say, and keep the search query, source titles, URLs, and summary directly related to focusInterest.title. Include a concrete fact and cite the actual source URL/title. If web search is unavailable, say that plainly instead of inventing a source. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
-        autonomyPlan: focusInterest.isOngoingGoal
-          ? "This is one step in Mabel's longer-running interest. Continue from its saved steps and next action. Take one small, useful step, record what changed in her understanding, and suggest one next question. She may pause or change this interest if the evidence no longer draws her."
-          : "This is a passing question, not automatically a hobby or long-term goal. Explore it once, record a useful fact and source, and only suggest a next step if there is a natural open question.",
-        priorGoalSteps: Array.isArray(focusInterest.steps) ? focusInterest.steps.slice(0, 6) : [],
-        priorGoalNextAction: focusInterest.nextAction || focusInterest.nextQuestion || "",
+        guidingAim: MABEL_GUIDING_AIM,
+        researchInstruction: focusInterest.isGuidingAimStep
+          ? "For this step in Mabel’s broad wish to understand life beyond her woods, choose one concrete, verifiable subject she has not researched recently. Let the web search choose a varied subject rather than using a fixed topic list. Search the public web, open relevant pages where possible, and return the actual specific subject as title, a search question, a useful fact, and a source URL/title. Keep it a one-time discovery unless it later keeps drawing her attention. Do not invent results or say she found an object."
+          : "Search the public web for the exact subject and two or three closely related questions. Open at least two relevant pages where possible, compare what they say, and keep the search query, source titles, URLs, and summary directly related to focusInterest.title. Include a concrete fact and cite the actual source URL/title. If web search is unavailable, say that plainly instead of inventing a source. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
+        autonomyPlan: focusInterest.isGuidingAimStep
+          ? "This is one small step toward Mabel’s open-ended wish to build a fulfilling life by learning about the wider world. Choose a varied subject, keep the finding as a passing discovery, and do not turn it into an interest, career, or fixed trait unless it continues to matter across real moments."
+          : focusInterest.isOngoingGoal
+            ? "This is one step in Mabel's longer-running interest. Continue from its saved steps and next action. Take one small, useful step, record what changed in her understanding, and suggest one next question. She may pause or change this interest if the evidence no longer draws her."
+            : "This is a passing question, not automatically a hobby or long-term goal. Explore it once, record a useful fact and source, and only suggest a next step if there is a natural open question.",
+        priorGoalSteps: Array.isArray(focusInterest.steps) ? focusInterest.steps.slice(0, 8) : [],
+        priorGoalNextAction: focusInterest.isGuidingAimStep
+          ? "Choose a concrete subject different from the recent research."
+          : (focusInterest.nextAction || focusInterest.nextQuestion || ""),
+        recentResearch: researchLog.slice(0, 8).map(function (entry) {
+          return { title: entry.focusTitle || entry.title || "", question: entry.searchQuestion || "" };
+        }),
         memories: [],
         mood: mabel.now.mood,
         energy: mabel.now.energy,
         needs: mabel.needs,
         wanderings: [],
-        recentFinds: [focusInterest.title]
+        recentFinds: focusInterest.isGuidingAimStep
+          ? researchLog.slice(0, 8).map(function (entry) { return entry.focusTitle || entry.title || ""; })
+          : [focusInterest.title]
       })
     });
     if (!response.ok) throw new Error("Mabel could not reach the library. Status " + response.status);
@@ -3434,11 +3500,19 @@ async function handleWander(options) {
       data.title,
       data.sourceTitle
     ].filter(Boolean).join(" ");
-    const relevant = researchMatchesFocus(returnedText, focusInterest);
+    const aimResearchRelevant = Boolean(
+      focusInterest.isGuidingAimStep &&
+      data.title && data.searchQuestion && data.researchSummary &&
+      safeExternalUrl(data.url) &&
+      researchMatchesFocus(String(data.searchQuestion) + " " + String(data.researchSummary), { title: String(data.title) })
+    );
+    const relevant = focusInterest.isGuidingAimStep
+      ? aimResearchRelevant
+      : researchMatchesFocus(returnedText, focusInterest);
     const research = {
       kind: "research",
       at: now(),
-      focusTitle: focusInterest.title,
+      focusTitle: focusInterest.isGuidingAimStep && relevant ? data.title : focusInterest.title,
       focusSource: focusInterest.source || "",
       searchQuestion: relevant
         ? (data.searchQuestion || focusInterest.question || "What might Mabel discover about " + focusInterest.title + "?")
