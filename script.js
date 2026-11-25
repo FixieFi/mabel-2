@@ -2184,40 +2184,54 @@ function visitorSeemsDistressed(message) {
 
 function isArtworkRequest(message) {
   const text = String(message || "").trim();
+  if (!text) return false;
   const selfPortrait = /\bself[ -]?portrait\b|\bportrait of (?:yourself|mabel)\b|\bdraw (?:yourself|mabel)\b|\bpicture of (?:you|mabel)\b/i.test(text);
-  const directDraw = /^(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
-    /\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text);
-  const pictureRequest = /\b(?:make|create|give|show)\s+(?:me\s+)?(?:a|an|some)?\s*(?:picture|image|art|artwork|drawing|portrait|illustration)\b/i.test(text);
-  const requestedSubject = requestedArtworkSubject(text);
-  const makeSubject = /\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:make|create|do)\b/i.test(text) && Boolean(requestedSubject);
-  return selfPortrait || directDraw || pictureRequest || makeSubject;
+  const directDraw = /\b(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
+    /\b(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:draw|sketch|paint|illustrate)\b/i.test(text) ||
+    /\b(?:i want|i'd like|i would like)\s+you\s+to\s+(?:draw|sketch|paint|illustrate)\b/i.test(text);
+  const pictureRequest = /\b(?:make|create|give|show)\s+(?:(?:me|us)\s+)?(?:(?:a|an|some|the)\s+)?(?:picture|image|art|artwork|drawing|portrait|illustration)\b/i.test(text);
+  return selfPortrait || directDraw || pictureRequest || Boolean(requestedArtworkSubject(text));
 }
 
 function requestedArtworkDescriptionSubject(message) {
-  const knownSubject = requestedArtworkSubject(message);
-  if (knownSubject) return knownSubject;
-  const text = String(message || '').trim();
-  const match = text.match(/\b(?:draw|sketch|paint|illustrate|picture of|image of|drawing of)\s+(?:(?:me|us)\s+)?(?:(?:a|an|the)\s+)?([^.!?,;]+)/i);
-  if (!match) return '';
-  const subject = match[1].replace(/\b(?:please|for me|in your own time|when you can)\b/gi, '').replace(/\s+/g, ' ').trim().slice(0, 80);
-  return /^(?:something|anything|art|artwork|a picture|an image)$/i.test(subject) ? '' : subject;
+  return requestedArtworkSubject(message);
 }
+
 function requestedArtworkSubject(message) {
-  const text = String(message || "").toLowerCase();
-  if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:yourself|mabel)|picture of (?:you|mabel))\b/.test(text)) return "mabel";
-  const subjects = [
-    ["power ranger", "power ranger"], ["cat|kitten", "cat"], ["dog|puppy", "dog"],
-    ["rabbit|bunny", "rabbit"], ["fox", "fox"], ["bird|robin|sparrow", "bird"],
-    ["flower|bouquet", "flower"], ["mushroom|toadstool", "mushroom"],
-    ["fossil", "fossil"], ["button", "button"], ["shell", "shell"],
-    ["moon", "moon"], ["star", "star"], ["fish", "fish"], ["house|cottage", "house"]
+  const text = String(message || "").trim();
+  if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:yourself|mabel)|picture of (?:you|mabel))\b/i.test(text)) return "mabel";
+  const lower = text.toLowerCase();
+  const knownSubjects = [
+    [/\bpower\s+ranger\b/i, "power ranger"], [/\b(?:cat|kitten)\b/i, "cat"],
+    [/\b(?:dog|puppy)\b/i, "dog"], [/\b(?:rabbit|bunny)\b/i, "rabbit"],
+    [/\bfox\b/i, "fox"], [/\b(?:bird|robin|sparrow)\b/i, "bird"],
+    [/\b(?:flower|bouquet)\b/i, "flower"], [/\b(?:mushroom|toadstool)\b/i, "mushroom"],
+    [/\bfossil\b/i, "fossil"], [/\bbutton\b/i, "button"], [/\bshell\b/i, "shell"],
+    [/\bmoon\b/i, "moon"], [/\bstar\b/i, "star"], [/\bfish\b/i, "fish"],
+    [/\b(?:house|cottage)\b/i, "house"]
   ];
-  for (const [pattern, subject] of subjects) {
-    if (new RegExp("\b(?:" + pattern + ")\b", "i").test(text)) return subject;
+  for (const [pattern, subject] of knownSubjects) {
+    if (pattern.test(lower)) return subject;
+  }
+
+  const subjectPatterns = [
+    /\b(?:draw|sketch|paint|illustrate)\s+(?:(?:me|us)\s+)?(?:(?:a|an|the)\s+)?(.+)/i,
+    /\b(?:make|create|give|show)\s+(?:(?:me|us)\s+)?(?:(?:a|an|some|the)\s+)?(?:picture|image|artwork|art|drawing|portrait|illustration)\s+(?:of|showing)\s+(.+)/i,
+    /\b(?:picture|image|drawing|painting|artwork|art)\s+of\s+(.+)/i
+  ];
+  for (const pattern of subjectPatterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const subject = match[1]
+      .replace(/\b(?:please|for me|when you can|if you can)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s,:-]+|[\s,:-]+$/g, "")
+      .trim()
+      .slice(0, 80);
+    if (subject && !/^(?:something|anything|art|artwork|a picture|an image)$/i.test(subject)) return subject;
   }
   return "";
 }
-
 function makeMabelFallbackArtwork(context) {
   const palettes = [
     ["#718778", "#b77769", "#e9d8b7"],
@@ -2435,8 +2449,8 @@ async function handleVisitorMessage() {
           return { kind: "visitor-fact", text: fact.text };
         }),
         conversation: conversation.slice(-14).filter(function (entry) {
-          return entry && entry.role === "user" && typeof entry.content === "string";
-        }).slice(-7),
+          return entry && (entry.role === "user" || entry.role === "assistant") && typeof entry.content === "string";
+        }),
         visitorProfile: {
           facts: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; })
         },
@@ -2483,15 +2497,6 @@ async function handleVisitorMessage() {
     let requestedArtwork = null;
     if (isArtworkRequest(message)) {
       requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
-    } else if (visitorSeemsDistressed(message)) {
-      requestedArtwork = await requestMabelArtwork({
-        source: "comfort",
-        comfortRequest: true,
-        message: message,
-        mood: mabel.now.mood,
-        activity: "making a small comfort drawing for a visitor",
-        thought: "A little picture might be a kind thing to leave for them."
-      }, replyElement);
     } else if (visitorSeemsDistressed(message)) {
       requestedArtwork = await requestMabelArtwork({
         source: "comfort",
