@@ -573,11 +573,27 @@ function renderMabelCard(artwork) {
   });
 
   if (subject === "mabel") {
-    node("image", {
-      href: new URL("images/mabel.png", window.location.href).href,
-      x: "37", y: "25", width: "86", height: "105",
-      preserveAspectRatio: "xMidYMid meet", opacity: "0.72"
-    });
+    const cx = 80 + random() * 5;
+    const cy = 83 + random() * 5;
+    ellipse(cx - 20, cy - 25, 13, 20, palette[1], 0.82, -18);
+    ellipse(cx + 19, cy - 26, 13, 20, palette[1], 0.82, 18);
+    ellipse(cx - 20, cy - 25, 6, 12, palette[2], 0.72, -18);
+    ellipse(cx + 19, cy - 26, 6, 12, palette[2], 0.72, 18);
+    ellipse(cx, cy + 31, 23, 29, palette[1], 0.58, -8);
+    softBlob(cx, cy - 3, 31, 27, palette[1], 0.9);
+    softBlob(cx + 5, cy + 8, 19, 13, "#f4ead6", 0.8);
+    ellipse(cx - 10, cy - 4, 2.2, 3, "#432a5e", 0.9, 0);
+    ellipse(cx + 11, cy - 4, 2.2, 3, "#432a5e", 0.9, 0);
+    ellipse(cx + 1, cy + 7, 2.4, 1.8, palette[2], 0.95, 0);
+    path("M " + (cx - 3) + " " + (cy + 10) + " Q " + cx + " " + (cy + 15) + " " + (cx + 4) + " " + (cy + 10),
+      "#432a5e", 1.1, 0.8);
+    path("M " + (cx - 14) + " " + (cy + 7) + " Q " + (cx - 28) + " " + (cy + 4) + " " + (cx - 37) + " " + (cy + 2) +
+      " M " + (cx - 14) + " " + (cy + 12) + " Q " + (cx - 28) + " " + (cy + 14) + " " + (cx - 35) + " " + (cy + 17) +
+      " M " + (cx + 14) + " " + (cy + 7) + " Q " + (cx + 28) + " " + (cy + 4) + " " + (cx + 37) + " " + (cy + 2) +
+      " M " + (cx + 14) + " " + (cy + 12) + " Q " + (cx + 28) + " " + (cy + 14) + " " + (cx + 35) + " " + (cy + 17),
+      palette[2], 0.8, 0.75);
+    path("M " + (cx + 19) + " " + (cy + 47) + " Q " + (cx + 41) + " " + (cy + 40) + " " + (cx + 37) + " " + (cy + 25),
+      palette[1], 2, 0.55);
   } else if (subject === "cat") {
     const cx = 78 + random() * 8;
     const cy = 82 + random() * 8;
@@ -1316,20 +1332,68 @@ function safeExternalUrl(value) {
   }
 }
 
+function syncNoticedItemsIntoBindle() {
+  ensureHollowWorld();
+  const lists = { food: bindle.food, water: bindle.water, treasures: bindle.treasures };
+  mabel.world.objects.forEach(function (object) {
+    if (!object || (object.source !== "wandering" && !(object.source === "visitor" && object.noticedAt))) return;
+    if (["eaten", "drank"].includes(object.status)) return;
+    const target = object.kind === "food" ? lists.food : object.kind === "water" ? lists.water : lists.treasures;
+    const name = String(object.name || "").trim();
+    if (!name || target.some(function (item) {
+      return item.giftId && item.giftId === object.id ||
+        normalizeInterestTitle(item.name) === normalizeInterestTitle(name);
+    })) return;
+    target.unshift({
+      name: name,
+      note: object.note || (object.source === "visitor" ? "A visitor left this for Mabel." : ""),
+      giftId: object.id || ""
+    });
+  });
+  saveBindle();
+}
+
 function updateBindle() {
   const bindleElement = document.getElementById("bindle");
+  if (!bindleElement) return;
+  bindleElement.replaceChildren();
+  const inventory = bindle || { food: [], water: [], treasures: [] };
+  inventory.food = Array.isArray(inventory.food) ? inventory.food : [];
+  inventory.water = Array.isArray(inventory.water) ? inventory.water : [];
+  inventory.treasures = Array.isArray(inventory.treasures) ? inventory.treasures : [];
+  const waitingGifts = mabel.world && Array.isArray(mabel.world.objects)
+    ? mabel.world.objects.filter(function (object) {
+        return object.source === "visitor" && !object.noticedAt;
+      })
+    : [];
 
-  if (!bindleElement) {
-    return;
+  function appendGroup(title, values, isWaiting) {
+    if (!values.length) return;
+    const group = document.createElement("div");
+    group.className = "bindle-group";
+    const heading = document.createElement("p");
+    heading.className = "bindle-title";
+    heading.textContent = title;
+    group.appendChild(heading);
+    const list = document.createElement("ul");
+    list.className = "bindle-list";
+    values.forEach(function (value) {
+      const row = document.createElement("li");
+      row.className = "bindle-item";
+      row.textContent = value.name || String(value);
+      if (value.note || isWaiting) {
+        const note = document.createElement("span");
+        note.className = "bindle-note";
+        note.textContent = " — " + (value.note || "Waiting for Mabel’s next quiet moment.");
+        row.appendChild(note);
+      }
+      list.appendChild(row);
+    });
+    group.appendChild(list);
+    bindleElement.appendChild(group);
   }
 
-  bindleElement.innerHTML = "";
-
-  const hasFood = bindle.food.length > 0;
-  const hasWater = bindle.water.length > 0;
-  const hasTreasures = bindle.treasures.length > 0;
-
-  if (!hasFood && !hasWater && !hasTreasures) {
+  if (!inventory.food.length && !inventory.water.length && !inventory.treasures.length && !waitingGifts.length) {
     const empty = document.createElement("p");
     empty.className = "bindle-empty";
     empty.textContent = "Mabel’s bindle is light today.";
@@ -1337,98 +1401,10 @@ function updateBindle() {
     return;
   }
 
-  if (hasFood) {
-    const foodGroup = document.createElement("div");
-    foodGroup.className = "bindle-group";
-
-    const foodTitle = document.createElement("p");
-    foodTitle.className = "bindle-title";
-    foodTitle.textContent = "Food";
-
-    const foodList = document.createElement("ul");
-    foodList.className = "bindle-list";
-
-    bindle.food.forEach(function (item) {
-      const foodItem = document.createElement("li");
-      foodItem.className = "bindle-item";
-      foodItem.textContent = item.name;
-
-      if (item.note) {
-        const note = document.createElement("span");
-        note.className = "bindle-note";
-        note.textContent = " — " + item.note;
-        foodItem.appendChild(note);
-      }
-
-      foodList.appendChild(foodItem);
-    });
-
-    foodGroup.appendChild(foodTitle);
-    foodGroup.appendChild(foodList);
-    bindleElement.appendChild(foodGroup);
-  }
-
-  if (hasWater) {
-    const waterGroup = document.createElement("div");
-    waterGroup.className = "bindle-group";
-
-    const waterTitle = document.createElement("p");
-    waterTitle.className = "bindle-title";
-    waterTitle.textContent = "Water";
-
-    const waterList = document.createElement("ul");
-    waterList.className = "bindle-list";
-
-    bindle.water.forEach(function (item) {
-      const waterItem = document.createElement("li");
-      waterItem.className = "bindle-item";
-      waterItem.textContent = item.name;
-
-      if (item.note) {
-        const note = document.createElement("span");
-        note.className = "bindle-note";
-        note.textContent = " — " + item.note;
-        waterItem.appendChild(note);
-      }
-
-      waterList.appendChild(waterItem);
-    });
-
-    waterGroup.appendChild(waterTitle);
-    waterGroup.appendChild(waterList);
-    bindleElement.appendChild(waterGroup);
-  }
-
-  if (hasTreasures) {
-    const treasureGroup = document.createElement("div");
-    treasureGroup.className = "bindle-group";
-
-    const treasureTitle = document.createElement("p");
-    treasureTitle.className = "bindle-title";
-    treasureTitle.textContent = "Little treasures";
-
-    const treasureList = document.createElement("ul");
-    treasureList.className = "bindle-list";
-
-    bindle.treasures.forEach(function (item) {
-      const treasureItem = document.createElement("li");
-      treasureItem.className = "bindle-item";
-      treasureItem.textContent = item.name;
-
-      if (item.note) {
-        const note = document.createElement("span");
-        note.className = "bindle-note";
-        note.textContent = " — " + item.note;
-        treasureItem.appendChild(note);
-      }
-
-      treasureList.appendChild(treasureItem);
-    });
-
-    treasureGroup.appendChild(treasureTitle);
-    treasureGroup.appendChild(treasureList);
-    bindleElement.appendChild(treasureGroup);
-  }
+  appendGroup("Food", inventory.food, false);
+  appendGroup("Water", inventory.water, false);
+  appendGroup("Little treasures", inventory.treasures, false);
+  appendGroup("Waiting to be noticed", waitingGifts, true);
 }
 
 function updateWanderings() {
@@ -1738,8 +1714,9 @@ async function queueHomeGift(objectName, giftKind) {
   mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
   saveMabel();
   updateHomeObjects();
+  updateBindle();
   const status = document.getElementById("hollow-status");
-  if (status) status.textContent = "Your gift is at home. Mabel may notice it during her next quiet moment while this page is open.";
+  if (status) status.textContent = "Your gift is waiting in Mabel’s bindle for her next quiet moment.";
 }
 
 function chooseGift(event) {
@@ -1852,6 +1829,9 @@ async function requestMabelArtwork(context, targetElement) {
         requestedSubject: requestedArtworkSubject(context.message),
         selfPortrait: requestedArtworkSubject(context.message) === "mabel",
         referenceImageUrl: new URL("images/mabel.png", window.location.href).href,
+        referenceImageInstruction: requestedArtworkSubject(context.message) === "mabel"
+          ? "Use mabel.png only as a visual reference for Mabel’s mouse features and proportions. Create a new original drawing; never paste or embed the reference image as a layer."
+          : "",
         mood: context.mood || mabel.now.mood,
         activity: context.activity || mabel.now.doing,
         thought: context.thought || mabel.now.thought,
@@ -1907,6 +1887,42 @@ async function requestMabelArtwork(context, targetElement) {
   return artwork;
 }
 
+function separateSparkMarker(value) {
+  let sparkTitle = "";
+  const text = String(value || "").replace(/\s*\[\[SPARK\]\]\s*([^\r\n]*)/gi, function (_match, title) {
+    sparkTitle = String(title || "").replace(/^[*_~]+|[*_~]+$/g, "").trim().slice(0, 90);
+    return "";
+  }).replace(/\[\[\/?SPARK\]\]/gi, "").trim();
+  return { text: text, sparkTitle: sparkTitle };
+}
+
+function sparkFromMarker(parts, source, question) {
+  if (!parts || !parts.sparkTitle) return null;
+  return {
+    id: "spark-" + normalizeInterestTitle(parts.sparkTitle),
+    title: parts.sparkTitle,
+    question: String(question || "Why did this detail stay with Mabel?").slice(0, 180),
+    reason: "A small thought caught Mabel’s attention.",
+    kind: "wonder",
+    source: source || "conversation"
+  };
+}
+
+function normalizeMabelReply(payload) {
+  const candidates = [
+    payload && payload.reply,
+    payload && payload.response,
+    payload && payload.message,
+    payload && payload.result && payload.result.reply,
+    payload && payload.result && payload.result.response
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (candidate && typeof candidate.text === "string" && candidate.text.trim()) return candidate.text.trim();
+  }
+  return "";
+}
+
 async function handleVisitorMessage() {
   if (messagePending || !messageElement || !replyElement) return;
   const message = messageElement.value.trim();
@@ -1952,14 +1968,19 @@ async function handleVisitorMessage() {
     }
 
     const data = await response.json();
+    const parsedReply = separateSparkMarker(normalizeMabelReply(data));
+    if (!parsedReply.text) throw new Error("Mabel’s Worker returned no reply text.");
+    const inlineSpark = sparkFromMarker(parsedReply, "conversation", message);
 
-    replyElement.textContent = data.reply;
+    replyElement.textContent = parsedReply.text;
 
     if (data.spark) {
       recordSpark(data.spark);
+    } else if (inlineSpark) {
+      recordSpark(inlineSpark);
     }
 
-    reflectOnConversation(message, data.reply, data.spark || null);
+    reflectOnConversation(message, parsedReply.text, data.spark || inlineSpark || null);
 
     let requestedArtwork = null;
     if (isArtworkRequest(message)) {
@@ -1983,7 +2004,7 @@ async function handleVisitorMessage() {
     });
     conversation.push({
       role: "assistant",
-      content: data.reply
+      content: parsedReply.text
     });
 
     if (conversation.length > 20) {
@@ -2039,6 +2060,7 @@ async function handleVisitorMessage() {
 
     messageElement.value = "";
   } catch (error) {
+    console.warn("Mabel chat request failed.", error);
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
     if (isArtworkRequest(message)) {
       await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
@@ -2075,22 +2097,25 @@ async function noticeNextVisitorGift() {
     });
     if (!response.ok) return;
     const data = await response.json();
+    const parsedGiftReply = separateSparkMarker(normalizeMabelReply(data));
+    const inlineGiftSpark = sparkFromMarker(parsedGiftReply, "discovery", gift.name);
     gift.noticedAt = now();
-    gift.reaction = data.reply || "Mabel has noticed the gift.";
+    gift.reaction = parsedGiftReply.text || "Mabel has noticed the gift.";
     gift.status = "noticed";
-    if (data.reply) showHollowSpeech(data.reply);
+    if (parsedGiftReply.text) showHollowSpeech(parsedGiftReply.text);
     if (data.mood) mabel.now.mood = data.mood;
     if (data.memory) mabel.memories.unshift({ at: now(), kind: "discovery", text: data.memory });
     if (data.spark) recordSpark({ ...data.spark, source: "discovery" });
+    else if (inlineGiftSpark) recordSpark(inlineGiftSpark);
 
     if (gift.kind === "food" && mabel.needs.food < 0.72) {
       mabel.needs.food = clampNeed(mabel.needs.food + 0.2);
       gift.status = "eaten";
-      addFeedEntry({ kind: "did", text: "Mabel ate " + gift.name + ", a gift she found waiting at home.", why: data.reply || "She was hungry." });
+      addFeedEntry({ kind: "did", text: "Mabel ate " + gift.name + ", a gift she found waiting at home.", why: parsedGiftReply.text || "She was hungry." });
     } else if (gift.kind === "water" && mabel.needs.water < 0.72) {
       mabel.needs.water = clampNeed(mabel.needs.water + 0.22);
       gift.status = "drank";
-      addFeedEntry({ kind: "did", text: "Mabel drank " + gift.name + ", a gift she found waiting at home.", why: data.reply || "She was thirsty." });
+      addFeedEntry({ kind: "did", text: "Mabel drank " + gift.name + ", a gift she found waiting at home.", why: parsedGiftReply.text || "She was thirsty." });
     } else if (gift.kind === "food") {
       bindle.food.unshift({ name: gift.name, note: "A visitor left this for Mabel.", giftId: gift.id });
       bindle.food.length = Math.min(bindle.food.length, 8);
@@ -2099,6 +2124,10 @@ async function noticeNextVisitorGift() {
       bindle.water.unshift({ name: gift.name, note: "A visitor left this for Mabel.", giftId: gift.id });
       bindle.water.length = Math.min(bindle.water.length, 5);
       gift.status = "saved for later";
+    } else {
+      bindle.treasures.unshift({ name: gift.name, note: "A visitor left this for Mabel.", giftId: gift.id });
+      bindle.treasures.length = Math.min(bindle.treasures.length, 12);
+      gift.status = "packed in Mabel’s bindle";
     }
     addFeedEntry({
       kind: "noticed",
@@ -2163,17 +2192,28 @@ async function noticeNextVisitorBoardNote() {
     boardReadKeys = boardReadKeys.slice(0, 100);
     saveBoardReadKeys();
 
-    const reaction = String(result.reply || "").trim();
+    const parsedReaction = separateSparkMarker(normalizeMabelReply(result));
+    const reaction = parsedReaction.text;
+    const inlineSpark = sparkFromMarker(parsedReaction, "visitor-board", message);
+    if (result.spark) recordSpark({ ...result.spark, source: "visitor-board" });
+    else if (inlineSpark) recordSpark(inlineSpark);
+
     mabel.memories.unshift({
       at: now(),
       kind: "noticeboard",
       text: "A visitor called " + name + " left this note: " + message
     });
+    if (reaction) {
+      mabel.memories.unshift({
+        at: now(),
+        kind: "noticeboard-reflection",
+        text: "Mabel wondered about the note: " + reaction
+      });
+    }
     if (mabel.memories.length > 20) mabel.memories.length = 20;
     addFeedEntry({
       kind: "noticed",
-      text: "Mabel checked the Visitors’ board and noticed a note from " + name + ".",
-      why: reaction || message
+      text: "Mabel checked the Visitors’ board and noticed a note from " + name + "."
     });
     if (reaction) showHollowSpeech(reaction);
     saveMabel();
@@ -2898,9 +2938,12 @@ async function handleWander(options) {
 function removeReflectionHeading(value) {
   let text = String(value || "").trim();
 
-  // Some journal Worker responses put a JSON object inside entry.text.
-  // Unwrap that object before adding the prose to the diary.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    text = text
+      .replace(/^\x60{3}(?:json)?\s*/i, "")
+      .replace(/\s*\x60{3}$/i, "")
+      .trim();
+
     try {
       const parsed = JSON.parse(text);
       if (typeof parsed === "string") {
@@ -2913,16 +2956,27 @@ function removeReflectionHeading(value) {
       }
       break;
     } catch (error) {
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const possibleJson = text.slice(firstBrace, lastBrace + 1);
+        try {
+          const parsed = JSON.parse(possibleJson);
+          if (parsed && typeof parsed.text === "string") {
+            text = parsed.text.trim();
+            continue;
+          }
+        } catch (nestedError) {
+          // Leave non-JSON prose alone.
+        }
+      }
       break;
     }
   }
 
-  text = text
+  return text
     .replace(/^\x60{3}(?:json)?\s*/i, "")
     .replace(/\s*\x60{3}$/i, "")
-    .trim();
-
-  return text
     .replace(/^(?:mabel[’']s\s+)?end[ -]of[ -]day reflection(?:\s+text)?\s*(?::|—|–|-)?\s*/i, "")
     .trim();
 }
@@ -3130,6 +3184,7 @@ function startMabel() {
   }
 
   ensureHollowWorld();
+  syncNoticedItemsIntoBindle();
   updatePage();
 
   tabButtons.forEach(function (button) {
@@ -3161,7 +3216,7 @@ function startMabel() {
   }
   if (viewGalleryButton) {
     viewGalleryButton.addEventListener("click", function () {
-      switchTab("inner-life");
+      switchTab("gallery-tab");
       const galleryList = document.getElementById("gallery");
       if (galleryList) galleryList.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -3188,14 +3243,14 @@ function startMabel() {
     }
   }, 45000);
 
-  // Mabel has one AI-generated autonomous moment every 20 to 40 minutes.
+  // Mabel has one AI-generated autonomous moment every 5 to 10 minutes.
   setInterval(function () {
     const timeSinceLastMoment = Date.now() - lastAutonomousMoment;
-    const twentyMinutes = 20 * 60 * 1000;
-    const fortyMinutes = 40 * 60 * 1000;
+    const fiveMinutes = 5 * 60 * 1000;
+    const tenMinutes = 10 * 60 * 1000;
 
     const nextMomentDelay =
-      twentyMinutes + Math.random() * (fortyMinutes - twentyMinutes);
+      fiveMinutes + Math.random() * (tenMinutes - fiveMinutes);
 
     if (
       mabel &&
