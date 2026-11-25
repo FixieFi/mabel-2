@@ -1242,15 +1242,23 @@ function updateInterests() {
     const stepCount = Array.isArray(interest.steps) ? interest.steps.length : (interest.progress || 0);
     const stage = document.createElement("span");
     stage.className = "interest-stage";
-    stage.textContent = stepCount > 0
-      ? "Investigating · " + stepCount + (stepCount === 1 ? " step" : " steps")
-      : (interest.stage === "pursuing" ? "Ready to investigate" : "Taking shape");
+    stage.textContent = interest.stage === "resting"
+      ? "Paused for now · Mabel can return to it"
+      : (stepCount > 0
+        ? "Investigating · " + stepCount + (stepCount === 1 ? " step" : " steps")
+        : (interest.stage === "pursuing" ? "Ready to investigate" : "Taking shape"));
     item.appendChild(stage);
     if (interest.lastStep) {
       const progress = document.createElement("span");
       progress.className = "interest-progress-note";
       progress.textContent = "Latest step: " + interest.lastStep;
       item.appendChild(progress);
+    }
+    if (interest.nextAction) {
+      const nextStep = document.createElement("span");
+      nextStep.className = "interest-progress-note";
+      nextStep.textContent = "Next small step: " + interest.nextAction;
+      item.appendChild(nextStep);
     }
     if (interest.lastSource) {
       const source = document.createElement("span");
@@ -2409,7 +2417,9 @@ function chooseAutonomousResearchFocus(boardNote) {
   });
 
   mabel.interests.forEach(function (interest) {
-    if (interest && interest.title) candidates.push(interest);
+    if (interest && interest.title && ["growing", "pursuing"].includes(interest.stage)) {
+      candidates.push({ ...interest, isOngoingGoal: true });
+    }
   });
 
   wanderings.slice(0, 8).forEach(function (outing) {
@@ -2445,8 +2455,25 @@ function chooseAutonomousResearchFocus(boardNote) {
     return key && !recentFocus.has(key) &&
       candidates.findIndex(function (other) { return normalizeInterestTitle(other.title) === key; }) === index;
   });
+  if (!fresh.length && !candidates.length) return null;
+
+  const freshBoardNote = fresh.find(function (item) { return item.source === "visitor-board"; });
+  if (freshBoardNote) return freshBoardNote;
+
+  const ongoingGoals = fresh.filter(function (item) { return item.isOngoingGoal; });
+  if (ongoingGoals.length) {
+    ongoingGoals.sort(function (a, b) {
+      const aLast = Date.parse(a.lastPursuedAt || 0) || 0;
+      const bLast = Date.parse(b.lastPursuedAt || 0) || 0;
+      if (aLast !== bLast) return aLast - bLast;
+      return (b.pull || 0) - (a.pull || 0);
+    });
+    const goal = ongoingGoals[0];
+    goal.question = goal.nextQuestion || goal.nextAction || goal.question;
+    return goal;
+  }
+
   const pool = fresh.length ? fresh : candidates;
-  if (!pool.length) return null;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -2492,6 +2519,18 @@ async function handleAutonomousMoment() {
         energy: mabel.now.energy,
         needs: mabel.needs,
         interests: mabel.interests,
+        activeGoals: mabel.interests.filter(function (interest) {
+          return ["growing", "pursuing"].includes(interest.stage);
+        }).map(function (interest) {
+          return {
+            title: interest.title,
+            question: interest.nextQuestion || interest.question,
+            nextAction: interest.nextAction || "",
+            steps: Array.isArray(interest.steps) ? interest.steps.slice(0, 5) : [],
+            lastPursuedAt: interest.lastPursuedAt || ""
+          };
+        }),
+        autonomyPlan: "Choose a small next action from Mabel's active interests when appropriate. Interests are earned from repeated attention, may develop through evidence, and may pause or change. Do not invent a fixed personality or treat every passing observation as a lasting goal.",
         memories: mabel.memories.slice(0, 10),
         wanderings: wanderings.slice(0, 10),
         feed: mabel.feed.slice(0, 15),
@@ -3013,6 +3052,11 @@ async function handleWander(options) {
         focusInterest: focusInterest,
         interests: [focusInterest],
         researchInstruction: "Search the public web for the exact subject and two or three closely related questions. Open at least two relevant pages where possible, compare what they say, and keep the search query, source titles, URLs, and summary directly related to focusInterest.title. Include a concrete fact and cite the actual source URL/title. If web search is unavailable, say that plainly instead of inventing a source. Do not switch to another object or topic. This is a library research moment, not an exploration: do not say Mabel found or picked up a new object.",
+        autonomyPlan: focusInterest.isOngoingGoal
+          ? "This is one step in Mabel's longer-running interest. Continue from its saved steps and next action. Take one small, useful step, record what changed in her understanding, and suggest one next question. She may pause or change this interest if the evidence no longer draws her."
+          : "This is a passing question, not automatically a hobby or long-term goal. Explore it once, record a useful fact and source, and only suggest a next step if there is a natural open question.",
+        priorGoalSteps: Array.isArray(focusInterest.steps) ? focusInterest.steps.slice(0, 6) : [],
+        priorGoalNextAction: focusInterest.nextAction || focusInterest.nextQuestion || "",
         memories: [],
         mood: mabel.now.mood,
         energy: mabel.now.energy,
@@ -3093,9 +3137,17 @@ async function handleWander(options) {
           goal.progress = goal.steps.length;
           goal.lastStep = step;
           goal.lastSource = { title: research.sourceTitle, url: research.url };
+          goal.lastPursuedAt = now();
           goal.nextQuestion = data.goalProgress.nextQuestion || goal.question;
+          goal.nextAction = data.goalProgress.nextAction || goal.nextQuestion;
           goal.question = goal.nextQuestion;
-          goal.stage = "pursuing";
+          if (data.goalProgress.completed === true) {
+            goal.stage = "resting";
+            goal.completedAt = now();
+            goal.nextAction = "";
+          } else {
+            goal.stage = "pursuing";
+          }
         }
       }
     }
