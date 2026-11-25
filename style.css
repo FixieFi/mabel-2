@@ -1146,3 +1146,9 @@ button#explore.explore-button:disabled {
 #research-log > li > p {
   margin-top: 8px;
 }
+
+
+#research-ideas .interest-question {
+  display: block;
+  margin-top: 0.4rem;
+}
