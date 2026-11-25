@@ -4027,17 +4027,27 @@ function updateVisitorGiftNotice() {
   visitorGiftNoticeCard.classList.remove("hidden");
 }
 
-function markVisitorGiftNoticeSeen() {
-  const gift = currentVisitorGiftNotice();
-  if (gift) {
-    viewedVisitorGiftNoticeKeys.add(gift.noticeKey);
-    try {
-      const saved = JSON.parse(localStorage.getItem(visitorGiftSeenStorageKey) || "[]");
-      const seen = Array.isArray(saved) ? saved : [];
-      if (!seen.includes(gift.noticeKey)) seen.unshift(gift.noticeKey);
-      localStorage.setItem(visitorGiftSeenStorageKey, JSON.stringify(seen.slice(0, 100)));
-    } catch (error) {}
-  }
+function markVisitorGiftNoticeSeen(markAllNoticedGifts) {
+  ensureHollowWorld();
+  let seen = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(visitorGiftSeenStorageKey) || "[]");
+    seen = Array.isArray(saved) ? saved : [];
+  } catch (error) {}
+
+  const giftsToMark = markAllNoticedGifts
+    ? mabel.world.objects.filter(function (item) { return item && item.source === "visitor" && item.noticedAt; })
+    : [currentVisitorGiftNotice()].filter(Boolean);
+
+  giftsToMark.forEach(function (gift) {
+    const key = gift.noticeKey || (String(gift.id || gift.name) + "|" + String(gift.noticedAt));
+    viewedVisitorGiftNoticeKeys.add(key);
+    if (!seen.includes(key)) seen.unshift(key);
+  });
+
+  try {
+    localStorage.setItem(visitorGiftSeenStorageKey, JSON.stringify(seen.slice(0, 100)));
+  } catch (error) {}
   if (visitorGiftNoticeCard) visitorGiftNoticeCard.classList.add("hidden");
 }
 
@@ -5406,7 +5416,7 @@ function startMabel() {
   if (viewVisitorGiftButton) {
     viewVisitorGiftButton.addEventListener("click", function () {
       const gift = currentVisitorGiftNotice();
-      markVisitorGiftNoticeSeen();
+      markVisitorGiftNoticeSeen(true);
       switchTab("hollow");
       const safeId = gift && gift.id ? String(gift.id).replace(/[^a-z0-9_-]/gi, "") : "";
       const giftRow = safeId && (document.getElementById("bindle-gift-" + safeId) || document.getElementById("home-gift-" + safeId));
