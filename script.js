@@ -3103,7 +3103,7 @@ function comfortDrawingSubject(message) {
 }
 
 function visitorSeemsDistressed(message) {
-  return /\b(sad|upset|lonely|scared|anxious|anxiety|stressed|overwhelmed|heartbroken|grieving|rough day|bad day|feeling low|feel awful|crying|in tears)\b/i.test(String(message || ""));
+  return /\b(sad|upset|lonely|alone|isolated|no one|nobody|scared|anxious|anxiety|stressed|overwhelmed|heartbroken|grieving|rough day|bad day|feeling low|feel awful|crying|in tears)\b/i.test(String(message || ""));
 }
 
 function isArtworkRequest(message) {
