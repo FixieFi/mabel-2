@@ -81,6 +81,7 @@
         <button class="tab-button" data-tab="research">Library</button>
         <button class="tab-button" data-tab="day">Activity log</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
+        <button class="tab-button" data-tab="brain">Mabel’s Brain</button>
         <button class="tab-button" data-tab="gallery-tab">Gallery</button>
         <button class="tab-button" data-tab="postbox">For you</button>
 	<button class="tab-button" data-tab="hollow">Mabel’s home</button>
@@ -276,6 +277,28 @@
 
       </section>
 
+      <section id="brain" class="tab-panel">
+        <h2>Mabel’s Brain</h2>
+        <p class="day-intro">A small window into the parts of Mabel that stay steady and the parts that are slowly growing.</p>
+        <div class="brain-state-card">
+          <div class="brain-mood-row">
+            <div><span class="brain-label">Right now</span><strong id="brain-mood"></strong></div>
+            <div><span class="brain-label">Mood balance</span><strong id="brain-mood-score"></strong></div>
+          </div>
+          <p id="brain-thought" class="brain-current-thought"></p>
+          <small>Balance is the average of Mabel’s current needs, shown out of 100.</small>
+        </div>
+        <div class="brain-trait-columns">
+          <section class="brain-trait-card brain-core-card">
+            <h3>Her steady self</h3><p>These are Mabel’s starting traits.</p>
+            <ul id="brain-core-traits" class="brain-trait-list"></ul>
+          </section>
+          <section class="brain-trait-card brain-evolved-card">
+            <h3>What is growing</h3><p>Small habits and beliefs she has returned to over time.</p>
+            <ul id="brain-evolved-traits" class="brain-trait-list"></ul>
+          </section>
+        </div>
+      </section>
       <section id="gallery-tab" class="tab-panel">
         <h2>Mabel’s Gallery</h2>
         <p class="gallery-intro">Little drawings Mabel made when a thought or moment felt worth keeping.</p>
