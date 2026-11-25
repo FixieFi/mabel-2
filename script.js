@@ -736,11 +736,15 @@ function recordBindleDeparture(item, action, at) {
   if (!item || !item.name) return;
   bindle.history = Array.isArray(bindle.history) ? bindle.history : [];
   const giftId = item.giftId || "";
+  const linkedObject = giftId && mabel.world && Array.isArray(mabel.world.objects)
+    ? mabel.world.objects.find(function (object) { return object && object.id === giftId; })
+    : null;
+  const itemSource = item.source || linkedObject && linkedObject.source || "";
   bindle.history.unshift({
     name: String(item.name),
     note: String(item.note || ""),
     giftId: giftId,
-    source: giftId || item.source === "visitor" ? "visitor" : (item.source || ""),
+    source: itemSource,
     action: action || "discarded",
     at: at || now()
   });
@@ -2754,6 +2758,7 @@ function syncNoticedItemsIntoBindle() {
       name: name,
       note: object.bindleNote || (object.source === "visitor" ? makeGiftKeepsakeNote(object) : object.note || ""),
       giftId: object.id || "",
+      source: object.source || "",
       edible: Boolean(object.edible)
     });
   });
@@ -2828,12 +2833,20 @@ function updateBindle() {
       row.className = "bindle-item";
       if (value && value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
       row.textContent = value.name || String(value);
-      if (value && (value.giftId || value.source === "visitor")) {
+      const source = value && (value.source || value.giftId && (mabel.world.objects || []).find(function (object) { return object && object.id === value.giftId; })?.source);
+      if (value && source === "visitor") {
         if (value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
         row.classList.add("visitor-gift");
         const badge = document.createElement("span");
         badge.className = "visitor-gift-badge";
         badge.textContent = "Gift from a visitor";
+        row.appendChild(badge);
+      } else if (value && source === "wandering") {
+        if (value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
+        row.classList.add("wander-find");
+        const badge = document.createElement("span");
+        badge.className = "wander-find-badge";
+        badge.textContent = "Found on a wander";
         row.appendChild(badge);
       }
       const highlightGiftId = getVisitorGiftHighlightId();
@@ -4627,15 +4640,15 @@ async function noticeNextVisitorGift() {
       gift.status = "set aside";
       addFeedEntry({ kind: "did", text: "Mabel found " + gift.name + " but left it alone.", why: "The water looked muddy, and she wanted to find something clean." });
     } else if (gift.kind === "food") {
-      bindle.food.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id });
+      bindle.food.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
       trimBindleItems(bindle.food, 8);
       gift.status = "saved for later";
     } else if (gift.kind === "water") {
-      bindle.water.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id });
+      bindle.water.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
       trimBindleItems(bindle.water, 5);
       gift.status = "saved for later";
     } else {
-      bindle.treasures.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id });
+      bindle.treasures.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
       trimBindleItems(bindle.treasures, 12);
       gift.status = "packed in Mabel’s bindle";
     }
@@ -4656,7 +4669,7 @@ async function noticeNextVisitorGift() {
       if (!["eaten", "drank"].includes(gift.status)) {
         const target = gift.edible || gift.kind === "food" ? bindle.food : gift.kind === "water" ? bindle.water : bindle.treasures;
         const existing = target.some(function (item) { return item && item.giftId === gift.id; });
-        if (!existing) target.unshift({ name: gift.name, note: gift.bindleNote, giftId: gift.id, edible: Boolean(gift.edible) });
+        if (!existing) target.unshift({ name: gift.name, note: gift.bindleNote, giftId: gift.id, source: "visitor", edible: Boolean(gift.edible) });
         if (gift.status === "noticed" || gift.status === "waiting") gift.status = gift.edible ? "packed as food" : "saved for later";
       }
       if (!gift.postboxNoteReadyAt) gift.postboxNoteReadyAt = new Date(Date.parse(gift.noticedAt) + 3 * 60 * 1000).toISOString();
@@ -6053,7 +6066,7 @@ function moveVisitorGiftToFood(gift, data, research) {
   bindle.treasures = (bindle.treasures || []).filter(function (item) { return item.giftId !== gift.id; });
   bindle.water = (bindle.water || []).filter(function (item) { return item.giftId !== gift.id; });
   bindle.food = (bindle.food || []).filter(function (item) { return item.giftId !== gift.id; });
-  bindle.food.unshift({ name: gift.name, note: makeGiftKeepsakeNote({ ...gift, edible: true }), giftId: gift.id, edible: true });
+  bindle.food.unshift({ name: gift.name, note: makeGiftKeepsakeNote({ ...gift, edible: true }), giftId: gift.id, source: "visitor", edible: true });
   trimBindleItems(bindle.food, 8);
   addFeedEntry({ kind: "noticed", text: "Mabel learned that " + gift.name + " is edible and tucked it with her food.", why: gift.edibleReason });
   addMabelPostboxItem({
