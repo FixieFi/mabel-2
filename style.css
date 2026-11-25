@@ -1234,3 +1234,44 @@ button#explore.explore-button:disabled {
 .postbox-item time { color: var(--plum); font-size: 0.85rem; }
 .postbox-item p { margin: 0.2rem 0; }
 .postbox-item a { color: var(--deep-plum); }
+
+
+/* Connect a little wander to what Mabel investigates next. */
+.explore-research {
+  margin: 0.75rem 0 0.35rem;
+  padding: 0.7rem 0.85rem;
+  border-left: 3px solid #8a72b8;
+  border-radius: 0.4rem;
+  background: #f4effa;
+  color: #554374;
+  line-height: 1.5;
+}
+
+.explore-discovery + .explore-research {
+  margin-top: 0.65rem;
+}
+
+.chat-research-followup {
+  margin-top: 0.9rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #d9cde8;
+  border-left: 4px solid #8a72b8;
+  border-radius: 0.8rem;
+  background: #f8f4fb;
+  color: #443653;
+}
+
+.chat-research-followup strong {
+  display: block;
+  color: #654c8d;
+}
+
+.chat-research-followup p {
+  margin: 0.45rem 0;
+}
+
+.chat-research-followup a,
+.explore-research + a {
+  color: #684a91;
+  font-weight: 600;
+}
