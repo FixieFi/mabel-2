@@ -952,3 +952,38 @@ button#explore.explore-button:disabled {
 .chat-status:empty {
   display: none;
 }
+
+
+.gallery-notice-card strong,
+.gallery-notice-card p {
+  color: #51356f;
+}
+
+#view-gallery {
+  padding: 9px 15px;
+  color: #fff9f0;
+  background: linear-gradient(135deg, #7352a0, #4d3474);
+  border: 1px solid rgba(91, 59, 130, 0.22);
+  border-radius: 999px;
+  box-shadow: 0 3px 0 #38234f, 0 6px 14px rgba(56, 35, 79, 0.2);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+#view-gallery::before {
+  content: "✦ ";
+  color: #ffe39a;
+}
+
+#view-gallery:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 #38234f, 0 9px 17px rgba(56, 35, 79, 0.24);
+  filter: brightness(1.08);
+}
+
+#view-gallery:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 #38234f;
+}
