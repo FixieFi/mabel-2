@@ -5338,6 +5338,7 @@ function currentVisitorGiftNotice() {
 function setVisitorGiftHighlight(gift) {
   if (!gift || !gift.id) return;
   try { sessionStorage.setItem(visitorGiftHighlightStorageKey, String(gift.id)); } catch (error) {}
+  updateBindle();
 }
 
 function getVisitorGiftHighlightId() {
