@@ -3482,8 +3482,10 @@ function forgetVisitorProfile() {
 }
 
 function resetThisBrowserMabel() {
-  const confirmed = window.confirm("Start fresh in this browser? This clears its gifts, bindle, postbox, personal Gallery, visitor notes, activity and old notifications. Mabel’s shared personality, Art Exhibition and Visitors’ board will stay.");
+  const confirmed = window.confirm("Start fresh in this browser? This clears its gifts, bindle, postbox, personal Gallery, visitor notes, activity, friendship level, time spent together here, and old notifications. Mabel’s shared personality, Art Exhibition and Visitors’ board will stay.");
   if (!confirmed) return;
+  visitorProfile = { facts: [], moments: [], bond: 0, activeMinutes: 0, activeDay: "", activeBondToday: 0, activeTickAt: 0, visitorId: "", activeMinuteBucket: 0 };
+  viewedVisitorGiftNoticeKeys.clear();
   [
     mabelStorageKey, reflectionQueueStorageKey, wanderingsStorageKey, researchLogStorageKey,
     boardReadKeysStorageKey, sparksStorageKey, autonomousResearchStorageKey, viewedSparkStorageKey,
@@ -3496,6 +3498,7 @@ function resetThisBrowserMabel() {
   try {
     sessionStorage.removeItem(bindleStorageKey);
     sessionStorage.removeItem(visitorSessionStorageKey);
+    sessionStorage.removeItem(visitorGiftHighlightStorageKey);
   } catch (error) {};
   try { sessionStorage.removeItem(conversationStorageKey); } catch (error) {}
   window.location.reload();
