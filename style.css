@@ -1465,3 +1465,24 @@ button#explore.explore-button:disabled {
   color: var(--deep-plum);
   font-weight: 600;
 }
+
+
+/* Mabel’s Brain */
+.brain-state-card,.brain-trait-card{padding:1rem 1.1rem;margin:1rem 0;border:1px solid rgba(113,82,139,.2);border-radius:18px;background:rgba(255,252,246,.88);box-shadow:0 5px 18px rgba(71,53,38,.06)}
+.brain-state-card{border-left:4px solid #789b6a}
+.brain-mood-row{display:flex;justify-content:space-between;gap:1rem}
+.brain-mood-row>div{display:grid;gap:.2rem}
+.brain-label{color:#726477;font-size:.78rem;letter-spacing:.04em;text-transform:uppercase}
+.brain-current-thought{margin:.9rem 0 .4rem;color:#58416d;font-family:Georgia,serif;font-size:1.1rem;font-style:italic}
+.brain-state-card small,.brain-trait-card>p{color:#766e75}
+.brain-trait-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem}
+.brain-trait-card h3{margin-top:0}
+.brain-core-card{border-top:4px solid #789b6a}
+.brain-evolved-card{border-top:4px solid #a377bd;background:linear-gradient(145deg,#fffaf2,#f7effb)}
+.brain-trait-list{display:grid;gap:.65rem;padding-left:1.2rem}
+.brain-trait-list li{color:#4d6548}
+.brain-evolved-card .brain-trait-list li{color:#664579}
+.brain-trait-list p{margin:.3rem 0;color:#655a68}
+.brain-trait-list time{color:#766e75;font-size:.8rem}
+.brain-trait-empty{color:#746b73!important;font-style:italic}
+@media(max-width:640px){.brain-trait-columns{grid-template-columns:1fr}.brain-mood-row{flex-wrap:wrap}}
