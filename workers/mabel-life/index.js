@@ -607,6 +607,18 @@ async function handleVisitorBoard(request, env) {
     return jsonResponse({ error: "Please write a note first." }, 400);
   }
 
+  if (data?.action === "mabel-noticed") {
+    const target = messages.find(item => item.id === cleanText(data.id, 100));
+    const reaction = cleanText(data.reaction, 500);
+    if (!target || !reaction) return jsonResponse({ error: "That board note could not be marked." }, 404);
+    if (!target.mabelNoticedAt) {
+      target.mabelNoticedAt = new Date().toISOString();
+      target.mabelReaction = reaction;
+      await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+    }
+    return jsonResponse({ ok: true, message: target });
+  }
+
   const message = cleanText(data?.message, 280);
   const name = cleanText(data?.name, 40);
   if (!message) {
