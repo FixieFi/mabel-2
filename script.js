@@ -39,6 +39,7 @@ const needFood = document.getElementById("need-food");
 const needWater = document.getElementById("need-water");
 const wishesElement = document.getElementById("wishes");
 const interestsElement = document.getElementById("interests");
+const mindTopicsElement = document.getElementById("mind-topics");
 const changesElement = document.getElementById("changes");
 const wanderButton = document.getElementById("wander");
 const wanderStatus = document.getElementById("wander-status");
@@ -458,9 +459,25 @@ function addResearchIdea(candidate) {
 }
 
 function isConcreteHumanHobby(title) {
-  const value = String(title || "").trim().toLowerCase();
-  return /\b(?:baking|cooking|sewing|knitting|crocheting|embroidery|quilting|woodworking|pottery|ceramics|painting|drawing|sketching|photography|gardening|singing|dancing|public speaking|writing|journaling|reading|bookbinding|music making|making music|playing music|playing guitar|playing piano|playing violin|playing an instrument|guitar|piano|violin|drumming|songwriting|composing music|hiking|walking|running|swimming|cycling|yoga|rock climbing|birdwatching|chess|acting|theatre|calligraphy|origami|model making|model building|stargazing|baking bread|baking cakes|cooking recipes|language learning|learning languages|coding|programming|skateboarding|surfing|fishing|knitting scarves|home decorating|tiny home decorating|interior decorating|interior design|DIY|home improvement|crafting)\b/i.test(value);
+  const value = normalizeInterestTitle(String(title || ""));
+  const concretePractices = [
+    "baking", "baking bread", "baking cakes", "cooking", "cooking recipes",
+    "sewing", "knitting", "crocheting", "embroidery", "quilting",
+    "woodworking", "pottery", "ceramics", "painting", "drawing", "sketching",
+    "photography", "gardening", "singing", "dancing", "public speaking",
+    "writing", "journaling", "reading", "bookbinding", "music making",
+    "making music", "playing music", "playing guitar", "playing piano",
+    "playing violin", "playing an instrument", "guitar", "piano", "violin",
+    "drumming", "songwriting", "composing music", "hiking", "walking",
+    "running", "swimming", "cycling", "yoga", "rock climbing", "birdwatching",
+    "chess", "acting", "theatre", "calligraphy", "origami", "model making",
+    "model building", "stargazing", "language learning", "learning languages",
+    "coding", "programming", "skateboarding", "surfing", "fishing", "DIY",
+    "home improvement"
+  ];
+  return concretePractices.includes(value);
 }
+
 
 function isDurableInterestCandidate(candidate) {
   if (!candidate) return false;
@@ -1491,8 +1508,10 @@ function scheduleWanderingResearch(researchLead) {
     if (!mabel || !queuedIdea || queuedIdea.lastResearchedAt) return;
     mabel.now.doing = "going to the Library";
     mabel.now.thought = "I want to find out a little more about " + queuedIdea.title + ".";
-    mabel.now.updatedAt = now();
+    const libraryStartedAt = now();
+    mabel.now.updatedAt = libraryStartedAt;
     addFeedEntry({
+      at: libraryStartedAt,
       kind: "did",
       text: "Mabel went to the Library to research " + queuedIdea.title + ".",
       why: queuedIdea.originText || "A discovery from her wander stayed on her mind."
@@ -1632,55 +1651,50 @@ function updateWishes() {
 function updateInterests() {
   if (!interestsElement) return;
   interestsElement.replaceChildren();
-  const sorted = [...mabel.interests].sort(function (a, b) {
-    return (b.pull || 0) - (a.pull || 0);
-  });
-  if (!sorted.length) {
+  const hobbies = (Array.isArray(mabel.interests) ? mabel.interests : [])
+    .filter(function (interest) {
+      return interest && interest.kind === "hobby" && isConcreteHumanHobby(interest.title);
+    })
+    .sort(function (a, b) { return (Number(b.level) || 1) - (Number(a.level) || 1); });
+
+  if (!hobbies.length) {
     const empty = document.createElement("li");
-    empty.textContent = "Mabel has not found a question she wants to follow yet.";
+    empty.textContent = "No hobby has taken root yet. Mabel’s questions and passing fascinations gather below.";
     interestsElement.appendChild(empty);
     return;
   }
-  sorted.forEach(function (interest) {
+
+  hobbies.forEach(function (interest) {
     const item = document.createElement("li");
     item.className = "interest-item";
     const title = document.createElement("strong");
     title.className = "interest-title";
-    title.textContent = interest.title || "A small question";
+    title.textContent = interest.title;
     item.appendChild(title);
-    if (interest.kind === "hobby" && interest.level) {
-      const levelBadge = document.createElement("span");
-      levelBadge.className = "interest-stage hobby-level";
-      levelBadge.textContent = "Hobby · Level " + interest.level;
-      item.appendChild(levelBadge);
-    }
-    const question = document.createElement("span");
-    question.className = "interest-question";
-    question.textContent = interest.question || "";
-    item.appendChild(question);
-    const whyText = interest.reason && !/a thought caught mabel|small thought caught/i.test(interest.reason)
-      ? interest.reason
-      : (interest.originText || interest.question || "Mabel noticed this subject more than once.");
-    if (whyText) {
+
+    const level = Math.max(1, Math.min(5, Number(interest.level) || 1));
+    const levelBadge = document.createElement("span");
+    levelBadge.className = "interest-stage hobby-level";
+    levelBadge.textContent = "Hobby · Level " + level;
+    item.appendChild(levelBadge);
+
+    if (interest.reason || interest.originText) {
       const why = document.createElement("span");
       why.className = "interest-reason";
-      why.textContent = "Why it caught her attention: " + whyText;
+      why.textContent = "Why it caught her attention: " + String(interest.reason || interest.originText);
       item.appendChild(why);
     }
-    const meter = document.createElement("progress");
-    meter.className = "interest-meter";
-    meter.max = 1;
-    meter.value = clampNeed(interest.pull || 0);
-    item.appendChild(meter);
-    const stepCount = Array.isArray(interest.steps) ? interest.steps.length : (interest.progress || 0);
+
+    const steps = Array.isArray(interest.steps) ? interest.steps.length : (Number(interest.progress) || 0);
     const stage = document.createElement("span");
     stage.className = "interest-stage";
     stage.textContent = interest.stage === "resting"
       ? "Paused for now · Mabel can return to it"
-      : (stepCount > 0
-        ? "Investigating · " + stepCount + (stepCount === 1 ? " step" : " steps")
-        : (interest.stage === "pursuing" ? "Ready to investigate" : "Taking shape"));
+      : (steps > 0
+        ? "Growing through " + steps + (steps === 1 ? " small step" : " small steps")
+        : (level === 1 ? "Just beginning" : "Growing"));
     item.appendChild(stage);
+
     if (interest.lastStep) {
       const progress = document.createElement("span");
       progress.className = "interest-progress-note";
@@ -1693,24 +1707,62 @@ function updateInterests() {
       nextStep.textContent = "Next small step: " + interest.nextAction;
       item.appendChild(nextStep);
     }
-    if (interest.lastSource) {
-      const source = document.createElement("span");
-      source.className = "interest-source";
-      source.appendChild(document.createTextNode("Read: "));
-      const safeUrl = safeExternalUrl(interest.lastSource.url);
-      if (safeUrl) {
-        const link = document.createElement("a");
-        link.href = safeUrl;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.textContent = interest.lastSource.title || "source";
-        source.appendChild(link);
-      } else {
-        source.appendChild(document.createTextNode(interest.lastSource.title || "source not available"));
-      }
-      item.appendChild(source);
-    }
     interestsElement.appendChild(item);
+  });
+}
+
+function updateMindTopics() {
+  if (!mindTopicsElement) return;
+  mindTopicsElement.replaceChildren();
+  const entries = [];
+  const addEntry = function (entry) {
+    if (!entry || !entry.title) return;
+    const key = normalizeInterestTitle(entry.title);
+    if (!key || entries.some(function (saved) { return normalizeInterestTitle(saved.title) === key; })) return;
+    entries.push({
+      title: String(entry.title).slice(0, 100),
+      question: String(entry.question || "").slice(0, 240),
+      why: String(entry.originText || entry.reason || "").slice(0, 260),
+      at: entry.originAt || entry.createdAt || entry.lastSeenAt || ""
+    });
+  };
+
+  (Array.isArray(mabel.interests) ? mabel.interests : []).forEach(function (interest) {
+    if (interest && !(interest.kind === "hobby" && isConcreteHumanHobby(interest.title))) addEntry(interest);
+  });
+  (Array.isArray(sparks) ? sparks : []).forEach(function (spark) {
+    if (spark && !spark.interestPromotedAt) addEntry(spark);
+  });
+  (Array.isArray(researchIdeas) ? researchIdeas : []).forEach(addEntry);
+
+  entries.sort(function (a, b) { return Date.parse(b.at || 0) - Date.parse(a.at || 0); });
+  if (!entries.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "Nothing is tugging at Mabel’s thoughts just now. New questions may grow from a conversation, a find, or something she researches.";
+    mindTopicsElement.appendChild(empty);
+    return;
+  }
+
+  entries.slice(0, 10).forEach(function (entry) {
+    const item = document.createElement("li");
+    item.className = "interest-item mind-topic";
+    const title = document.createElement("strong");
+    title.className = "interest-title";
+    title.textContent = entry.title;
+    item.appendChild(title);
+    if (entry.question) {
+      const question = document.createElement("span");
+      question.className = "interest-question";
+      question.textContent = entry.question;
+      item.appendChild(question);
+    }
+    if (entry.why) {
+      const why = document.createElement("span");
+      why.className = "interest-reason";
+      why.textContent = "What brought it to mind: " + entry.why;
+      item.appendChild(why);
+    }
+    mindTopicsElement.appendChild(item);
   });
 }
 
@@ -1876,6 +1928,14 @@ function updateResearchLog() {
       timestamp.textContent = new Date(entry.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) +
         " · " + formatLibraryMethod(entry.researchMethod);
       item.appendChild(timestamp);
+    }
+    if (entry.sourceOriginText) {
+      const origin = document.createElement("p");
+      origin.className = "research-entry-origin";
+      const sourceTime = Date.parse(entry.sourceOriginAt || "");
+      origin.textContent = "Inspired by: “" + entry.sourceOriginText + "”" +
+        (Number.isFinite(sourceTime) ? " · " + new Date(sourceTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "");
+      item.appendChild(origin);
     }
 
     if (entry.researchSummary) {
@@ -2420,6 +2480,7 @@ function updatePage() {
   updateNeeds();
   updateWishes();
   updateInterests();
+  updateMindTopics();
   updateChanges();
 
   updateResearchLog();
@@ -4201,14 +4262,12 @@ function recordSpark(candidate) {
   });
   const ageMs = timestamp - Date.parse(spark.createdAt || timestampText);
   const concreteHobby = candidate.kind === "hobby" && isConcreteHumanHobby(title);
-  const newVisitorHobby = !previousInterest &&
-    concreteHobby &&
-    normalizeInterestTitle(candidate.source || "") === "conversation";
   const durableCandidate = isDurableInterestCandidate(candidate);
-  const priorInterestStillFits = Boolean(previousInterest || spark.interestPromotedAt) &&
-    (durableCandidate || isConcreteHumanHobby(title));
-  const qualifies = newVisitorHobby || priorInterestStillFits ||
-    (durableCandidate && spark.evidence >= 3 && ageMs >= 60 * 60 * 1000);
+  const priorConcreteHobby = Boolean(previousInterest && previousInterest.kind === "hobby" &&
+    isConcreteHumanHobby(previousInterest.title));
+  const priorInterestStillFits = priorConcreteHobby && (durableCandidate || concreteHobby);
+  const qualifies = priorInterestStillFits ||
+    (concreteHobby && durableCandidate && spark.evidence >= 3 && ageMs >= 24 * 60 * 60 * 1000);
 
   if (qualifies) {
     const newlyPromoted = !spark.interestPromotedAt;
@@ -4223,9 +4282,9 @@ function recordSpark(candidate) {
       interest.question = spark.question || interest.question;
       interest.lastSeenAt = timestampText;
       if (concreteHobby) interest.kind = "hobby";
-      const nextLevel = Math.min(5, 1 + Math.floor(Math.max(0, spark.pull - 0.2) / 0.2));
+      const nextLevel = Math.min(5, 1 + Math.floor(Math.max(0, spark.evidence - 3) / 3));
       interest.level = Math.max(previousLevel, nextLevel);
-      if (newVisitorHobby) interest.level = Math.max(1, interest.level);
+      if (!priorConcreteHobby) interest.level = 1;
       const isConcreteHobbyInterest = isConcreteHumanHobby(interest.title) && interest.kind === "hobby";
       if (newlyPromoted && isConcreteHobbyInterest) {
         spark.notificationAt = timestampText;
@@ -4920,53 +4979,7 @@ async function handleWander(options) {
       }
     }
     saveResearchLog();
-    if (relevant && research.researchSummary) {
-      let shareCount = 0;
-      try {
-        shareCount = Number(localStorage.getItem(researchShareCountStorageKey) || 0) + 1;
-        localStorage.setItem(researchShareCountStorageKey, String(shareCount));
-      } catch (error) {}
-      const workerNote = typeof data.visitorNote === "string" ? data.visitorNote.trim() : "";
-      if (["exploration", "wandering"].includes(research.focusSource)) {
-        const factSentence = chooseResearchPostcardSentence(research);
-        if (factSentence) {
-          addMabelPostboxItem({
-            kind: "research-question",
-            title: "Mabel came back from the Library",
-            text: "I researched " + research.focusTitle + ", inspired by the " + research.focusTitle + " I found on my wander. Here’s one interesting thing I learned: " + factSentence + " Isn’t that interesting?",
-            sources: relatedSources,
-            at: research.at
-          });
-        } else {
-          addMabelPostboxItem({
-            kind: "research-question",
-            title: "Mabel came back from the Library",
-            text: "I looked up " + research.focusTitle + " after finding it on my wander. I’m still looking for a short, interesting fact to bring back.",
-            sources: relatedSources,
-            at: research.at
-          });
-        }
-      } else if (research.focusSource === "conversation" || workerNote || shareCount % 2 === 0) {
-        const factSentence = chooseResearchPostcardSentence(research);
-        const inspiration = research.focusSource === "conversation"
-          ? "our conversation about " + research.focusTitle
-          : "a question I kept thinking about";
-        const noteText = research.focusSource === "conversation"
-          ? "I researched " + research.focusTitle + ", inspired by " + inspiration + ". " +
-            (factSentence ? "Here’s one interesting thing I learned: " + factSentence : "It is still a question I want to return to.")
-          : (workerNote || (
-            "I looked into " + research.focusTitle + " and found this: " +
-            (factSentence || research.focusTitle + " caught my attention.")
-          ));
-        addMabelPostboxItem({
-          kind: "research-question",
-          title: research.focusSource === "conversation" ? "Mabel followed up on our conversation" : "A little Library postcard",
-          text: noteText.slice(0, 500),
-          sources: relatedSources,
-          at: research.at
-        });
-      }
-    }
+    // Research results live in the Library. The Postbox is reserved for personal notes.
 
     const researchedIdea = researchIdeas.find(function (item) {
       return item.id === focusInterest.id ||
