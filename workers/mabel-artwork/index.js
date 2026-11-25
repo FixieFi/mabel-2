@@ -315,7 +315,7 @@ async function handleArtwork(request, env) {
       }
       artwork.palette = palette.slice(0, 3);
     }
-    if (!artwork && wantsArtwork) {
+    if (!artwork && wantsArtwork && !referenceRetry) {
       const palettes = [
         ["#7669a8", "#e8a66b", "#b9d7c4"],
         ["#4f7892", "#dc8e8a", "#f0d88c"],
@@ -337,9 +337,18 @@ async function handleArtwork(request, env) {
         note: "Mabel made a little drawing of " + label + " in her own colours."
       }, subject, selfPortrait);
     }
+    if (referenceRetry && (!artwork || !Array.isArray(artwork.vectorPaths) || !artwork.vectorPaths.length)) {
+      return jsonResponse({
+        artwork: null,
+        referenceUnavailable: true,
+        reason: "The artwork model did not return a usable subject-specific drawing from the Library reference."
+      });
+    }
     return jsonResponse({ artwork });
-  } catch {
-    return jsonResponse({ artwork: null });
+  } catch (error) {
+    return jsonResponse(referenceRetry
+      ? { artwork: null, referenceUnavailable: true, reason: "The artwork model could not finish the reference drawing. Check the Workers AI usage limit and model availability." }
+      : { artwork: null });
   }
 }
 
