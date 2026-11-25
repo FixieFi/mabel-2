@@ -1902,8 +1902,11 @@ function updateResearchIdeas() {
     }
     const origin = document.createElement("p");
     origin.className = "research-idea-origin";
-    const originText = String(idea.originText || "a thought Mabel wanted to return to").trim().slice(0, 260);
-    const originType = String(idea.originType || idea.source || "Mabel’s thoughts").toLowerCase();
+    const relatedSpark = sparks.find(function (spark) {
+      return spark && (spark.id === idea.id || normalizeInterestTitle(spark.title) === normalizeInterestTitle(idea.title));
+    });
+    const originText = String(idea.originText || (relatedSpark && (relatedSpark.originText || relatedSpark.reason)) || "a thought Mabel wanted to return to").trim().slice(0, 260);
+    const originType = String(idea.originType || (relatedSpark && relatedSpark.source) || idea.source || "Mabel’s thoughts").toLowerCase();
     const originLabel = originType === "conversation" ? "a conversation"
       : originType === "visitor-board" ? "a Visitors’ board note"
       : originType === "discovery" ? "something she noticed"
@@ -1911,7 +1914,7 @@ function updateResearchIdeas() {
       : originType === "research" ? "her research"
       : originType === "autonomous" ? "an activity moment"
       : originType;
-    const originTime = Date.parse(idea.originAt || idea.createdAt || "");
+    const originTime = Date.parse(idea.originAt || (relatedSpark && (relatedSpark.lastEvidenceAt || relatedSpark.createdAt)) || idea.createdAt || "");
     const originDate = Number.isFinite(originTime)
       ? new Date(originTime).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
       : "time not recorded";
