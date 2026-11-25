@@ -2384,12 +2384,6 @@ async function loadVisitorBoard() {
       const signoff = document.createElement("strong");
       signoff.textContent = message.name ? "— " + message.name : "— A visitor";
       item.appendChild(signoff);
-      if (message.mabelReaction) {
-        const mabelNote = document.createElement("p");
-        mabelNote.className = "visitor-board-mabel-reaction";
-        mabelNote.textContent = "Mabel wondered: " + message.mabelReaction;
-        item.appendChild(mabelNote);
-      }
       if (message.createdAt) {
         const time = document.createElement("time");
         time.dateTime = message.createdAt;
@@ -3742,7 +3736,7 @@ async function noticeNextVisitorBoardNote() {
     const data = await response.json();
     const notes = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
     const next = notes.slice().reverse().find(function (note) {
-      return note && String(note.message || "").trim() && !note.mabelNoticedAt &&
+      return note && String(note.message || "").trim() &&
         !boardReadKeys.includes(visitorBoardNoteKey(note));
     });
     if (!next) return null;
@@ -3776,10 +3770,6 @@ async function noticeNextVisitorBoardNote() {
     boardReadKeys.unshift(key);
     boardReadKeys = boardReadKeys.slice(0, 100);
     saveBoardReadKeys();
-    fetch(MABEL_BOARD_URL, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mabel-noticed", id: next.id, reaction: reaction })
-    }).catch(function () {});
 
     const parsedReaction = separateSparkMarker(normalizeMabelReply(result));
     const reaction = textSharesSpecificDetail(parsedReaction.text, message)
