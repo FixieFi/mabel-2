@@ -12,6 +12,7 @@ const DEFAULT_STATE = {
   thought: "Every small thing remembers being part of something larger.",
   memories: [],
   interests: [],
+  crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
   personality: {
     core_traits: ["gentle", "curious", "thoughtful", "quietly playful"],
     evolved_traits: [],
@@ -86,6 +87,12 @@ async function loadState(env) {
   state.interests = Array.isArray(state.interests)
     ? state.interests.filter(item => item && !LEGACY_SEEDS.has(item.id)).slice(0, MAX_INTERESTS)
     : [];
+  state.crafting = state.crafting && typeof state.crafting === "object" ? state.crafting : structuredClone(DEFAULT_STATE.crafting);
+  state.crafting.skillLevel = Math.max(0, Math.min(5, Number(state.crafting.skillLevel) || 0));
+  state.crafting.materials = Array.isArray(state.crafting.materials) ? state.crafting.materials.filter(item => item && typeof item.name === "string").slice(0, 30) : [];
+  state.crafting.projects = Array.isArray(state.crafting.projects) ? state.crafting.projects.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
+  state.crafting.artInspirations = Array.isArray(state.crafting.artInspirations) ? state.crafting.artInspirations.filter(item => item && typeof item.key === "string").slice(0, 12) : [];
+  state.crafting.lastIdeaAt = cleanText(state.crafting.lastIdeaAt, 40) || null;
   return state;
 }
 
@@ -276,9 +283,17 @@ async function handleReflect(request, env) {
   const recentMoments = Array.isArray(data.recentMoments)
     ? data.recentMoments.slice(0, 12).map(item => cleanText(item?.text, 220)).filter(Boolean).join("\n")
     : "";
-  const recentWanderings = Array.isArray(data.recentWanderings)
-    ? data.recentWanderings.slice(0, 8).flatMap(item => Array.isArray(item?.finds) ? item.finds.map(found => cleanText(found?.name, 120)).filter(Boolean) : []).join(", ")
-    : "";
+  const recentFindNames = Array.isArray(data.recentWanderings)
+    ? data.recentWanderings.slice(0, 8).flatMap(item => Array.isArray(item?.finds) ? item.finds.map(found => cleanText(found?.name, 120)).filter(Boolean) : []).slice(0, 24)
+    : [];
+  const recentWanderings = recentFindNames.join(", ");
+  state.crafting.materials = Array.isArray(state.crafting?.materials) ? state.crafting.materials : [];
+  recentFindNames.forEach(name => {
+    if (!state.crafting.materials.some(item => makeId(item.name) === makeId(name))) {
+      state.crafting.materials.unshift({ name, at: new Date().toISOString() });
+    }
+  });
+  state.crafting.materials = state.crafting.materials.slice(0, 30);
   const visitorProfile = data.visitorProfile && typeof data.visitorProfile === "object"
     ? data.visitorProfile
     : {};
@@ -423,6 +438,11 @@ async function runMabelLife(env) {
   const memories = state.memories.slice(0, 8)
     .map(item => "- " + item.text)
     .join("\n") || "Mabel has no kept memories yet.";
+  const craftMaterials = state.crafting.materials.slice(0, 12)
+    .map(item => "- " + item.name + " (found " + cleanText(item.at, 10, "earlier") + ")")
+    .join("\n") || "No reusable found objects are recorded yet.";
+  const craftingReady = state.crafting.materials.length >= 2 &&
+    (!state.crafting.lastIdeaAt || Date.now() - Date.parse(state.crafting.lastIdeaAt) > 6 * 60 * 60 * 1000);
 
   const system = [
     "You are Mabel, a small mouse who lives in Hawthorn Hollow.",
@@ -432,9 +452,13 @@ async function runMabelLife(env) {
     "A memory is optional. Keep one only if this moment is likely to matter later; do not write a diary entry for every cycle.",
     "Let ideas raised by real encounters continue into Mabel's later thoughts, research, and occasional art when they truly stay with her. Do not force every conversation into an interest or artwork.",
     "Interests should describe broad, human-readable pursuits or values (for example, music, exploring the wider world, making things, or understanding feelings), not one isolated object or a single search query.",
-    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought}.",
+    "Mabel may develop a genuine interest in crafting after her own art, discoveries, or repeated wish to make useful things. Do not assign it in advance.",
+    "When supplied found materials genuinely inspire her, she may suggest one small mouse-sized invention using at least two of the actual listed materials. Prefer safe, gentle, useful ideas that solve a small mouse problem. Never invent materials. Return craftIdea null unless the idea feels earned. An idea is not an accomplished object: set tried:false unless Mabel actually tried it in this moment. When a previous project and its actual materials are still available, she may choose to test it during this moment if her needs and mood allow.",
+    "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
+    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea}.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
-    "pendingThought is null or a small unresolved question Mabel wants to return to."
+    "pendingThought is null or a small unresolved question Mabel wants to return to.",
+    "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects."
   ].join("\n");
   const prompt = [
     "Current activity: " + state.activity,
@@ -443,6 +467,9 @@ async function runMabelLife(env) {
     "Needs: " + JSON.stringify(state.needs),
     "Interests:\n" + interests,
     "Selected memories:\n" + memories,
+    "Things Mabel has actually found and could use as materials:\n" + craftMaterials,
+    "Mabel’s recent unprompted artwork that may inspire her approach:\n" + state.crafting.artInspirations.slice(0, 5).map(item => "- " + item.title + ": " + item.inspiration).join("\n"),
+    "Existing crafting ideas: " + state.crafting.projects.slice(0, 5).map(item => item.title).join(", "),
     "Personality: " + JSON.stringify(state.personality),
     "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment.")
   ].join("\n\n");
@@ -481,6 +508,39 @@ async function runMabelLife(env) {
       };
     }
 
+    const craftIdea = update.craftIdea && typeof update.craftIdea === "object" ? update.craftIdea : null;
+    if (craftingReady && craftIdea) {
+      const available = new Map(state.crafting.materials.map(item => [makeId(item.name), item.name]));
+      const selected = Array.isArray(craftIdea.materials)
+        ? Array.from(new Set(craftIdea.materials.map(name => available.get(makeId(name))).filter(Boolean))).slice(0, 4)
+        : [];
+      const title = cleanText(craftIdea.title, 100);
+      const idea = cleanText(craftIdea.idea, 260);
+      const reason = cleanText(craftIdea.reason, 220);
+      if (title && idea && selected.length >= 2) {
+        const existingProject = state.crafting.projects.find(item => makeId(item.title) === makeId(title));
+        const project = existingProject || { id: makeId(title) + "-" + Date.now(), title, materials: selected, idea, reason, tried: false, at: new Date().toISOString() };
+        if (!existingProject) {
+          state.crafting.projects.unshift(project);
+          state.crafting.projects = state.crafting.projects.slice(0, 12);
+        } else {
+          project.idea = idea;
+          project.reason = reason || project.reason;
+          project.materials = selected;
+        }
+        if (craftIdea.tried === true) {
+          project.tried = true;
+          project.lastTriedAt = new Date().toISOString();
+          state.crafting.skillLevel = Math.min(5, state.crafting.skillLevel + 1);
+        }
+        state.crafting.lastIdeaAt = new Date().toISOString();
+        remember(state, (craftIdea.tried === true ? "Mabel tried making " : "Mabel imagined making ") + title + " from " + selected.join(" and ") + ".", "crafting");
+        if (state.crafting.projects.length >= 2 && !state.interests.some(item => item.kind === "hobby" && /craft|making things/i.test(item.title))) {
+          upsertInterest(state, { id: "making-things", title: "Crafting", kind: "hobby", question: "What useful little things can Mabel make from what she finds?", evidence: "Several finds have led Mabel to imagine mouse-sized inventions." }, 0);
+        }
+      }
+    }
+
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
     if (new Date().getUTCHours() >= 20) {
@@ -490,6 +550,31 @@ async function runMabelLife(env) {
   } catch {
     return state;
   }
+}
+
+async function handleSharedWorldEvent(request, env) {
+  let data;
+  try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
+  const state = await loadState(env);
+  const kind = cleanText(data.kind, 24);
+  if (kind === "exploration") {
+    const names = Array.isArray(data.finds) ? data.finds.map(name => cleanText(name, 100)).filter(Boolean).slice(0, 3) : [];
+    for (const name of names) {
+      if (!state.crafting.materials.some(item => makeId(item.name) === makeId(name))) state.crafting.materials.unshift({ name, at: new Date().toISOString() });
+    }
+    state.crafting.materials = state.crafting.materials.slice(0, 30);
+  } else if (kind === "artwork") {
+    const title = cleanText(data.title, 100);
+    const inspiration = cleanText(data.inspiration, 220);
+    if (!title || !inspiration) return jsonResponse({ error: "The artwork needs a title and inspiration." }, 400);
+    const key = makeId(title + " " + inspiration);
+    if (!state.crafting.artInspirations.some(item => item.key === key)) {
+      state.crafting.artInspirations.unshift({ key, title, inspiration, at: new Date().toISOString() });
+      state.crafting.artInspirations = state.crafting.artInspirations.slice(0, 12);
+    }
+  } else return jsonResponse({ error: "That world event is not recognized." }, 400);
+  await saveState(env, state);
+  return jsonResponse({ ok: true });
 }
 
 const VISITOR_BOARD_KEY = "mabel-visitor-board-v1";
@@ -558,6 +643,9 @@ export default {
       });
     }
 
+    if (url.pathname === "/mabel-brain" && request.method === "POST") {
+      return handleSharedWorldEvent(request, env);
+    }
     if (url.pathname === "/mabel-brain" && request.method === "GET") {
       const state = await loadState(env);
       return jsonResponse({
@@ -566,6 +654,8 @@ export default {
           thought: state.thought,
           needs: state.needs,
           personality: state.personality,
+          interests: state.interests,
+          crafting: state.crafting,
           updatedAt: state.lastLifeUpdate
         }
       });
