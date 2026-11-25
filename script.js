@@ -90,6 +90,7 @@ let viewedVisitorGiftNoticeKeys = new Set();
 let conversation = [];
 let reflectionQueue = [];
 let messagePending = false;
+let reflectionInProgress = false;
 let wanderings = [];
 let researchLog = [];
 let boardReadKeys = [];
@@ -3204,8 +3205,6 @@ async function handleVisitorMessage() {
       mabelReply: parsedReply.text,
       sparkCandidate: data.spark || inlineSpark || null
     });
-    await processNextDeferredReflection();
-
     if (explicitResearchRequest) {
       const researchIdea = addResearchIdea(explicitResearchRequest);
       if (researchIdea) {
@@ -3263,6 +3262,11 @@ async function handleVisitorMessage() {
     updatePage();
 
     messageElement.value = "";
+    window.setTimeout(function () {
+      processNextDeferredReflection().catch(function (error) {
+        console.warn("Mabel’s private reflection could not be saved.", error);
+      });
+    }, 0);
   } catch (error) {
     console.warn("Mabel chat request failed.", error);
     replyElement.textContent = "Mabel's lantern flickers. \"The path to my thoughts is tangled tonight. Try again in a moment.\"";
@@ -4492,16 +4496,22 @@ async function reflectOnVisitorBoardNote(reflection) {
 }
 
 async function processNextDeferredReflection() {
+  if (reflectionInProgress) return;
   const reflection = reflectionQueue[0];
   if (!reflection) return;
-  const succeeded = reflection.type === "conversation"
-    ? await reflectOnConversation(reflection.visitorMessage, reflection.mabelReply, reflection.sparkCandidate, true)
-    : reflection.type === "board-note"
-      ? await reflectOnVisitorBoardNote(reflection)
-      : true;
-  if (succeeded) {
-    reflectionQueue.shift();
-    saveReflectionQueue();
+  reflectionInProgress = true;
+  try {
+    const succeeded = reflection.type === "conversation"
+      ? await reflectOnConversation(reflection.visitorMessage, reflection.mabelReply, reflection.sparkCandidate, true)
+      : reflection.type === "board-note"
+        ? await reflectOnVisitorBoardNote(reflection)
+        : true;
+    if (succeeded) {
+      reflectionQueue.shift();
+      saveReflectionQueue();
+    }
+  } finally {
+    reflectionInProgress = false;
   }
 }
 
