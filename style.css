@@ -1136,3 +1136,13 @@ button#explore.explore-button:disabled {
   border: 1px solid rgba(160, 135, 95, 0.18);
   border-radius: 12px;
 }
+
+
+#research-log > li > strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+#research-log > li > p {
+  margin-top: 8px;
+}
