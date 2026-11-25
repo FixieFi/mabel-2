@@ -81,6 +81,7 @@
         <button class="tab-button" data-tab="research">Library</button>
         <button class="tab-button" data-tab="day">Activity log</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
+        <button class="tab-button" data-tab="gallery-tab">Gallery</button>
 	<button class="tab-button" data-tab="hollow">Mabel’s home</button>
         <button class="tab-button" data-tab="visitor-board">Visitors’ board</button>
         <button class="tab-button" data-tab="about-you">About you</button>
@@ -96,6 +97,7 @@
         ></textarea>
 
         <button id="send">Send</button>
+        <p id="chat-status" class="chat-status" aria-live="polite"></p>
 
         <div id="reply" class="reply"></div>
 
@@ -152,15 +154,13 @@
   <div id="hollow-speech" class="hollow-speech hidden" aria-live="polite">
     <p id="hollow-speech-text"></p>
   </div>
-  <p id="hollow-status">Gifts wait here for Mabel’s next quiet moment, usually 20–40 minutes while this page is open. Her reaction appears here and in her activity log.</p>
+  <p id="hollow-status">Gifts wait here for Mabel’s next quiet moment, usually every 5–10 minutes while this page is open. Her reaction appears here and in her activity log.</p>
   <div class="home-inventory">
     <h3>Mabel’s bindle</h3>
-    <p class="bindle-intro">The things she has gathered for her travels.</p>
+    <p class="bindle-intro">Everything Mabel is carrying: useful things, snacks, and little treasures.</p>
     <div id="bindle" class="bindle-card">
       <p class="bindle-empty">Mabel’s bindle is light today.</p>
     </div>
-    <h3>Things at home</h3>
-    <ul id="hollow-objects" class="hollow-objects"></ul>
   </div>
 </div>
 
@@ -241,11 +241,11 @@
                 <h3>Mabel’s diary</h3>
         <ul id="diary"></ul>
 
-        <h3>Mabel’s Gallery</h3>
-        <p class="gallery-intro">
-          Little drawings Mabel made when something felt worth keeping.
-        </p>
+      </section>
 
+      <section id="gallery-tab" class="tab-panel">
+        <h2>Mabel’s Gallery</h2>
+        <p class="gallery-intro">Little drawings Mabel made when a thought or moment felt worth keeping.</p>
         <ul id="gallery"></ul>
       </section>
 
