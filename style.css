@@ -1183,6 +1183,27 @@ button#explore.explore-button:disabled {
   vertical-align: middle;
 }
 
+.newly-noticed-gift-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  color: #50316f;
+  background: linear-gradient(120deg, #fff0b8, #e8d8ff);
+  border: 1px solid rgba(116, 79, 151, 0.28);
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(195, 159, 255, 0.45);
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.bindle-item.newly-noticed-gift {
+  outline: 2px solid rgba(174, 133, 219, 0.55);
+  outline-offset: 2px;
+}
+
 
 .diary-entry-highlight {
   padding: 12px 14px;
@@ -1582,3 +1603,25 @@ button#explore.explore-button:disabled {
 .gallery-detail-exhibition-date { color: var(--deep-plum); font-weight: 600; }
 .explore-follow-up { margin: 7px 0; padding: 8px 10px; color: var(--deep-plum); background: rgba(255, 240, 200, .62); border-left: 3px solid var(--soft-purple); border-radius: 8px; font-style: italic; }
 .crafting-materials { max-height: 180px; overflow-y: auto; overscroll-behavior: contain; }
+
+.wander-find {
+  color: #365c48;
+  background: rgba(229, 241, 225, 0.72);
+  border-left: 3px solid #719b75;
+  border-radius: 8px;
+}
+
+.wander-find-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  color: #294e39;
+  background: #d9ead6;
+  border: 1px solid rgba(72, 116, 79, 0.25);
+  border-radius: 999px;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: middle;
+}

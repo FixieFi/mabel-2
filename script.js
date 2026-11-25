@@ -99,6 +99,7 @@ function currentVisitorSessionId() {
 const galleryStorageKey = "mabel-gallery-v1";
 const visitorProfileStorageKey = "mabel-visitor-profile-v1";
 const visitorGiftSeenStorageKey = "mabel-viewed-visitor-gift-v1";
+const visitorGiftHighlightStorageKey = "mabel-highlight-visitor-gift-v1";
 
 const legacySeedInterestIds = new Set([
   "silver-thread",
@@ -735,11 +736,15 @@ function recordBindleDeparture(item, action, at) {
   if (!item || !item.name) return;
   bindle.history = Array.isArray(bindle.history) ? bindle.history : [];
   const giftId = item.giftId || "";
+  const linkedObject = giftId && mabel.world && Array.isArray(mabel.world.objects)
+    ? mabel.world.objects.find(function (object) { return object && object.id === giftId; })
+    : null;
+  const itemSource = item.source || linkedObject && linkedObject.source || "";
   bindle.history.unshift({
     name: String(item.name),
     note: String(item.note || ""),
     giftId: giftId,
-    source: giftId || item.source === "visitor" ? "visitor" : (item.source || ""),
+    source: itemSource,
     action: action || "discarded",
     at: at || now()
   });
@@ -1043,7 +1048,9 @@ function renderMabelCard(artwork) {
     );
   }
 
-  if (motif === "rain") {
+  if (artwork.referenceRetry) {
+    // Keep the studied subject clear instead of layering an unrelated motif over it.
+  } else if (motif === "rain") {
     const drift = -8 + random() * 16;
     for (let i = 0; i < 11 + Math.floor(random() * 13); i += 1) {
       const x = 12 + random() * 136;
@@ -1345,6 +1352,21 @@ function renderMabelCard(artwork) {
       palette[2], 2, 0.88);
   } else if (subject === "button") {
     symbolMarks.button(80, 80, 22);
+  }
+
+  if (Array.isArray(artwork.vectorPaths)) {
+    artwork.vectorPaths.slice(0, 24).forEach(function (item) {
+      if (!item || typeof item.d !== "string") return;
+      const d = item.d.slice(0, 360);
+      if (!/^[MmLlHhVvCcSsQqTtZz0-9.,+\-\s]+$/.test(d) || !/[MLCQ]/i.test(d)) return;
+      const values = d.match(/-?\d+(?:\.\d+)?/g) || [];
+      if (values.some(function (value) { return !Number.isFinite(Number(value)) || Number(value) < -20 || Number(value) > 180; })) return;
+      const strokeIndex = Number.isInteger(item.stroke) && item.stroke >= 0 && item.stroke < 3 ? item.stroke : 2;
+      const fillIndex = Number.isInteger(item.fill) && item.fill >= 0 && item.fill < 3 ? item.fill : -1;
+      const width = typeof item.width === "number" ? Math.max(0.35, Math.min(5, item.width)) : 1.4;
+      const opacity = typeof item.opacity === "number" ? Math.max(0.15, Math.min(1, item.opacity)) : 0.85;
+      path(d, palette[strokeIndex], width, opacity, fillIndex >= 0 ? palette[fillIndex] : "none");
+    });
   }
 
   for (let i = 0; i < 45; i += 1) {
@@ -2736,6 +2758,7 @@ function syncNoticedItemsIntoBindle() {
       name: name,
       note: object.bindleNote || (object.source === "visitor" ? makeGiftKeepsakeNote(object) : object.note || ""),
       giftId: object.id || "",
+      source: object.source || "",
       edible: Boolean(object.edible)
     });
   });
@@ -2810,13 +2833,38 @@ function updateBindle() {
       row.className = "bindle-item";
       if (value && value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
       row.textContent = value.name || String(value);
-      if (value && (value.giftId || value.source === "visitor")) {
+      const source = value && (value.source || value.giftId && (mabel.world.objects || []).find(function (object) { return object && object.id === value.giftId; })?.source);
+      if (value && source === "visitor") {
         if (value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
         row.classList.add("visitor-gift");
         const badge = document.createElement("span");
         badge.className = "visitor-gift-badge";
-        badge.textContent = "visitor gift";
+        badge.textContent = "Gift from a visitor";
         row.appendChild(badge);
+      } else if (value && source === "wandering") {
+        if (value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
+        row.classList.add("wander-find");
+        const badge = document.createElement("span");
+        badge.className = "wander-find-badge";
+        badge.textContent = "Found on a wander";
+        row.appendChild(badge);
+      }
+      const highlightGiftId = getVisitorGiftHighlightId();
+      if (value && value.giftId && highlightGiftId === String(value.giftId)) {
+        const newBadge = document.createElement("span");
+        newBadge.className = "newly-noticed-gift-badge";
+        newBadge.textContent = "✧ Newly noticed";
+        row.appendChild(newBadge);
+        row.classList.add("newly-noticed-gift");
+        if (typeof IntersectionObserver === "function") {
+          const observer = new IntersectionObserver(function (entries) {
+            if (entries.some(function (entry) { return entry.isIntersecting && entry.intersectionRatio >= 0.65; })) {
+              observer.disconnect();
+              window.setTimeout(function () { clearVisitorGiftHighlight(value.giftId); }, 1200);
+            }
+          }, { threshold: [0.65] });
+          observer.observe(row);
+        }
       }
       if (value && value.action) {
         const status = document.createElement("span");
@@ -3921,6 +3969,9 @@ async function requestMabelArtwork(context, targetElement) {
         requestedColors: requestedArtworkColors(context.message),
         selfPortrait: requestedArtworkSubject(context.message) === "mabel",
         referenceImageUrl: context.referenceImageUrl || new URL("images/mabel.png", window.location.href).href,
+        referenceRetry: context.referenceRetry === true,
+        referenceTitle: context.referenceTitle || "",
+        referenceFact: context.referenceFact || "",
         referenceImageInstruction: context.referenceImageInstruction || (requestedArtworkSubject(context.message) === "mabel"
           ? "Use mabel.png only as a visual reference for Mabel’s mouse features and proportions. Create a new original drawing; never paste or embed the reference image as a layer."
           : ""),
@@ -3951,6 +4002,10 @@ async function requestMabelArtwork(context, targetElement) {
       const data = await response.json();
       artwork = data.artwork || null;
       declined = data.declined === true;
+      if (data.referenceUnavailable === true) {
+        context.referenceUnavailable = true;
+        context.referenceUnavailableReason = String(data.reason || "").slice(0, 240);
+      }
     }
     } catch (error) {
       // An explicit drawing request can still use Mabel's local drawing hand.
@@ -3972,7 +4027,7 @@ async function requestMabelArtwork(context, targetElement) {
 
   const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   const comfortRequest = source === "comfort" && context.comfortRequest === true;
-  if (!artwork && explicitRequest) {
+  if (!artwork && explicitRequest && !context.referenceUnavailable && !context.referenceRetry) {
     artwork = makeMabelFallbackArtwork(context);
   }
   if (!artwork && comfortRequest) {
@@ -3984,7 +4039,7 @@ async function requestMabelArtwork(context, targetElement) {
     artwork.note = "A happy little picture Mabel made to keep you company.";
   }
 
-  if (!artwork && source === "autonomous" && context.inspiration) {
+  if (!artwork && source === "autonomous" && context.inspiration && !context.referenceUnavailable && !context.referenceRetry) {
     artwork = makeMabelFallbackArtwork({
       activity: "making a little study",
       mood: context.mood || mabel.now.mood,
@@ -4287,7 +4342,7 @@ async function handleVisitorMessage() {
     growVisitorBond(1.5, "a thoughtful chat");
 
     replyElement.textContent = parsedReply.text;
-    const activityTopic = message.replace(/\\s+/g, " ").slice(0, 100);
+    const activityTopic = message.replace(/\s+/g, " ").slice(0, 100);
     addFeedEntry({
       kind: "did",
       source: "visitor",
@@ -4585,15 +4640,15 @@ async function noticeNextVisitorGift() {
       gift.status = "set aside";
       addFeedEntry({ kind: "did", text: "Mabel found " + gift.name + " but left it alone.", why: "The water looked muddy, and she wanted to find something clean." });
     } else if (gift.kind === "food") {
-      bindle.food.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id });
+      bindle.food.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
       trimBindleItems(bindle.food, 8);
       gift.status = "saved for later";
     } else if (gift.kind === "water") {
-      bindle.water.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id });
+      bindle.water.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
       trimBindleItems(bindle.water, 5);
       gift.status = "saved for later";
     } else {
-      bindle.treasures.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id });
+      bindle.treasures.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
       trimBindleItems(bindle.treasures, 12);
       gift.status = "packed in Mabel’s bindle";
     }
@@ -4614,7 +4669,7 @@ async function noticeNextVisitorGift() {
       if (!["eaten", "drank"].includes(gift.status)) {
         const target = gift.edible || gift.kind === "food" ? bindle.food : gift.kind === "water" ? bindle.water : bindle.treasures;
         const existing = target.some(function (item) { return item && item.giftId === gift.id; });
-        if (!existing) target.unshift({ name: gift.name, note: gift.bindleNote, giftId: gift.id, edible: Boolean(gift.edible) });
+        if (!existing) target.unshift({ name: gift.name, note: gift.bindleNote, giftId: gift.id, source: "visitor", edible: Boolean(gift.edible) });
         if (gift.status === "noticed" || gift.status === "waiting") gift.status = gift.edible ? "packed as food" : "saved for later";
       }
       if (!gift.postboxNoteReadyAt) gift.postboxNoteReadyAt = new Date(Date.parse(gift.noticedAt) + 3 * 60 * 1000).toISOString();
@@ -5283,12 +5338,30 @@ function currentVisitorGiftNotice() {
   } catch (error) {}
   const gifts = mabel.world.objects.filter(function (item) {
     return item && item.source === "visitor" && item.visitSessionId === currentVisitorSessionId() && item.noticedAt;
+  }).sort(function (a, b) {
+    return Date.parse(b.noticedAt || 0) - Date.parse(a.noticedAt || 0);
   });
   for (const gift of gifts) {
     const key = String(gift.id || gift.name) + "|" + String(gift.noticedAt);
     if (!seen.includes(key) && !viewedVisitorGiftNoticeKeys.has(key)) return { ...gift, noticeKey: key };
   }
   return null;
+}
+
+function setVisitorGiftHighlight(gift) {
+  if (!gift || !gift.id) return;
+  try { sessionStorage.setItem(visitorGiftHighlightStorageKey, String(gift.id)); } catch (error) {}
+  updateBindle();
+}
+
+function getVisitorGiftHighlightId() {
+  try { return sessionStorage.getItem(visitorGiftHighlightStorageKey) || ""; } catch (error) { return ""; }
+}
+
+function clearVisitorGiftHighlight(giftId) {
+  if (!giftId || getVisitorGiftHighlightId() !== String(giftId)) return;
+  try { sessionStorage.removeItem(visitorGiftHighlightStorageKey); } catch (error) {}
+  updateBindle();
 }
 
 function updateVisitorGiftNotice() {
@@ -5993,7 +6066,7 @@ function moveVisitorGiftToFood(gift, data, research) {
   bindle.treasures = (bindle.treasures || []).filter(function (item) { return item.giftId !== gift.id; });
   bindle.water = (bindle.water || []).filter(function (item) { return item.giftId !== gift.id; });
   bindle.food = (bindle.food || []).filter(function (item) { return item.giftId !== gift.id; });
-  bindle.food.unshift({ name: gift.name, note: makeGiftKeepsakeNote({ ...gift, edible: true }), giftId: gift.id, edible: true });
+  bindle.food.unshift({ name: gift.name, note: makeGiftKeepsakeNote({ ...gift, edible: true }), giftId: gift.id, source: "visitor", edible: true });
   trimBindleItems(bindle.food, 8);
   addFeedEntry({ kind: "noticed", text: "Mabel learned that " + gift.name + " is edible and tucked it with her food.", why: gift.edibleReason });
   addMabelPostboxItem({
@@ -6400,12 +6473,14 @@ async function handleWander(options) {
         source: focusInterest.isGiftArtReference ? "autonomous" : "visitor",
         message: "Draw " + focusInterest.title,
         referenceImageUrl: reference.imageUrl,
-        referenceImageInstruction: "Use this real visual reference only to learn the subject’s distinctive shape and details. Create a fresh, original drawing in Mabel’s own handmade style; do not paste, trace, or embed the reference image. The requested subject is " + focusInterest.title + ".",
+        referenceTitle: reference.sourceTitle || "",
+        referenceFact: reference.fact || "",
         referenceRetry: true,
+        referenceImageInstruction: "Study the actual image at the supplied reference URL. Use its visible shape and distinguishing details to guide a fresh drawing of " + focusInterest.title + " in Mabel’s handmade style; do not paste, trace, or embed the reference image.",
         inspiration: inspiration
       };
       let refinedArtwork = await requestMabelArtwork(artContext, null);
-      if (!refinedArtwork) refinedArtwork = await requestMabelArtwork({ ...artContext, forceLocalFallback: true }, null);
+      if (!refinedArtwork && !artContext.referenceUnavailable) refinedArtwork = await requestMabelArtwork({ ...artContext, forceLocalFallback: true }, null);
       if (refinedArtwork) {
         const firstFact = reference.fact ? " One thing Mabel learned: " + reference.fact : "";
         if (focusInterest.isGiftArtReference) {
@@ -6428,6 +6503,13 @@ async function handleWander(options) {
             why: "She wanted to share the second study after learning from a visual reference."
           });
         }
+        updatePage();
+      } else if (artContext.referenceUnavailable) {
+        addFeedEntry({
+          kind: "did",
+          text: "Mabel could not study the Library picture for her drawing yet.",
+          why: artContext.referenceUnavailableReason || "The image reference was unavailable to the artwork studio."
+        });
         updatePage();
       }
     }
@@ -6854,7 +6936,8 @@ function startMabel() {
   if (viewVisitorGiftButton) {
     viewVisitorGiftButton.addEventListener("click", function () {
       const gift = currentVisitorGiftNotice();
-      markVisitorGiftNoticeSeen(true);
+      setVisitorGiftHighlight(gift);
+      markVisitorGiftNoticeSeen(false);
       switchTab("hollow");
       const safeId = gift && gift.id ? String(gift.id).replace(/[^a-z0-9_-]/gi, "") : "";
       const giftRow = safeId && (document.getElementById("bindle-gift-" + safeId) || document.getElementById("home-gift-" + safeId));
@@ -6864,7 +6947,7 @@ function startMabel() {
     });
   }
   if (dismissVisitorGiftButton) {
-    dismissVisitorGiftButton.addEventListener("click", markVisitorGiftNoticeSeen);
+    dismissVisitorGiftButton.addEventListener("click", function () { markVisitorGiftNoticeSeen(false); });
   }
   if (viewPostboxButton) viewPostboxButton.addEventListener("click", function () { switchTab("postbox"); });
   if (dismissPostboxButton) dismissPostboxButton.addEventListener("click", markPostboxNoticeSeen);
