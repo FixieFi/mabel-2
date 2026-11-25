@@ -1245,10 +1245,35 @@ function saveToMabelGallery(artwork) {
 
   saveGallery();
   updateGallery();
+  updateArtExhibition();
   updateVisitorProfile();
   refreshGalleryNotice();
   if (artwork.source === "autonomous" && artwork.inspirationContext) {
-    fetch(MABEL_BRAIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "artwork", title: artwork.title, inspiration: artwork.inspirationContext }) }).catch(function () {});
+    fetch(MABEL_BRAIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "artwork",
+        title: artwork.title,
+        inspiration: artwork.inspirationContext,
+        exhibitionArtwork: {
+          id: String(artwork.id || artwork.title + "-" + (artwork.seed || artwork.createdAt || artwork.at || Date.now())),
+          source: "autonomous",
+          title: artwork.title,
+          description: artwork.description || artwork.note || "",
+          kind: artwork.kind || "moment",
+          palette: artwork.palette,
+          motif: artwork.motif,
+          seed: artwork.seed,
+          subject: artwork.subject || "",
+          selfPortrait: Boolean(artwork.selfPortrait),
+          symbols: artwork.symbols,
+          at: artwork.at || artwork.createdAt || now(),
+          inspirationContext: artwork.inspirationContext,
+          inspirationTitle: artwork.inspirationTitle || ""
+        }
+      })
+    }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
   }
 }
 
@@ -1262,6 +1287,45 @@ function formatArtworkTime(isoTime) {
   return date.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit"
+  });
+}
+
+function updateArtExhibition() {
+  const list = document.getElementById("art-exhibition-works");
+  const period = document.getElementById("art-exhibition-week");
+  if (!list) return;
+  list.replaceChildren();
+  const exhibition = sharedMabelBrain && sharedMabelBrain.artExhibition;
+  const weekOf = String(exhibition && exhibition.weekOf || "");
+  const works = exhibition && Array.isArray(exhibition.works) ? exhibition.works : [];
+  if (period) {
+    const date = new Date(weekOf + "T00:00:00Z");
+    period.textContent = weekOf && !isNaN(date.getTime())
+      ? "This week’s exhibition · week of " + date.toLocaleDateString([], { dateStyle: "long", timeZone: "UTC" })
+      : "Mabel’s little exhibition changes each week.";
+  }
+  if (!works.length) {
+    const empty = document.createElement("li");
+    empty.className = "gallery-empty";
+    empty.textContent = "Mabel hasn’t chosen this week’s drawings yet. Her own little Gallery is still here.";
+    list.appendChild(empty);
+    return;
+  }
+  works.forEach(function (artwork) {
+    const item = document.createElement("li");
+    item.className = "gallery-item";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gallery-artwork-button";
+    button.setAttribute("aria-label", "Open details for " + (artwork.title || "Mabel’s drawing"));
+    const card = renderMabelCard(artwork);
+    const drawing = card && card.querySelector("svg");
+    if (drawing) {
+      button.appendChild(drawing);
+      button.addEventListener("click", function () { openGalleryArtworkDetails(artwork); });
+      item.appendChild(button);
+    }
+    list.appendChild(item);
   });
 }
 
@@ -2114,6 +2178,7 @@ async function refreshSharedMabelBrain() {
       updateInterests();
       updateMindTopics();
       updateCrafting();
+      updateArtExhibition();
     }
   } catch (error) {
     // Keep the browser's current Brain view if the shared Worker is unavailable.
@@ -2430,7 +2495,15 @@ function updateBindle() {
       if (value && value.action) {
         const status = document.createElement("span");
         status.className = "bindle-item-status";
-        status.textContent = value.action === "eaten" ? "eaten by Mabel" : value.action === "drank" ? "drank by Mabel" : value.action === "kept" ? "kept in Mabel’s treasure box" : "discarded";
+        if (value.action === "discarded") {
+          const discardedAt = Date.parse(value.at || "");
+          const stamp = Number.isFinite(discardedAt)
+            ? " · " + new Date(discardedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+            : "";
+          status.textContent = "discarded" + stamp;
+        } else {
+          status.textContent = value.action === "eaten" ? "eaten by Mabel" : value.action === "drank" ? "drank by Mabel" : value.action === "kept" ? "kept in Mabel’s treasure box" : value.action;
+        }
         row.appendChild(status);
       }
       if (value && value.edible) {
@@ -2856,6 +2929,22 @@ function forgetVisitorProfile() {
   visitorProfile = { facts: [], moments: [] };
   saveVisitorProfile();
   updateVisitorProfile();
+}
+
+function resetThisBrowserMabel() {
+  const confirmed = window.confirm("Start fresh in this browser? This clears its gifts, bindle, postbox, personal Gallery, visitor notes, activity and old notifications. Mabel’s shared personality, Art Exhibition and Visitors’ board will stay.");
+  if (!confirmed) return;
+  [
+    mabelStorageKey, reflectionQueueStorageKey, wanderingsStorageKey, researchLogStorageKey,
+    boardReadKeysStorageKey, sparksStorageKey, autonomousResearchStorageKey, viewedSparkStorageKey,
+    viewedArtworkStorageKey, autonomousStorageKey, reflectionStorageKey, bindleStorageKey,
+    galleryStorageKey, visitorProfileStorageKey, visitorGiftSeenStorageKey, researchIdeasStorageKey,
+    mabelPostboxStorageKey, comfortPostboxQueueStorageKey, postboxSeenStorageKey, researchShareCountStorageKey
+  ].forEach(function (key) {
+    try { localStorage.removeItem(key); } catch (error) {}
+  });
+  try { sessionStorage.removeItem(conversationStorageKey); } catch (error) {}
+  window.location.reload();
 }
 
 function updatePage() {
@@ -3343,9 +3432,7 @@ async function requestMabelArtwork(context, targetElement) {
     artwork.inspirationKey = artworkInspiration.key;
   }
   const card = renderMabelCard(artwork);
-  if (source !== "comfort") {
-    saveToMabelGallery(artwork);
-  }
+  saveToMabelGallery(artwork);
   if (card && targetElement) {
     targetElement.appendChild(document.createElement("br"));
     targetElement.appendChild(card);
@@ -5778,6 +5865,7 @@ Use "evolved_trait": null when there is no well-supported new trait.
 function switchTab(tabName) {
   if (tabName === "inner-life") markSparkNoticeSeen();
   if (tabName === "gallery-tab") markGalleryNoticeSeen();
+  if (tabName === "art-exhibition") refreshSharedMabelBrain();
   tabButtons.forEach(function (button) {
     button.classList.toggle("active", button.dataset.tab === tabName);
   });
@@ -6036,6 +6124,8 @@ function startMabel() {
   if (visitorBoardForm) visitorBoardForm.addEventListener("submit", submitVisitorBoardMessage);
   const forgetProfileButton = document.getElementById("forget-visitor-profile");
   if (forgetProfileButton) forgetProfileButton.addEventListener("click", forgetVisitorProfile);
+  const resetBrowserButton = document.getElementById("reset-browser-mabel");
+  if (resetBrowserButton) resetBrowserButton.addEventListener("click", resetThisBrowserMabel);
   loadVisitorBoard();
   refreshSharedMabelBrain();
   setInterval(refreshSharedMabelBrain, 60000);
