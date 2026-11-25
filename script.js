@@ -2456,13 +2456,12 @@ function updateBindle() {
     empty.className = "bindle-empty";
     empty.textContent = "Mabel’s bindle is light today.";
     bindleElement.appendChild(empty);
-    return;
+  } else {
+    appendGroup("Food", inventory.food, false);
+    appendGroup("Water", inventory.water, false);
+    appendGroup("Little treasures", inventory.treasures, false);
+    appendGroup("Waiting to be noticed", waitingGifts, true);
   }
-
-  appendGroup("Food", inventory.food, false);
-  appendGroup("Water", inventory.water, false);
-  appendGroup("Little treasures", inventory.treasures, false);
-  appendGroup("Waiting to be noticed", waitingGifts, true);
   if (treasureBoxElement) {
     if (inventory.treasureBox.length) appendGroup("Things she decided to keep", inventory.treasureBox, false, treasureBoxElement);
     else {
