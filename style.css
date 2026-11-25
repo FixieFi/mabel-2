@@ -1431,3 +1431,17 @@ button#explore.explore-button:disabled {
     justify-self: start;
   }
 }
+
+
+.research-entry-origin {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 0.7rem;
+  color: #675078;
+  border-left: 3px solid rgba(138, 114, 184, 0.55);
+  font-size: 0.92rem;
+  font-style: italic;
+}
+.mind-topic {
+  background: rgba(255, 248, 238, 0.78);
+  border-left: 3px solid rgba(138, 114, 184, 0.5);
+}
