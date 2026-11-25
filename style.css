@@ -1275,3 +1275,105 @@ button#explore.explore-button:disabled {
   color: #684a91;
   font-weight: 600;
 }
+
+
+/* One message and one reply make each visit with Mabel easy to follow. */
+.chat-one-turn-note {
+  max-width: 60rem;
+  margin-bottom: 1rem;
+}
+.chat-message-label {
+  display: block;
+  margin: 0 0 0.4rem;
+  color: var(--deep-plum);
+  font-weight: 700;
+}
+.chat-exchanges {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.2rem;
+}
+.chat-exchange {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: linear-gradient(145deg, rgba(255, 248, 238, 0.88), rgba(243, 234, 255, 0.72));
+  border: 1px solid rgba(107, 74, 143, 0.2);
+  border-radius: 18px;
+}
+.chat-exchange-visitor,
+.chat-exchange-mabel {
+  padding: 0.8rem 1rem;
+  border-radius: 14px;
+}
+.chat-exchange-visitor {
+  margin-left: 8%;
+  color: #51475b;
+  background: rgba(255, 255, 255, 0.84);
+}
+.chat-exchange-mabel {
+  margin-right: 8%;
+  color: var(--deep-plum);
+  background: rgba(235, 225, 250, 0.78);
+}
+.chat-exchange p {
+  margin: 0.3rem 0 0;
+}
+.chat-exchange .reply {
+  margin-top: 0.35rem;
+}
+.research-entry-title {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #51406b;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.12rem;
+}
+.research-entry-time,
+.item-knowledge-note time {
+  display: block;
+  margin: 0 0 0.6rem;
+  color: #72657b;
+  font-size: 0.84rem;
+}
+.item-knowledge-section {
+  margin: 1rem 0 1.4rem;
+}
+.item-knowledge-note {
+  background: rgba(238, 232, 249, 0.68) !important;
+  border-left: 3px solid #a789c6;
+}
+.item-knowledge-note p {
+  margin: 0.35rem 0;
+}
+.visitor-gift-notice-card {
+  background: linear-gradient(120deg, rgba(246, 237, 255, 0.98), rgba(255, 248, 238, 0.98));
+  border-color: rgba(141, 103, 180, 0.42);
+}
+.notice-dismiss {
+  padding: 0.5rem 0.8rem;
+  color: #5e4c70;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(107, 74, 143, 0.25);
+  border-radius: 999px;
+}
+.postbox-gift-link {
+  margin-top: 0.55rem;
+  color: #5c3d7c;
+  background: #efe4fa;
+  border: 1px solid rgba(107, 74, 143, 0.25);
+  border-radius: 999px;
+}
+
+@media (max-width: 560px) {
+  .chat-exchange-visitor { margin-left: 0; }
+  .chat-exchange-mabel { margin-right: 0; }
+  .visitor-gift-notice-card {
+    grid-template-columns: auto 1fr;
+  }
+  #view-visitor-gift,
+  #dismiss-visitor-gift {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
