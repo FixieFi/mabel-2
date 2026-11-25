@@ -48,6 +48,8 @@ const wanderingsElement = document.getElementById("wanderings");
 const visitorBoardForm = document.getElementById("visitor-board-form");
 const visitorBoardMessages = document.getElementById("visitor-board-messages");
 const visitorBoardStatus = document.getElementById("visitor-board-status");
+const brainCoreTraitsElement = document.getElementById("brain-core-traits");
+const brainEvolvedTraitsElement = document.getElementById("brain-evolved-traits");
 
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
@@ -87,6 +89,7 @@ const legacySeedInterestIds = new Set([
 
 let mabel = null;
 let viewedVisitorGiftNoticeKeys = new Set();
+let giftNoticeInProgress = false;
 let conversation = [];
 let reflectionQueue = [];
 let messagePending = false;
@@ -1250,6 +1253,7 @@ function createDefaultMabel() {
     },
     feed: [],
     interests: [],
+    personality: { core_traits: ["gentle", "curious", "thoughtful", "quietly playful"], evolved_traits: [] },
     memories: [],
     knowledge: []
   };
@@ -1856,6 +1860,72 @@ function updateChanges() {
     item.appendChild(document.createTextNode(entry.text || ""));
     changesElement.appendChild(item);
   });
+}
+
+function updateBrain() {
+  const mood = document.getElementById("brain-mood");
+  const moodScore = document.getElementById("brain-mood-score");
+  const thought = document.getElementById("brain-thought");
+  const personality = mabel && mabel.personality ? mabel.personality : {};
+  const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
+  const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  if (mood) mood.textContent = mabel.now.mood || "quiet";
+  if (thought) thought.textContent = "“" + (mabel.now.thought || "Mabel is listening to the hollow.") + "”";
+  if (moodScore) {
+    const needs = Object.values(mabel.needs || {}).map(Number).filter(Number.isFinite);
+    const balance = needs.length ? Math.round(needs.reduce(function (sum, value) { return sum + clampNeed(value); }, 0) / needs.length * 100) : 0;
+    moodScore.textContent = balance + " / 100";
+  }
+  if (brainCoreTraitsElement) {
+    brainCoreTraitsElement.replaceChildren();
+    coreTraits.forEach(function (trait) {
+      const item = document.createElement("li");
+      item.textContent = typeof trait === "string" ? trait : String(trait && trait.trait || "");
+      brainCoreTraitsElement.appendChild(item);
+    });
+  }
+  if (brainEvolvedTraitsElement) {
+    brainEvolvedTraitsElement.replaceChildren();
+    if (!evolvedTraits.length) {
+      const empty = document.createElement("li");
+      empty.className = "brain-trait-empty";
+      empty.textContent = "Nothing has taken root yet. These will appear as Mabel returns to the same small feeling or habit.";
+      brainEvolvedTraitsElement.appendChild(empty);
+    } else {
+      evolvedTraits.slice(0, 18).forEach(function (entry) {
+        const item = document.createElement("li");
+        const title = document.createElement("strong");
+        title.textContent = entry.trait || "";
+        item.appendChild(title);
+        if (entry.reason) {
+          const reason = document.createElement("p");
+          reason.textContent = entry.reason;
+          item.appendChild(reason);
+        }
+        if (entry.date_added) {
+          const date = document.createElement("time");
+          date.dateTime = entry.date_added;
+          date.textContent = new Date(entry.date_added).toLocaleDateString([], { dateStyle: "medium" });
+          item.appendChild(date);
+        }
+        brainEvolvedTraitsElement.appendChild(item);
+      });
+    }
+  }
+}
+
+function addEvolvedTrait(candidate, evidence) {
+  if (!candidate || typeof candidate !== "object") return false;
+  const trait = String(candidate.trait || "").trim().replace(/\s+/g, " ").slice(0, 100);
+  const reason = String(candidate.reason || "").trim().replace(/\s+/g, " ").slice(0, 240);
+  if (trait.length < 4 || reason.length < 20 || !textSharesSpecificDetail(reason, evidence)) return false;
+  const personality = mabel.personality || (mabel.personality = { core_traits: [], evolved_traits: [] });
+  personality.evolved_traits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  const key = normalizeInterestTitle(trait);
+  if (personality.evolved_traits.some(function (entry) { return normalizeInterestTitle(entry && entry.trait) === key; })) return false;
+  personality.evolved_traits.unshift({ trait: trait, reason: reason, date_added: new Date().toISOString().slice(0, 10) });
+  personality.evolved_traits = personality.evolved_traits.slice(0, 18);
+  return true;
 }
 
 function updateDiary() {
@@ -2540,6 +2610,7 @@ function updatePage() {
   updateInterests();
   updateMindTopics();
   updateChanges();
+  updateBrain();
 
   updateResearchLog();
   updateMabelPostbox();
@@ -3399,19 +3470,24 @@ function isUncleanWater(name) {
 
 async function noticeNextVisitorGift() {
   ensureHollowWorld();
-  const gift = mabel.world.objects.find(function (item) {
-    return item.source === "visitor" && !item.noticedAt;
+  const pendingGifts = mabel.world.objects.filter(function (item) {
+    return item && item.source === "visitor" && !item.noticedAt;
   });
-  if (!gift) return;
-
-  const giftNoticeTime = Date.parse(gift.noticeAfter || "");
-  if (!Number.isFinite(giftNoticeTime)) {
-    gift.noticeAfter = new Date(Date.now() + (5 + Math.random() * 5) * 60 * 1000).toISOString();
-    saveMabel();
-    return;
-  }
-  if (Date.now() < giftNoticeTime) return;
-
+  let rescheduledGift = false;
+  pendingGifts.forEach(function (item) {
+    if (!Number.isFinite(Date.parse(item.noticeAfter || ""))) {
+      item.noticeAfter = new Date(Date.now() + (5 + Math.random() * 5) * 60 * 1000).toISOString();
+      rescheduledGift = true;
+    }
+  });
+  if (rescheduledGift) saveMabel();
+  const nowMs = Date.now();
+  const dueGifts = pendingGifts
+    .filter(function (item) { return Date.parse(item.noticeAfter) <= nowMs; })
+    .sort(function (a, b) { return Date.parse(a.noticeAfter) - Date.parse(b.noticeAfter); });
+  const gift = dueGifts[0];
+  if (!gift || giftNoticeInProgress) return;
+  giftNoticeInProgress = true;
   const eventText = "During a quiet moment in her own day, Mabel notices a " + gift.name + " left at home. React to this specific object itself: describe a detail or possible use suggested by the object, then give Mabel a small feeling or question about it. Do not answer with only a generic acknowledgement that a visitor left something.";
   try {
     let data = {};
@@ -3522,6 +3598,8 @@ async function noticeNextVisitorGift() {
       updatePage();
     }
     saveMabel();
+  } finally {
+    giftNoticeInProgress = false;
   }
 }
 
@@ -5258,6 +5336,7 @@ ${recentDiary || "Mabel has not written in her journal yet."}
 Mabel's current mood is ${mabel.now.mood}.
 Mabel is currently ${mabel.now.doing}.
 Mabel's inner thought is: ${mabel.now.thought}
+Mabel's already-established evolved traits: ${(mabel.personality.evolved_traits || []).map(function (entry) { return entry.trait; }).join(", ") || "none yet"}
 
 Mabel's needs:
 Comfort: ${mabel.needs.comfort}
@@ -5281,11 +5360,18 @@ Do not mention Wikipedia, the internet, or searching.
 Use 4 to 7 sentences.
 Write in Mabel's voice.
 
+Also consider whether the supplied moments show the same small preference, habit, or belief appearing repeatedly. If they do, you may return at most ONE new, subtle evolved trait. Ground it in repeated details from the supplied day, do not repeat an existing trait, and do not turn one passing thought into a fixed personality. Return null if the evidence is not strong enough. Never change Mabel's core traits.
+
 Return only JSON like this:
 {
   "title": "End-of-day reflection",
-  "text": "Mabel's reflection"
+  "text": "Mabel's reflection",
+  "evolved_trait": {
+    "trait": "a short, specific habit or preference",
+    "reason": "the repeated evidence from Mabel's day that supports it"
+  }
 }
+Use "evolved_trait": null when there is no well-supported new trait.
 `;
 
   try {
@@ -5320,6 +5406,16 @@ Return only JSON like this:
       title: data.entry.title || "End-of-day reflection",
       text: reflectionText
     });
+    const newTrait = addEvolvedTrait(data.entry.evolved_trait || data.evolved_trait, reflectionEvidence);
+    if (newTrait) {
+      addFeedEntry({
+        kind: "mind",
+        text: "A small part of Mabel’s nature is taking root: " + mabel.personality.evolved_traits[0].trait + ".",
+        why: mabel.personality.evolved_traits[0].reason,
+        personalityCue: "A new trait is growing",
+        personalityChange: true
+      });
+    }
 
     saveMabel();
     updatePage();
@@ -5357,6 +5453,14 @@ function startMabel() {
     ...(mabel.now || {})
   };
   mabel.memories = Array.isArray(mabel.memories) ? mabel.memories : [];
+  const defaultCoreTraits = ["gentle", "curious", "thoughtful", "quietly playful"];
+  mabel.personality = mabel.personality && typeof mabel.personality === "object" ? mabel.personality : {};
+  mabel.personality.core_traits = defaultCoreTraits;
+  mabel.personality.evolved_traits = Array.isArray(mabel.personality.evolved_traits)
+    ? mabel.personality.evolved_traits.filter(function (entry) {
+        return entry && typeof entry.trait === "string" && typeof entry.reason === "string";
+      }).slice(0, 18)
+    : [];
   mabel.knowledge = Array.isArray(mabel.knowledge) ? mabel.knowledge.slice(0, 40) : [];
   mabel.needs = {
     comfort: 0.7,
@@ -5585,6 +5689,17 @@ function startMabel() {
     const boardPanel = document.getElementById("visitor-board");
     if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
   }, 30000);
+
+  // Check due visitor gifts separately from Mabel’s longer autonomous moments.
+  setInterval(function () {
+    if (!mabel || document.visibilityState !== "visible" || giftNoticeInProgress) return;
+    ensureHollowWorld();
+    const dueGift = mabel.world.objects.some(function (gift) {
+      const dueAt = Date.parse(gift && gift.noticeAfter || "");
+      return gift && gift.source === "visitor" && !gift.noticedAt && Number.isFinite(dueAt) && Date.now() >= dueAt;
+    });
+    if (dueGift) noticeNextVisitorGift();
+  }, 15000);
 
   // Mabel's ordinary life continues every 45 seconds.
   setInterval(function () {
