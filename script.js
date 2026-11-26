@@ -1107,7 +1107,7 @@ function renderMabelCard(artwork) {
     node("path", { d: d, fill: colour, opacity: opacity });
   }
 
-  const referenceStudy = artwork.referenceRetry === true;
+  const referenceStudy = artwork.referenceRetry === true && Boolean(artwork.referenceObservation);
   const background = palette[0];
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: background });
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: "#f4ead6", opacity: 0.24 });
@@ -3721,6 +3721,7 @@ function captureVisitorFacts(message) {
   }
   const appearancePatterns = [
     /\bI\s+(?:have|got|wear|am wearing)\s+[^.!?\n]{1,100}\b(?:hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes|eye colour|eye color|bald|curly|straight|blonde|blond|brunette|ginger|red-haired|red hair|brown hair|black hair|grey hair|gray hair)\b[^.!?\n]*/i,
+    /\bI(?:'m| am)\s+(?:a|an)\s+(?:man|woman|nonbinary person|non-binary person)\s+with\s+[^.!?\n]{1,80}\b(?:hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes)\b[^.!?\n]*/i,
     /\bI(?:'m| am)\s+(?:a|an)\s+(?:man|woman|nonbinary person|non-binary person)\b/i,
     /\bmy\s+(?:hair|eyes|glasses|spectacles|mustache|moustache|beard|freckles)\s+(?:is|are)\s+[^.!?\n]{1,80}/i
   ];
@@ -3733,6 +3734,8 @@ function captureVisitorFacts(message) {
 
 function formatVisitorFact(value) {
   let fact = String(value || "").trim().replace(/^They shared:\s*/i, "").replace(/^Visitor says:\s*/i, "");
+  const compoundAppearance = fact.match(/^I(?:'m| am)\s+(?:a|an)\s+(man|woman|nonbinary person|non-binary person)\s+with\s+(.+?)\s+(hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes)\.?$/i);
+  if (compoundAppearance) return "Visitor is " + compoundAppearance[1].toLowerCase() + " and has " + compoundAppearance[2].trim() + " " + compoundAppearance[3].toLowerCase() + ".";
   let match = fact.match(/^(?:My name is|Their name is)\s+(.+?)\.?$/i);
   if (match) return "Visitor’s name is " + match[1].replace(/\.$/, "") + ".";
   match = fact.match(/^(?:Their favorite|Their favourite)\s+(.+?)\s+is\s+(.+?)\.?$/i);
@@ -4127,7 +4130,7 @@ function requestedArtworkDescriptionSubject(message) {
 
 function shouldResearchArtworkReference(subject) {
   const key = normalizeInterestTitle(subject);
-  if (!key || /^(mabel|mouse|visitor|me|you|self portrait)$/.test(key)) return false;
+  if (!key || /^(mabel|mouse|visitor|me|you|self portrait|mabel and her visitor|mouse and visitor)$/.test(key)) return false;
   const familiar = new Set(["cat", "dog", "rabbit", "fox", "bird", "flower", "mushroom", "fossil", "button", "shell", "moon", "star", "fish", "house", "tree", "leaf", "apple", "heart", "cloud", "sun"]);
   if (familiar.has(key)) return false;
   // An explicit request deserves a fresh Library-to-studio pass, even if Mabel
@@ -4352,9 +4355,15 @@ async function requestMabelArtwork(context, targetElement) {
           ? "Draw Mabel’s visitor as the subject. Use only the explicitly shared appearance details in visitorAppearance; do not invent gender, hair, glasses, facial hair, age, or other features that are not provided. Give the artwork the exact title “Mabel drew her visitor”."
           : context.comfortRequest
             ? "Make a warm, happy comfort drawing for this visitor. First use a favorite animal, hobby, or interest explicitly stated in visitorPreferences if one is clearly available. If no such preference is present, draw Mabel the mouse holding a love heart, or Mabel beside the visitor with a bouquet of flowers and little hearts. Do not use unrelated things Mabel found as the subject. Do not invent the visitor's appearance; use only visitorAppearance details when drawing them. Keep the written title and description about the visitor's comfort, not about a random object."
-            : requestedArtworkDescriptionSubject(context.message)
-              ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
-              : "This is an open-ended request for a picture, not an instruction to draw an object named picture. Choose any subject that genuinely catches Mabel’s attention, or create an abstract, playful piece and let the marks decide what it is. Give it a specific, natural title and a short description.") + requestedArtworkColorInstruction(context.message) + (context.referenceImageInstruction ? " " + context.referenceImageInstruction : ""),
+            : /^(?:mabel and her visitor|mouse and visitor)$/i.test(requestedArtworkDescriptionSubject(context.message))
+              ? "Draw both figures together in one scene: Mabel, a small mouse, and her human visitor. Make the mouse clearly mouse-like with round ears and a tail; make the visitor clearly human. Show them side by side, sharing the moment. Use only visitor appearance details she has actually learned."
+              : /^(?:mouse and cat)$/i.test(requestedArtworkDescriptionSubject(context.message))
+                ? "Draw both a mouse and a cat together, with both complete recognizable animals visible. Do not leave either one out."
+                : /^(?:person|man|woman|human)$/i.test(requestedArtworkDescriptionSubject(context.message))
+                  ? "Draw a recognizable human figure with a head, face, torso, two arms, and two legs; keep the whole person visible."
+                  : requestedArtworkDescriptionSubject(context.message)
+                    ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
+                    : "This is an open-ended request for a picture, not an instruction to draw an object named picture. Choose any subject that genuinely catches Mabel’s attention, or create an abstract, playful piece and let the marks decide what it is. Give it a specific, natural title and a short description.") + requestedArtworkColorInstruction(context.message) + (context.referenceImageInstruction ? " " + context.referenceImageInstruction : ""),
         requestedColors: requestedArtworkColors(context.message),
         selfPortrait: selfPortrait,
         referenceImageUrl: context.referenceImageUrl || (storedReference && storedReference.imageUrl) || (selfPortrait ? new URL("images/mabel.png", window.location.href).href : ""),
@@ -4423,7 +4432,8 @@ async function requestMabelArtwork(context, targetElement) {
 
   const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   const comfortRequest = source === "comfort" && context.comfortRequest === true;
-  if (!artwork && explicitRequest && !context.referenceUnavailable && !context.referenceRetry) {
+  if (!artwork && explicitRequest) {
+    // A single failed reference-model attempt should still leave a drawing.
     artwork = makeMabelFallbackArtwork(context);
   }
   if (!artwork && comfortRequest) {
