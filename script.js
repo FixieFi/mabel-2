@@ -2457,6 +2457,114 @@ function updateCrafting() {
   });
 }
 
+function updateBaking() {
+  const baking = sharedMabelBrain && sharedMabelBrain.baking || {};
+  const level = document.getElementById("baking-level");
+  const pantryList = document.getElementById("baking-pantry");
+  const log = document.getElementById("baking-log");
+  const skill = Math.max(0, Number(baking.skillLevel) || 0);
+  if (level) level.textContent = skill
+    ? "Baking practice · Level " + skill + " — Mabel is learning by trying small recipes."
+    : "Mabel’s baking hobby is just beginning; she’ll try a treat when she has suitable ingredients.";
+  if (pantryList) {
+    pantryList.replaceChildren();
+    const pantry = Array.isArray(baking.pantry) ? baking.pantry.slice(0, 12) : [];
+    if (!pantry.length) {
+      const empty = document.createElement("li");
+      empty.className = "brain-trait-empty";
+      empty.textContent = "No baking ingredients gathered yet.";
+      pantryList.appendChild(empty);
+    } else {
+      pantry.forEach(function (ingredient) {
+        const item = document.createElement("li");
+        item.textContent = ingredient.name || "A little ingredient";
+        pantryList.appendChild(item);
+      });
+    }
+  }
+  if (log) {
+    log.replaceChildren();
+    const treats = Array.isArray(baking.treats) ? baking.treats.slice(0, 8) : [];
+    if (!treats.length) {
+      const empty = document.createElement("li");
+      empty.className = "brain-trait-empty";
+      empty.textContent = "No little baked treats yet.";
+      log.appendChild(empty);
+    } else {
+      treats.forEach(function (treat) {
+        const item = document.createElement("li");
+        item.className = "interest-item";
+        const title = document.createElement("strong");
+        title.className = "interest-title";
+        title.textContent = treat.title || "A little baked treat";
+        item.appendChild(title);
+        if (treat.at) {
+          const time = document.createElement("time");
+          time.dateTime = treat.at;
+          time.textContent = new Date(treat.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+          item.appendChild(time);
+        }
+        const description = document.createElement("p");
+        description.className = "interest-reason";
+        description.textContent = treat.description || "";
+        item.appendChild(description);
+        if (Array.isArray(treat.ingredients) && treat.ingredients.length) {
+          const ingredients = document.createElement("span");
+          ingredients.className = "interest-stage";
+          ingredients.textContent = "Made with " + treat.ingredients.join(" and ");
+          item.appendChild(ingredients);
+        }
+        log.appendChild(item);
+      });
+    }
+  }
+}
+
+function updateCoding() {
+  const coding = sharedMabelBrain && sharedMabelBrain.coding || {};
+  const level = document.getElementById("coding-level");
+  const list = document.getElementById("coding-projects");
+  const skill = Math.max(0, Number(coding.skillLevel) || 0);
+  if (level) level.textContent = skill
+    ? "Coding practice · Level " + skill + " — Mabel is learning through small experiments."
+    : "If coding becomes one of Mabel’s hobbies, she may start a tiny programming experiment.";
+  if (!list) return;
+  list.replaceChildren();
+  const projects = Array.isArray(coding.projects) ? coding.projects.slice(0, 6) : [];
+  if (!projects.length) {
+    const empty = document.createElement("li");
+    empty.className = "brain-trait-empty";
+    empty.textContent = "Mabel hasn’t written a little program yet.";
+    list.appendChild(empty);
+    return;
+  }
+  projects.forEach(function (project) {
+    const item = document.createElement("li");
+    item.className = "interest-item coding-project";
+    const title = document.createElement("strong");
+    title.className = "interest-title";
+    title.textContent = project.title || "A tiny code experiment";
+    item.appendChild(title);
+    if (project.at) {
+      const time = document.createElement("time");
+      time.dateTime = project.at;
+      time.textContent = new Date(project.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      item.appendChild(time);
+    }
+    const note = document.createElement("p");
+    note.className = "interest-reason";
+    note.textContent = project.note || "";
+    item.appendChild(note);
+    const code = document.createElement("pre");
+    code.className = "coding-project-code";
+    const codeText = document.createElement("code");
+    codeText.textContent = String(project.code || "").slice(0, 1800);
+    code.appendChild(codeText);
+    item.appendChild(code);
+    list.appendChild(item);
+  });
+}
+
 function updateBrain() {
   const mood = document.getElementById("brain-mood");
   const moodScore = document.getElementById("brain-mood-score");
@@ -2466,6 +2574,8 @@ function updateBrain() {
   const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
   updateCrafting();
+  updateBaking();
+  updateCoding();
   if (mood) mood.textContent = shared.mood || mabel.now.mood || "quiet";
   if (thought) thought.textContent = "“" + (shared.thought || mabel.now.thought || "Mabel is listening to the hollow.") + "”";
   if (moodScore) {
@@ -2730,6 +2840,17 @@ function safeExternalUrl(value) {
   try {
     const url = new URL(value);
     return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function safeWikimediaImageUrl(value) {
+  const safe = safeExternalUrl(value);
+  if (!safe) return "";
+  try {
+    const host = new URL(safe).hostname.toLowerCase();
+    return host === "upload.wikimedia.org" || host.endsWith(".wikimedia.org") ? safe : "";
   } catch (error) {
     return "";
   }
@@ -3824,6 +3945,7 @@ function queueArtworkReferenceResearch(message, options) {
     text: "Mabel practised an initial drawing of " + subject + " and set it aside to study a visual reference at the Library.",
     why: "She wanted to return to the subject and explore it more creatively."
   });
+  if (lead.requestType === "art-reference") lead.lastResearchedAt = "";
   saveResearchIdeas();
   saveMabel();
   updatePage();
@@ -4095,7 +4217,11 @@ async function requestMabelArtwork(context, targetElement) {
     addFeedEntry({
       kind: "did",
       source: "visitor",
-      text: context.comfortRequest ? "Mabel made a thoughtful drawing for her visitor." : "Mabel drew something for her visitor.",
+      text: context.comfortRequest
+        ? "Mabel made a thoughtful drawing for her visitor."
+        : (requestedArtworkDescriptionSubject(context.message)
+          ? "Mabel made an initial drawing of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
+          : "Mabel made a little drawing for her visitor."),
       why: "Mabel was thinking about " + String(creativeThought).replace(/[.?!]+$/, "") + " and wanted to explore it more creatively."
     });
   }
@@ -4363,8 +4489,19 @@ async function handleVisitorMessage() {
 
     let requestedArtwork = null;
     if (isArtworkRequest(message)) {
+      const drawingSubject = requestedArtworkDescriptionSubject(message);
+      addFeedEntry({
+        kind: "did",
+        source: "visitor",
+        text: drawingSubject
+          ? "Mabel began an initial sketch of " + drawingSubject + " for her visitor."
+          : "Mabel began a little drawing for her visitor.",
+        why: "A visitor asked her to draw, and she started by letting her own marks take shape."
+      });
+      saveMabel();
+      updatePage();
       requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
-      if (requestedArtwork) queueArtworkReferenceResearch(message);
+      queueArtworkReferenceResearch(message);
     } else if (visitorSeemsDistressed(message)) {
       requestedArtwork = await requestMabelArtwork({
         source: "comfort",
@@ -4455,7 +4592,7 @@ async function handleVisitorMessage() {
       recordSpark({ ...data.interest, grounded: true, source: "conversation", evidenceText: message + " " + parsedReply.text });
     }
 
-    mabel.needs.connection = clampNeed(mabel.needs.connection + 0.18);
+    mabel.needs.connection = clampNeed(Math.max(0.35, mabel.needs.connection) + 0.12);
     mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.08);
 
     if (mabel.memories.length > 20) {
@@ -5934,6 +6071,7 @@ const diverseWanderFinds = [
   { kind: "treasure", name: "a chipped chess knight", note: "Mabel thought it looked brave despite the missing paint." },
   { kind: "treasure", name: "a little piece of blue-and-white pottery", note: "A broken bit of somebody’s cup, now a bright tile." },
   { kind: "treasure", name: "a tiny toy bus with one wheel missing", note: "It had stopped at the edge of a mossy road." },
+  { kind: "treasure", name: "a mouse-sized red tricycle with one squeaky pedal", note: "Mabel wondered how far three little wheels could carry her." },
   { kind: "treasure", name: "a dried clover pressed flat in a book page", note: "A small green memory from a much larger story." },
   { kind: "food", name: "a crumb of oat biscuit", note: "A useful little bite for the road." },
   { kind: "food", name: "half a dried cranberry", note: "Tart, chewy, and a very good travelling snack." },
@@ -5943,6 +6081,10 @@ const diverseWanderFinds = [
   { kind: "food", name: "a fallen sunflower seed", note: "A proper seed with a satisfying shell." },
   { kind: "food", name: "a corner of plain cracker", note: "Crisp enough to make a tiny sound." },
   { kind: "food", name: "one oat flake", note: "A modest snack with grand ambitions." },
+  { kind: "food", name: "a tiny pinch of rolled oats", note: "Just enough for the smallest possible cake." },
+  { kind: "food", name: "a wild blackberry", note: "Its juice stained one of Mabel’s paws a dusky purple." },
+  { kind: "food", name: "a dried raisin", note: "A wrinkled little sweetness, fit for a bun." },
+  { kind: "food", name: "a paper twist of flour", note: "A pale dusting escaped from a forgotten bakery parcel." },
   { kind: "water", name: "a clean bead of rain gathered in a curled leaf", note: "A small drink sheltered from the wind." },
   { kind: "water", name: "a drop of dew on a clover leaf", note: "It trembled but did not spill." },
   { kind: "water", name: "a shallow puddle in a shell", note: "A little pool with a very useful edge." },
@@ -6044,6 +6186,51 @@ async function fetchPublicResearchFallback(searchTerm) {
     musing: "Mabel followed “" + keyword + "” to a public encyclopedia and kept a detail that caught her eye.",
     libraryFallback: true
   };
+}
+
+async function fetchWikimediaCommonsReference(searchTerm) {
+  const keyword = String(searchTerm || "").trim().slice(0, 80);
+  if (!keyword) return null;
+  const params = new URLSearchParams({
+    action: "query",
+    format: "json",
+    formatversion: "2",
+    generator: "search",
+    gsrsearch: "filetype:bitmap " + keyword,
+    gsrnamespace: "6",
+    gsrlimit: "5",
+    prop: "imageinfo",
+    inprop: "url",
+    iiprop: "url",
+    iiurlwidth: "640",
+    origin: "*"
+  });
+  const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params.toString(), {
+    method: "GET",
+    headers: { "Accept": "application/json" },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error("Wikimedia Commons returned status " + response.status);
+  const result = await response.json();
+  const pages = result && result.query && Array.isArray(result.query.pages) ? result.query.pages : [];
+  const sources = pages.map(function (page) {
+    const image = page && Array.isArray(page.imageinfo) ? page.imageinfo[0] : null;
+    return {
+      title: String(page && page.title || "").replace(/^File:/i, "").slice(0, 160),
+      url: safeExternalUrl(page && page.fullurl || ""),
+      imageUrl: safeExternalUrl(image && (image.thumburl || image.url) || ""),
+      snippet: String(page && page.description || "").slice(0, 500)
+    };
+  }).filter(function (source) { return source.title && source.url && source.imageUrl; });
+  return sources.length ? {
+    title: sources[0].title,
+    searchQuestion: keyword,
+    researchSummary: sources.map(function (source) { return source.snippet; }).filter(Boolean).join("\n\n"),
+    sources: sources,
+    sourceTitle: sources[0].title,
+    url: sources[0].url,
+    libraryFallback: true
+  } : null;
 }
 
 function commonEdibleGiftName(value) {
@@ -6248,10 +6435,10 @@ async function handleWander(options) {
         }
       }
     }
-    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return source.imageUrl; })) {
+    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return safeWikimediaImageUrl(source.imageUrl); })) {
       const imageResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
       const imageSources = imageResult && Array.isArray(imageResult.sources) ? imageResult.sources.filter(function (source) {
-        return source && source.title && source.imageUrl && safeExternalUrl(source.url);
+        return source && source.title && safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url);
       }) : [];
       const imageRelated = imageSources.filter(function (source) {
         return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
@@ -6261,6 +6448,20 @@ async function handleWander(options) {
         rawSources = imageSources;
         relatedSources = imageRelated;
         researchMethod = "in the public encyclopedia";
+      }
+    }
+    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return source.imageUrl; })) {
+      const commonsResult = await fetchWikimediaCommonsReference(searchTerm).catch(function () { return null; });
+      const commonsSources = commonsResult && Array.isArray(commonsResult.sources) ? commonsResult.sources : [];
+      const commonsRelated = commonsSources.filter(function (source) {
+        return safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url) &&
+          researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
+      });
+      if (commonsRelated.length) {
+        data = commonsResult;
+        rawSources = commonsSources;
+        relatedSources = commonsRelated;
+        researchMethod = "following links from a Library search";
       }
     }
     const returnedText = [
@@ -6318,11 +6519,11 @@ async function handleWander(options) {
     }
 
     if (focusInterest.requestType === "art-reference") {
-      const visualSource = relatedSources.find(function (source) { return source && safeExternalUrl(source.imageUrl); });
+      const visualSource = relatedSources.find(function (source) { return source && safeWikimediaImageUrl(source.imageUrl); });
       if (visualSource) {
         research.artReference = {
           subject: focusInterest.title,
-          imageUrl: safeExternalUrl(visualSource.imageUrl),
+          imageUrl: safeWikimediaImageUrl(visualSource.imageUrl),
           pageUrl: safeExternalUrl(visualSource.url),
           sourceTitle: visualSource.title,
           fact: String(visualSource.snippet || "").split(/(?<=[.!?])\s+/)[0].slice(0, 260),
@@ -6813,11 +7014,13 @@ function startMabel() {
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks().filter(function (spark) { return isGroundedResearchTrigger(spark); });
   researchIdeas = loadResearchIdeas();
-  researchIdeas.filter(function (idea) {
-    return idea && idea.requestType === "research-follow-up" && !idea.lastResearchedAt;
-  }).slice(0, 1).forEach(function (idea) {
-    window.setTimeout(function () { scheduleWanderingResearch(idea); }, 90 * 1000 + Math.random() * 90 * 1000);
+  const pendingResearch = researchIdeas.filter(function (idea) {
+    return idea && ["research-follow-up", "art-reference"].includes(idea.requestType) && !idea.lastResearchedAt;
   });
+  const resumeResearch = pendingResearch.find(function (idea) { return idea.requestType === "art-reference"; }) || pendingResearch[0];
+  if (resumeResearch) {
+    window.setTimeout(function () { scheduleWanderingResearch(resumeResearch); }, 90 * 1000 + Math.random() * 90 * 1000);
+  }
   const previousInterests = mabel.interests.slice();
   const retainedInterests = [];
   previousInterests.forEach(function (interest) {
@@ -6896,6 +7099,9 @@ function startMabel() {
   updateVisitorProfile();
   showSparkNotice();
   refreshGalleryNotice();
+  window.setTimeout(function () {
+    if (mabel && document.visibilityState === "visible") noticeNextVisitorBoardNote();
+  }, 5000);
 
   tabButtons.forEach(function (button) {
     button.addEventListener("click", function () {

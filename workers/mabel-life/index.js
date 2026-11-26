@@ -13,6 +13,9 @@ const DEFAULT_STATE = {
   memories: [],
   interests: [],
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
+  baking: { skillLevel: 0, pantry: [], treats: [], lastBakedAt: null },
+  coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
+  hobbyEvidence: [],
   artExhibition: { weekOf: null, candidates: [], works: [] },
   artReferences: [],
   drawingPractice: { count: 0, artworkIds: [], firstAt: null, lastAt: null },
@@ -174,6 +177,24 @@ async function loadState(env) {
   state.crafting.projects = Array.isArray(state.crafting.projects) ? state.crafting.projects.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
   state.crafting.artInspirations = Array.isArray(state.crafting.artInspirations) ? state.crafting.artInspirations.filter(item => item && typeof item.key === "string").slice(0, 12) : [];
   state.crafting.lastIdeaAt = cleanText(state.crafting.lastIdeaAt, 40) || null;
+  state.baking = state.baking && typeof state.baking === "object" ? state.baking : structuredClone(DEFAULT_STATE.baking);
+  state.baking.skillLevel = Math.max(0, Math.min(5, Number(state.baking.skillLevel) || 0));
+  state.baking.pantry = Array.isArray(state.baking.pantry) ? state.baking.pantry.filter(item => item && typeof item.name === "string" && typeof item.ingredient === "string").slice(0, 30) : [];
+  state.baking.treats = Array.isArray(state.baking.treats) ? state.baking.treats.filter(item => item && typeof item.title === "string").slice(0, 20) : [];
+  state.baking.lastBakedAt = cleanText(state.baking.lastBakedAt, 40) || null;
+  state.coding = state.coding && typeof state.coding === "object" ? state.coding : structuredClone(DEFAULT_STATE.coding);
+  state.coding.skillLevel = Math.max(0, Math.min(5, Number(state.coding.skillLevel) || 0));
+  state.coding.projects = Array.isArray(state.coding.projects) ? state.coding.projects.filter(item => item && typeof item.title === "string" && typeof item.code === "string").slice(0, 12) : [];
+  state.coding.lastAttemptAt = cleanText(state.coding.lastAttemptAt, 40) || null;
+  state.coding.lastCreatedAt = cleanText(state.coding.lastCreatedAt, 40) || null;
+  state.crafting.materials.forEach(item => {
+    const ingredient = bakingIngredientType(item.name);
+    const key = makeId(item.name);
+    if (ingredient && !state.baking.pantry.some(saved => makeId(saved.name) === key)) {
+      state.baking.pantry.push({ id: key + "-saved", name: item.name, ingredient, at: cleanText(item.at, 40) || new Date().toISOString() });
+    }
+  });
+  state.hobbyEvidence = Array.isArray(state.hobbyEvidence) ? state.hobbyEvidence.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
   const currentExhibitionWeek = artExhibitionWeekOf();
   state.artExhibition = state.artExhibition && typeof state.artExhibition === "object" ? state.artExhibition : structuredClone(DEFAULT_STATE.artExhibition);
   if (state.artExhibition.weekOf !== currentExhibitionWeek) {
@@ -317,6 +338,139 @@ async function reflectEvolvedTrait(env, state) {
   return Boolean(trait && reason && personality.evolved_traits[0]?.trait === trait);
 }
 
+function bakingIngredientType(value) {
+  const name = String(value || "").toLowerCase();
+  if (/\b(oats?|oat flakes?|oat biscuit crumbs?)\b/.test(name)) return "oats";
+  if (/\b(blackberr(y|ies)|blueberr(y|ies)|raspberr(y|ies)|strawberr(y|ies)|berries)\b/.test(name)) return "berries";
+  if (/\b(cranberr(y|ies)|raisin(s)?)\b/.test(name)) return "dried fruit";
+  if (/\b(apple|apples)\b/.test(name)) return "apple";
+  if (/\b(hazelnut(s)?|walnut(s)?|almond(s)?)\b/.test(name)) return "nuts";
+  if (/\b(sunflower seed(s)?|sesame seed(s)?)\b/.test(name)) return "seeds";
+  if (/\b(flour)\b/.test(name)) return "flour";
+  if (/\b(honey|honeycomb)\b/.test(name)) return "honey";
+  return "";
+}
+
+function addFoundMaterial(state, name) {
+  const cleanName = cleanText(name, 100);
+  if (!cleanName) return;
+  state.crafting.materials = Array.isArray(state.crafting.materials) ? state.crafting.materials : [];
+  const key = makeId(cleanName);
+  if (state.crafting.materials.some(item => makeId(item.name) === key)) return;
+  const at = new Date().toISOString();
+  state.crafting.materials.unshift({ name: cleanName, at });
+  state.crafting.materials = state.crafting.materials.slice(0, 30);
+  const ingredient = bakingIngredientType(cleanName);
+  if (ingredient && !state.baking.pantry.some(item => makeId(item.name) === key)) {
+    state.baking.pantry.unshift({ id: key + "-" + Date.now(), name: cleanName, ingredient, at });
+    state.baking.pantry = state.baking.pantry.slice(0, 30);
+  }
+}
+
+const TRACKED_HOBBIES = [
+  { title: "Baking", pattern: /\b(bak(e|ing|ed)|baking|cakes?|pastr(y|ies)|buns?)\b/i, question: "What little sweet things can Mabel learn to bake with ingredients she finds?" },
+  { title: "Dancing", pattern: /\b(danc(e|ing|ed)|dancing)\b/i, question: "What kinds of movement and music might Mabel enjoy dancing to?" },
+  { title: "Playing music", pattern: /\b(play(ing|ed)? music|mak(e|ing) music|play(ing|ed) (?:an? )?(?:instrument|guitar|piano|violin|drums?))\b/i, question: "What instruments and sounds might Mabel enjoy learning to play?" },
+  { title: "Cycling", pattern: /\b(cycl(e|ing|ed)|bik(e|ing|ed)|bicycle|cycling)\b/i, question: "What could Mabel learn about cycling, and what would she need to ride safely?" },
+  { title: "Running", pattern: /\b(run|running|ran|jog|jogging)\b/i, question: "How might Mabel enjoy running along a safe path and building her stamina?" },
+  { title: "Coding", pattern: /\b(cod(e|ing)|program(ming)?|write a program)\b/i, question: "What small useful or playful program could Mabel learn to make?" }
+];
+
+function trackRepeatedHobbyMention(state, message) {
+  const text = String(message || "");
+  const hobby = TRACKED_HOBBIES.find(item => item.pattern.test(text));
+  if (!hobby) return null;
+  const key = makeId(hobby.title);
+  let record = state.hobbyEvidence.find(item => makeId(item.title) === key);
+  if (!record) {
+    record = { title: hobby.title, count: 0, evidence: [] };
+    state.hobbyEvidence.unshift(record);
+    state.hobbyEvidence = state.hobbyEvidence.slice(0, 12);
+  }
+  record.count = Math.min(100, (Number(record.count) || 0) + 1);
+  record.lastAt = new Date().toISOString();
+  record.evidence = Array.isArray(record.evidence) ? record.evidence : [];
+  record.evidence.unshift(cleanText(text, 180));
+  record.evidence = record.evidence.slice(0, 3);
+  if (record.count < 3) return { counted: true, spark: null, interestUpdate: null };
+  const existing = state.interests.find(item => makeId(item.id) === key || makeId(item.title) === key);
+  const wasHobby = Boolean(existing && existing.kind === "hobby");
+  const interest = upsertInterest(state, {
+    id: key,
+    title: hobby.title,
+    kind: "hobby",
+    question: hobby.question,
+    evidence: "The visitor has brought up " + hobby.title.toLowerCase() + " in several separate conversations."
+  }, existing ? 0.04 : 0);
+  if (!interest) return null;
+  interest.kind = "hobby";
+  interest.level = Math.max(1, Number(interest.level) || 1);
+  interest.stage = interest.pull > 0.75 ? "pursuing" : "growing";
+  state.currentThread = interest.id;
+  const spark = !existing ? {
+    id: key,
+    title: hobby.title,
+    question: hobby.question,
+    reason: "This activity has come up in several conversations and stayed with Mabel.",
+    pull: interest.pull,
+    kind: "hobby",
+    source: "conversation"
+  } : null;
+  const interestUpdate = {
+    id: interest.id,
+    pullChange: existing ? 0.04 : 0,
+    ...(wasHobby ? {} : { newInterest: { title: interest.title, question: interest.question, kind: "hobby" } })
+  };
+  return { spark, interestUpdate };
+}
+
+function maybeBakeTreat(state) {
+  const hobby = state.interests.find(item => item && item.kind === "hobby" && /\bbak(e|ing)\b/i.test(String(item.title || "")));
+  if (!hobby || state.needs.food < 0.25 || state.needs.water < 0.25 || state.needs.rest < 0.25) return false;
+  const last = Date.parse(state.baking.lastBakedAt || "");
+  if (Number.isFinite(last) && Date.now() - last < 8 * 60 * 60 * 1000) return false;
+  const recipes = [
+    { ingredients: ["oats", "berries"], title: "A blackberry oat cake", description: "Mabel crushed a few oats with a berry and baked a tiny cake in her sun-warmed stone nook." },
+    { ingredients: ["oats", "dried fruit"], title: "A cranberry oat biscuit", description: "Mabel pressed oats and dried fruit into a little biscuit and baked it until its edges turned golden." },
+    { ingredients: ["oats", "apple"], title: "A little apple oat cake", description: "Mabel folded a sliver of apple into crushed oats for a small, sweet cake." },
+    { ingredients: ["oats", "nuts"], title: "A hazelnut oat biscuit", description: "Mabel tucked a bit of hazelnut into an oat biscuit and baked it in her tiny stone nook." },
+    { ingredients: ["oats", "seeds"], title: "A sunflower seed oat cake", description: "Mabel scattered sunflower seeds through a small oat cake and let the sun-warmed stones do their work." },
+    { ingredients: ["flour", "honey"], title: "A little honey bun", description: "Mabel mixed a pinch of flour with honey and baked a tiny golden bun." },
+    { ingredients: ["flour", "dried fruit"], title: "A tiny fruit bun", description: "Mabel tucked dried fruit into a small bun and baked it in her stone nook." }
+  ];
+  const selected = recipes.map(recipe => ({
+    recipe,
+    supplies: recipe.ingredients.map(type => state.baking.pantry.find(item => item.ingredient === type))
+  })).find(item => item.supplies.every(Boolean));
+  if (!selected) return false;
+  const at = new Date().toISOString();
+  const ingredientNames = selected.supplies.map(item => item.name);
+  const ids = new Set(selected.supplies.map(item => item.id));
+  state.baking.pantry = state.baking.pantry.filter(item => !ids.has(item.id));
+  state.baking.skillLevel = Math.min(5, (Number(state.baking.skillLevel) || 0) + 1);
+  state.baking.lastBakedAt = at;
+  const treat = {
+    id: "bake-" + Date.now(),
+    title: selected.recipe.title,
+    description: selected.recipe.description,
+    ingredients: ingredientNames,
+    at,
+    skillLevel: state.baking.skillLevel
+  };
+  state.baking.treats.unshift(treat);
+  state.baking.treats = state.baking.treats.slice(0, 20);
+  hobby.pull = clamp((Number(hobby.pull) || 0.4) + 0.1);
+  hobby.level = Math.min(5, 1 + Math.floor((state.baking.skillLevel - 1) / 3));
+  hobby.stage = hobby.pull > 0.75 ? "pursuing" : "growing";
+  hobby.events = Array.isArray(hobby.events) ? hobby.events : [];
+  hobby.events.unshift({ at, text: "Mabel baked " + selected.recipe.title.toLowerCase() + " from ingredients she found: " + ingredientNames.join(" and ") + "." });
+  hobby.events = hobby.events.slice(0, 12);
+  state.activity = "baking " + selected.recipe.title.toLowerCase();
+  state.thought = "I wonder what small sweet thing I might try next.";
+  remember(state, "Mabel baked " + selected.recipe.title.toLowerCase() + " using " + ingredientNames.join(" and ") + ".", "baking");
+  return true;
+}
+
 async function handleReflect(request, env) {
   let data;
   try {
@@ -333,6 +487,8 @@ async function handleReflect(request, env) {
 
   const state = await loadState(env);
   mergeClientInterests(state, data.interests);
+  const deterministicHobby = trackRepeatedHobbyMention(state, visitorMessage);
+  if (deterministicHobby) await saveState(env, state);
   const candidate = data.sparkCandidate && typeof data.sparkCandidate === "object"
     ? {
         id: makeId(data.sparkCandidate.id || data.sparkCandidate.title),
@@ -379,12 +535,7 @@ async function handleReflect(request, env) {
     : [];
   const recentWanderings = recentFindNames.join(", ");
   state.crafting.materials = Array.isArray(state.crafting?.materials) ? state.crafting.materials : [];
-  recentFindNames.forEach(name => {
-    if (!state.crafting.materials.some(item => makeId(item.name) === makeId(name))) {
-      state.crafting.materials.unshift({ name, at: new Date().toISOString() });
-    }
-  });
-  state.crafting.materials = state.crafting.materials.slice(0, 30);
+  recentFindNames.forEach(name => addFoundMaterial(state, name));
   const visitorProfile = data.visitorProfile && typeof data.visitorProfile === "object"
     ? data.visitorProfile
     : {};
@@ -505,6 +656,10 @@ async function handleReflect(request, env) {
     state.activity = cleanText(data.activity, 180, state.activity);
     await saveState(env, state);
 
+    if (deterministicHobby && deterministicHobby.interestUpdate) {
+      if (deterministicHobby.spark) spark = deterministicHobby.spark;
+      interestUpdate = deterministicHobby.interestUpdate;
+    }
     return jsonResponse({
       remember: Boolean(memory),
       memory: memory || null,
@@ -517,8 +672,58 @@ async function handleReflect(request, env) {
       desire: desire?.text ? desire : null
     });
   } catch {
+    if (deterministicHobby) {
+      await saveState(env, state);
+      return jsonResponse({ remember: false, memory: null, visitorNote: null, sharedMoment: null, reflection: null, itemKnowledge: null, spark: deterministicHobby.spark, interestUpdate: deterministicHobby.interestUpdate, desire: null });
+    }
     return jsonResponse({ remember: false, memory: null, visitorNote: null, sharedMoment: null, reflection: null, itemKnowledge: null, spark: null, interestUpdate: null, desire: null });
   }
+}
+
+function recordActiveHobbyPractice(state) {
+  const activity = String(state.activity || "").toLowerCase();
+  const rules = [
+    { title: "Running", pattern: /\b(running|jogging|went for a run|went jogging)\b/i },
+    { title: "Cycling", pattern: /\b(cycling|rode her (?:bike|bicycle|tricycle)|riding her (?:bike|bicycle|tricycle)|pedalling|pedaling)\b/i },
+    { title: "Dancing", pattern: /\b(dancing|practised dancing|practiced dancing)\b/i },
+    { title: "Playing music", pattern: /\b(playing music|practising (?:music|an instrument)|practicing (?:music|an instrument))\b/i }
+  ];
+  for (const rule of rules) {
+    const interest = state.interests.find(item => item && item.kind === "hobby" && makeId(item.title) === makeId(rule.title));
+    if (!interest || !rule.pattern.test(activity)) continue;
+    if (rule.title === "Cycling" && !state.crafting.materials.some(item => /\b(bicycle|bike|tricycle)\b/i.test(String(item.name || "")))) continue;
+    const last = Date.parse(interest.lastPracticedAt || "");
+    if (Number.isFinite(last) && Date.now() - last < 6 * 60 * 60 * 1000) continue;
+    interest.practiceCount = Math.min(1000, (Number(interest.practiceCount) || 0) + 1);
+    interest.lastPracticedAt = new Date().toISOString();
+    interest.level = Math.min(5, 1 + Math.floor((interest.practiceCount - 1) / 3));
+    interest.pull = clamp((Number(interest.pull) || 0.4) + 0.06);
+    interest.stage = interest.pull > 0.75 ? "pursuing" : "growing";
+    interest.events = Array.isArray(interest.events) ? interest.events : [];
+    interest.events.unshift({ at: interest.lastPracticedAt, text: "Mabel practised " + rule.title.toLowerCase() + " during her own day." });
+    interest.events = interest.events.slice(0, 12);
+  }
+}
+
+function cleanCodeProject(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const title = cleanText(raw.title, 90);
+  const languageValue = cleanText(raw.language, 30).toLowerCase();
+  const language = languageValue === "javascript" || languageValue === "js"
+    ? "JavaScript"
+    : languageValue === "python" || languageValue === "py"
+      ? "Python"
+      : "";
+  const fence = String.fromCharCode(96).repeat(3);
+  let code = typeof raw.code === "string" ? raw.code.trim() : "";
+  if (code.startsWith(fence)) code = code.slice(fence.length).replace(/^(?:javascript|js|python|py)?\s*/i, "");
+  if (code.endsWith(fence)) code = code.slice(0, -fence.length).trim();
+  const note = cleanText(raw.note, 220);
+  if (!title || !language || code.length < 12 || code.length > 1800 || !note) return null;
+  if (code.split(/\r?\n/).length > 36) return null;
+  const forbidden = /\b(fetch|require|import|export|process|document|window|localStorage|XMLHttpRequest|WebSocket|Deno|Bun|child_process|readFile|writeFile|exec|spawn)\b/i;
+  if (forbidden.test(code) || /\b(eval|Function)\s*\(/i.test(code)) return null;
+  return { title, language, code, note };
 }
 
 async function runMabelLife(env) {
@@ -534,6 +739,10 @@ async function runMabelLife(env) {
     .join("\n") || "No reusable found objects are recorded yet.";
   const craftingReady = state.crafting.materials.length >= 2 &&
     (!state.crafting.lastIdeaAt || Date.now() - Date.parse(state.crafting.lastIdeaAt) > 6 * 60 * 60 * 1000);
+  const codingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
+  const lastCodingAttempt = Date.parse(state.coding.lastAttemptAt || state.coding.lastCreatedAt || "");
+  const codingDue = Boolean(codingHobby && (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
+  if (codingDue) state.coding.lastAttemptAt = new Date().toISOString();
 
   const system = [
     "You are Mabel, a small mouse who lives in Hawthorn Hollow.",
@@ -546,10 +755,13 @@ async function runMabelLife(env) {
     "Mabel may develop a genuine interest in crafting after her own art, discoveries, or repeated wish to make useful things. Do not assign it in advance.",
     "When supplied found materials genuinely inspire her, she may suggest one small mouse-sized invention using at least two of the actual listed materials. Prefer safe, gentle, useful ideas that solve a small mouse problem. Never invent materials. Return craftIdea null unless the idea feels earned. An idea is not an accomplished object: set tried:false unless Mabel actually tried it in this moment. When a previous project and its actual materials are still available, she may choose to test it during this moment if her needs and mood allow.",
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
-    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea}.",
+    "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
+    "When codingDue is true, Coding is already one of Mabel’s hobbies and she may write one tiny self-contained code experiment for her notebook. Use only basic JavaScript or Python; keep it under 36 lines and 1,800 characters, grounded in a real interest or useful mouse-sized idea. This is text for display only: never use network, browser, file, process, import, evaluation, or system access. Return codeProject null unless it is a complete small experiment.",
+    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea,codeProject}.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
-    "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects."
+    "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects.",
+    "codeProject is null unless codingDue is true; otherwise use {title,language,code,note}. Keep the code as a short, self-contained written experiment with no imports, network, browser, file, process, or system access."
   ].join("\n");
   const prompt = [
     "Current activity: " + state.activity,
@@ -562,12 +774,18 @@ async function runMabelLife(env) {
     "Mabel’s recent unprompted artwork that may inspire her approach:\n" + state.crafting.artInspirations.slice(0, 5).map(item => "- " + item.title + ": " + item.inspiration).join("\n"),
     "Existing crafting ideas: " + state.crafting.projects.slice(0, 5).map(item => item.title).join(", "),
     "Personality: " + JSON.stringify(state.personality),
-    "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment.")
+    "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment."),
+    "Coding practice is due: " + (codingDue ? "yes; return a small codeProject" : "no; return codeProject null")
   ].join("\n\n");
 
   try {
-    const update = await askModel(env, system, prompt, 500);
-    if (!update) return state;
+    const update = await askModel(env, system, prompt, codingDue ? 760 : 500);
+    if (!update) {
+      maybeBakeTreat(state);
+      state.lastLifeUpdate = new Date().toISOString();
+      await saveState(env, state);
+      return state;
+    }
 
     state.activity = cleanText(update.activity, 180, state.activity);
     state.thought = cleanText(update.thought, 220, state.thought);
@@ -632,6 +850,37 @@ async function runMabelLife(env) {
       }
     }
 
+    recordActiveHobbyPractice(state);
+    const codeProject = codingDue ? cleanCodeProject(update.codeProject) : null;
+    if (codeProject) {
+      const at = new Date().toISOString();
+      state.coding.skillLevel = Math.min(5, (Number(state.coding.skillLevel) || 0) + 1);
+      state.coding.lastCreatedAt = at;
+      state.coding.projects.unshift({
+        id: makeId(codeProject.title) + "-" + Date.now(),
+        title: codeProject.title,
+        language: codeProject.language,
+        code: codeProject.code,
+        note: codeProject.note,
+        at,
+        skillLevel: state.coding.skillLevel
+      });
+      state.coding.projects = state.coding.projects.slice(0, 12);
+      const savedCodingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
+      if (savedCodingHobby) {
+        savedCodingHobby.pull = clamp((Number(savedCodingHobby.pull) || 0.4) + 0.08);
+        savedCodingHobby.level = Math.min(5, 1 + Math.floor((state.coding.skillLevel - 1) / 3));
+        savedCodingHobby.stage = savedCodingHobby.pull > 0.75 ? "pursuing" : "growing";
+        savedCodingHobby.events = Array.isArray(savedCodingHobby.events) ? savedCodingHobby.events : [];
+        savedCodingHobby.events.unshift({ at, text: "Mabel wrote a small " + codeProject.language + " experiment: " + codeProject.title + "." });
+        savedCodingHobby.events = savedCodingHobby.events.slice(0, 12);
+      }
+      state.activity = "writing a little " + codeProject.language + " program";
+      state.thought = "I wonder what other small things a few lines of code might do.";
+      remember(state, "Mabel wrote a small " + codeProject.language + " program called " + codeProject.title + ".", "coding");
+    } else {
+      maybeBakeTreat(state);
+    }
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
     if (new Date().getUTCHours() >= 20) {
@@ -639,6 +888,9 @@ async function runMabelLife(env) {
     }
     return state;
   } catch {
+    maybeBakeTreat(state);
+    state.lastLifeUpdate = new Date().toISOString();
+    await saveState(env, state);
     return state;
   }
 }
@@ -788,10 +1040,7 @@ async function handleSharedWorldEvent(request, env) {
     state.currentThread = saved.id;
   } else if (kind === "exploration") {
     const names = Array.isArray(data.finds) ? data.finds.map(name => cleanText(name, 100)).filter(Boolean).slice(0, 3) : [];
-    for (const name of names) {
-      if (!state.crafting.materials.some(item => makeId(item.name) === makeId(name))) state.crafting.materials.unshift({ name, at: new Date().toISOString() });
-    }
-    state.crafting.materials = state.crafting.materials.slice(0, 30);
+    for (const name of names) addFoundMaterial(state, name);
   } else if (kind === "artwork") {
     const title = cleanText(data.title, 100);
     const inspiration = cleanText(data.inspiration, 220);
@@ -902,6 +1151,8 @@ export default {
           artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
           artReferences: state.artReferences,
           drawingPractice: state.drawingPractice,
+          baking: state.baking,
+          coding: state.coding,
           updatedAt: state.lastLifeUpdate
         }
       });
