@@ -366,13 +366,32 @@ function refreshPostboxNotice() {
   }
   postboxNoticeCard.classList.remove("hidden");
 }
+function schedulePostboxArtworkGallery(entry) {
+  if (!entry || !entry.id || !entry.artwork || !entry.artwork.postboxFirst) return;
+  if (!entry.galleryReleaseAt) {
+    entry.galleryReleaseAt = new Date(Date.now() + 30 * 1000).toISOString();
+    saveMabelPostbox();
+  }
+  const remaining = Math.max(1000, Date.parse(entry.galleryReleaseAt) - Date.now());
+  window.setTimeout(function () {
+    const savedEntry = mabelPostboxItems.find(function (item) { return item && String(item.id) === String(entry.id); });
+    if (!savedEntry || !savedEntry.artwork || !savedEntry.artwork.postboxFirst) return;
+    const artwork = { ...savedEntry.artwork };
+    delete artwork.postboxFirst;
+    savedEntry.artwork = artwork;
+    delete savedEntry.galleryReleaseAt;
+    saveMabelPostbox();
+    updateMabelPostbox();
+    saveToMabelGallery(artwork);
+  }, remaining);
+}
 function addMabelPostboxItem(item) {
   if (!item || (!item.text && !item.artwork)) return;
   const duplicateKey = String(item.title || "") + "|" + String(item.text || "") + "|" + String(item.at || "");
   if (mabelPostboxItems.some(function (saved) {
     return saved && (String(saved.title || "") + "|" + String(saved.text || "") + "|" + String(saved.at || "")) === duplicateKey;
   })) return;
-  mabelPostboxItems.unshift({
+  const entry = {
     id: item.id || "postbox-" + Date.now(),
     at: item.at || now(),
     kind: item.kind || "note",
@@ -381,11 +400,13 @@ function addMabelPostboxItem(item) {
     relatedGiftId: item.relatedGiftId || "",
     sources: Array.isArray(item.sources) ? item.sources.slice(0, 3) : [],
     artwork: item.artwork || null
-  });
+  };
+  mabelPostboxItems.unshift(entry);
   mabelPostboxItems = mabelPostboxItems.slice(0, 30);
   saveMabelPostbox();
   updateMabelPostbox();
   refreshPostboxNotice();
+  schedulePostboxArtworkGallery(entry);
 }
 function loadComfortPostboxQueue() {
   try {
@@ -7301,6 +7322,7 @@ function startMabel() {
   nextAutonomousWanderAt = lastAutonomousWanderAt ? lastAutonomousWanderAt + (10 + Math.random() * 10) * 60 * 1000 : Date.now();
   researchLog = loadResearchLog();
   mabelPostboxItems = loadMabelPostbox();
+  mabelPostboxItems.forEach(schedulePostboxArtworkGallery);
   comfortPostboxQueue = loadComfortPostboxQueue();
   try {
     const savedSeen = localStorage.getItem(postboxSeenStorageKey) || "";
