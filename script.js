@@ -4224,7 +4224,9 @@ function recentRequestedArtworkSubject() {
 
 function requestedArtworkSubject(message) {
   const text = String(message || "").trim();
-  if (/\b(?:draw|sketch|paint|illustrate)\s+(?:us|both of us)(?:\s+together)?\b|\b(?:draw|sketch|paint|illustrate)\s+(?:me and you|you and me|me with mabel|mabel and me)\b|\b(?:draw|sketch|paint|illustrate)\s+us\s+together\b/i.test(text)) {
+  if (/\b(?:draw|sketch|paint|illustrate|picture|drawing|painting|artwork)\b/i.test(text) &&
+      /\b(?:us|both of us|me and you|you and me)\b/i.test(text) ||
+      /\b(?:draw|sketch|paint|illustrate)\s+(?:me with mabel|mabel and me)\b/i.test(text)) {
     return "Mabel and her visitor";
   }
   if (/\b(?:draw|sketch|paint|illustrate)\s+(?:it|that|this)(?:\s+again)?\b|\b(?:draw|sketch|paint|illustrate)\s+another\s+one\b|\b(?:draw|sketch|paint|illustrate)\s+the\s+same\b/i.test(text)) {
