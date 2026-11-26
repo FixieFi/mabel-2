@@ -380,7 +380,7 @@ function craftingMaterialType(value) {
   if (/\b(twig|twigs|branch|branches|stick|sticks|wooden peg)\b/.test(name)) return "wood";
   if (/\b(thread|string|yarn|ribbon|fabric|cloth|wool|woollen)\b/.test(name)) return "fibre";
   if (/\b(paper|cardboard|card|ticket|envelope|notebook page)\b/.test(name)) return "paper";
-  if (/\b(button|bead|bottle cap|bottlecap|coin|washer|ring pull|shell)\b/.test(name)) return "small object";
+  if (/\b(button|bead|bottle cap|bottlecap|coin|washer|ring pull|shell|toy|cartridge|trading card|plastic horse|teddy bear|makeup brush)\b/.test(name)) return "small object";
   if (/\b(leaf|leaves|moss|feather|flower stem|flower petal)\b/.test(name)) return "natural material";
   return "";
 }
@@ -793,9 +793,10 @@ async function runMabelLife(env) {
   const craftMaterials = state.crafting.materials.slice(0, 12)
     .map(item => "- " + item.name + " (found " + cleanText(item.at, 10, "earlier") + ")")
     .join("\n") || "No reusable found objects are recorded yet.";
+  const lastCraftIdeaAt = Date.parse(state.crafting.lastIdeaAt || "");
   const craftingReady = state.crafting.materials.length >= 2 &&
     state.needs.food >= 0.3 && state.needs.water >= 0.3 && state.needs.rest >= 0.35 &&
-    (!state.crafting.lastIdeaAt || Date.now() - Date.parse(state.crafting.lastIdeaAt) > 2 * 60 * 60 * 1000);
+    (!Number.isFinite(lastCraftIdeaAt) || Date.now() - lastCraftIdeaAt > 2 * 60 * 60 * 1000);
   const codingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
   const lastCodingAttempt = Date.parse(state.coding.lastAttemptAt || state.coding.lastCreatedAt || "");
   const codingDue = Boolean(codingHobby && (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
@@ -810,7 +811,7 @@ async function runMabelLife(env) {
     "Let ideas raised by real encounters continue into Mabel's later thoughts, research, and occasional art when they truly stay with her. Do not force every conversation into an interest or artwork.",
     "Interests should describe broad, human-readable pursuits or values (for example, music, exploring the wider world, making things, or understanding feelings), not one isolated object or a single search query.",
     "Mabel may develop a genuine interest in crafting after her own art, discoveries, or repeated wish to make useful things. Do not assign it in advance.",
-    "When at least two listed making materials are available and Mabel has enough food, water, and rest, use this life moment to make one small, safe, useful mouse-sized object from those actual materials. Never invent materials or use food as a craft supply. Set tried:true only if she actually makes it now; otherwise return a grounded idea with tried:false.",
+    "When a making moment is due, at least two listed materials are available, and Mabel has enough food, water, and rest, use this life moment to make one small, safe, useful mouse-sized object from those actual materials. If a making moment is not due, return craftIdea null. Never invent materials or use food as a craft supply. Set tried:true only if she actually makes it now; otherwise return a grounded idea with tried:false.",
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
     "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
     "When codingDue is true, Coding is already one of Mabel’s hobbies and she may write one tiny self-contained code experiment for her notebook. Use only basic JavaScript or Python; keep it under 36 lines and 1,800 characters, grounded in a real interest or useful mouse-sized idea. This is text for display only: never use network, browser, file, process, import, evaluation, or system access. Return codeProject null unless it is a complete small experiment.",
@@ -830,6 +831,7 @@ async function runMabelLife(env) {
     "Things Mabel has actually found and could use as materials:\n" + craftMaterials,
     "Mabel’s recent unprompted artwork that may inspire her approach:\n" + state.crafting.artInspirations.slice(0, 5).map(item => "- " + item.title + ": " + item.inspiration).join("\n"),
     "Existing crafting ideas: " + state.crafting.projects.slice(0, 5).map(item => item.title).join(", "),
+    "A crafting attempt is due: " + (craftingReady ? "yes; if a safe pair fits, make one and return tried:true" : "no; return craftIdea null"),
     "Personality: " + JSON.stringify(state.personality),
     "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment."),
     "Coding practice is due: " + (codingDue ? "yes; return a small codeProject" : "no; return codeProject null")
