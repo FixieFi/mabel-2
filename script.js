@@ -654,11 +654,11 @@ function recordArtworkFeedback(artwork, vote, status, container) {
 
 async function flushPendingArtworkFeedback() {
   if (artworkFeedbackSyncInProgress) return;
-  if (!sharedMabelBrain) await refreshSharedMabelBrain();
-  if (!sharedMabelBrain) return;
   artworkFeedbackSyncInProgress = true;
   let sentAny = false;
   try {
+    if (!sharedMabelBrain) await refreshSharedMabelBrain();
+    if (!sharedMabelBrain) return;
     const queuedItems = loadPendingArtworkFeedback();
     for (const item of queuedItems) {
       try {
