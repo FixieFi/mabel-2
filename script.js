@@ -345,14 +345,14 @@ function markPostboxNoticeSeen() {
   }
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
-function refreshPostboxNotice() {
+function refreshPostboxNotice(force) {
   const latest = latestPostboxMail();
   if (!postboxNoticeCard || !latest || !latest.id) {
     if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
     return;
   }
   const postboxPanel = document.getElementById("postbox");
-  if (postboxPanel && postboxPanel.classList.contains("active")) {
+  if (postboxPanel && postboxPanel.classList.contains("active") && !force) {
     markPostboxNoticeSeen();
     return;
   }
@@ -387,7 +387,7 @@ function addMabelPostboxItem(item) {
   mabelPostboxItems = mabelPostboxItems.slice(0, 30);
   saveMabelPostbox();
   updateMabelPostbox();
-  refreshPostboxNotice();
+  refreshPostboxNotice(true);
 }
 function loadComfortPostboxQueue() {
   try {
@@ -697,6 +697,15 @@ function registerSharedDrawing(artwork, context) {
     } else {
       refreshSharedMabelBrain();
     }
+  }).catch(function () {});
+}
+
+function persistSharedNeeds() {
+  if (!mabel || !mabel.needs) return;
+  fetch(MABEL_BRAIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "needs", needs: mabel.needs })
   }).catch(function () {});
 }
 
@@ -1887,13 +1896,22 @@ function chooseAction() {
     stretch_and_wiggle: "Her paws feel less sleepy after a good stretch."
   };
 
-  mabel.needs.food = clampNeed(mabel.needs.food - 0.005);
-  mabel.needs.water = clampNeed(mabel.needs.water - 0.006);
-  mabel.needs.rest = clampNeed(mabel.needs.rest + (chosen === "rest_in_hollow" ? 0.12 : -0.003));
-  mabel.needs.comfort = clampNeed(mabel.needs.comfort + (Math.random() - 0.48) * 0.025);
-  mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + (Math.random() - 0.4) * 0.025);
-  mabel.needs.connection = clampNeed(mabel.needs.connection - 0.005);
-  mabel.needs.wonder = clampNeed(mabel.needs.wonder + (Math.random() - 0.47) * 0.025);
+  // Slow background drift; specific actions below account for meaningful changes.
+  mabel.needs.food = clampNeed(mabel.needs.food - 0.002);
+  mabel.needs.water = clampNeed(mabel.needs.water - 0.003);
+  mabel.needs.rest = clampNeed(mabel.needs.rest + (chosen === "rest_in_hollow" ? 0.1 : -0.0015));
+  if (["rest_in_hollow", "sit_by_the_path", "listen_to_rain", "play_a_small_game"].includes(chosen)) {
+    mabel.needs.comfort = clampNeed(mabel.needs.comfort + 0.012);
+  }
+  if (["find_a_treasure", "inspect_a_leaf", "listen_for_small_creatures", "make_a_tiny_map"].includes(chosen)) {
+    mabel.needs.curiosity = clampNeed(mabel.needs.curiosity + 0.025);
+  } else if (!pursueInterest) {
+    mabel.needs.curiosity = clampNeed(mabel.needs.curiosity - 0.002);
+  }
+  mabel.needs.connection = clampNeed(mabel.needs.connection - 0.0003);
+  if (["find_a_treasure", "visit_the_berry_patch", "follow_a_scent"].includes(chosen)) {
+    mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.025);
+  }
 
   let activityOverride = "";
   let thoughtOverride = "";
@@ -2011,6 +2029,7 @@ function chooseAction() {
   });
   saveMabel();
   updatePage();
+  persistSharedNeeds();
 }
 
 function applyExplorationFinds(findings) {
@@ -2076,6 +2095,22 @@ function scheduleWanderingResearch(researchLead) {
         : "Mabel went to the Library to research " + queuedIdea.title + ".",
       why: queuedIdea.originText || "A discovery from her wander stayed on her mind."
     });
+    researchLog = researchLog.filter(function (entry) { return !(entry && entry.researchId === queuedIdea.id); });
+    researchLog.unshift({
+      id: "library-" + queuedIdea.id,
+      researchId: queuedIdea.id,
+      kind: "research",
+      at: libraryStartedAt,
+      requestType: queuedIdea.requestType || "",
+      focusTitle: queuedIdea.title,
+      focusQuestionTitle: queuedIdea.title,
+      searchTerm: queuedIdea.searchTerm || queuedIdea.title,
+      searchQuestion: queuedIdea.searchTerm || queuedIdea.title,
+      sourceOriginText: queuedIdea.originText || "",
+      inProgress: true
+    });
+    researchLog = researchLog.slice(0, 30);
+    saveResearchLog();
     saveMabel();
     updatePage();
     if (exploreStatus) exploreStatus.textContent = "Mabel has gone to the Library to look up " + queuedIdea.title + ".";
@@ -2674,6 +2709,26 @@ async function refreshSharedMabelBrain() {
     const data = await response.json();
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
+      if (mabel && Array.isArray(data.brain.lifeLog)) {
+        data.brain.lifeLog.slice().reverse().forEach(function (entry) {
+          if (!entry || !entry.id || mabel.feed.some(function (saved) { return saved && saved.sharedLifeId === entry.id; })) return;
+          mabel.feed.unshift({
+            id: "shared-" + entry.id,
+            sharedLifeId: entry.id,
+            at: entry.at || now(),
+            kind: entry.kind || "did",
+            text: entry.text || "Mabel did something during her day.",
+            why: entry.why || "A moment from Mabel’s own life."
+          });
+        });
+        mabel.feed = mabel.feed.slice(0, 80);
+        updateActivityLog();
+      }
+      if (mabel && data.brain.needs && typeof data.brain.needs === "object") {
+        mabel.needs = { ...mabel.needs, ...data.brain.needs };
+        saveMabel();
+        updateNeeds();
+      }
       updateBrain();
       updateInterests();
       updateMindTopics();
@@ -2855,8 +2910,30 @@ function updateResearchLog() {
     const resourceMethod = libraryResourceMethod(firstSource, entry.researchMethod);
     const sentence = document.createElement("p");
     sentence.className = "research-one-sentence";
+    if (entry.inProgress) {
+      sentence.textContent = entry.requestType === "art-reference"
+        ? "Mabel is at the Library looking for a visual reference for “" + (entry.focusQuestionTitle || subject) + "”."
+        : "Mabel is at the Library researching “" + searchTerm + "”.";
+      item.appendChild(sentence);
+      list.appendChild(item);
+      return;
+    }
     if (entry.failed) {
       sentence.textContent = "Mabel searched for “" + searchTerm + "” at the Library, but the search did not return a usable result. She’ll try again later.";
+      item.appendChild(sentence);
+      list.appendChild(item);
+      return;
+    }
+    if (entry.requestType === "art-reference") {
+      sentence.textContent = "At the Library, Mabel looked up “" + searchTerm + "” to find a visual reference for " + (entry.focusQuestionTitle || subject) + ".";
+      if (firstSource) {
+        const link = document.createElement("a");
+        link.href = safeExternalUrl(firstSource.url) || "#";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = " She found “" + firstSource.title + "”.";
+        sentence.appendChild(link);
+      }
       item.appendChild(sentence);
       list.appendChild(item);
       return;
@@ -3366,6 +3443,7 @@ function accrueActiveVisitorTime() {
     visitorProfile.activeBondToday += earned;
   }
   mabel.needs.connection = clampNeed((Number(mabel.needs.connection) || 0) + 0.006);
+  persistSharedNeeds();
   saveVisitorProfile();
   saveMabel();
   updateNeeds();
@@ -4707,6 +4785,7 @@ async function handleVisitorMessage() {
     saveMabel();
     updateHomeObjects();
     updatePage();
+    persistSharedNeeds();
 
     messageElement.value = "";
     window.setTimeout(function () {
@@ -6504,11 +6583,14 @@ async function handleWander(options) {
   if (!mabel) return;
   const focusInterest = options && options.focusInterest;
   if (!focusInterest || !focusInterest.title) return;
-  const searchTerm = focusInterest.isGuidingAimStep
+  let searchTerm = focusInterest.isGuidingAimStep
     ? ""
     : focusInterest.source === "exploration"
       ? String(researchKeywordFromFinding(focusInterest.title) || focusInterest.searchTerm || focusInterest.title).trim()
       : String(focusInterest.searchTerm || deriveResearchKeyword(focusInterest) || focusInterest.title).trim();
+  if (focusInterest.requestType === "art-reference" && /^a?\s*car$/i.test(String(focusInterest.title || "").trim())) {
+    searchTerm = "automobile road vehicle";
+  }
   const displayTitle = searchTerm || focusInterest.title;
   const researchStartedAt = now();
 
@@ -6534,7 +6616,7 @@ async function handleWander(options) {
         interests: [focusInterest],
         guidingAim: MABEL_GUIDING_AIM,
         researchInstruction: focusInterest.requestType === "art-reference"
-          ? "Research the requested drawing subject " + focusInterest.title + " online to find a reliable visual reference. Return the exact subject, a relevant article title, the canonical page URL, a real image thumbnail URL from the article if one is available, and one short factual sentence. Do not invent an image URL or use a generic image unrelated to this subject."
+          ? "Research the requested drawing subject " + focusInterest.title + " online to find a reliable visual reference. Return the exact subject, a relevant article title, the canonical page URL, a real image thumbnail URL from the article if one is available, and one short factual sentence. Do not invent an image URL or use a generic image unrelated to this subject." + (/^a?\s*car$/i.test(String(focusInterest.title || "").trim()) ? " Here car means a road-going automobile, not CAR as an acronym or the Central African Republic." : "")
           : focusInterest.isGiftResearch
           ? "Research this exact visitor gift: " + focusInterest.title + ". Search online for reliable web pages about what it is; do not describe the physical gift itself as something Mabel read. If reliable sources confirm it is ordinary edible food, return edibleFood true and a brief source-grounded edibleReason. If it is not food or you cannot confirm it is safe to eat, return edibleFood false. Never guess that an unfamiliar object, plant, or mushroom is edible. Return real webpage titles, URLs, and snippets."
           : focusInterest.isGuidingAimStep
@@ -6688,6 +6770,7 @@ async function handleWander(options) {
           researchMatchesFocus(String(data.title || "") + " " + String(data.researchSummary || ""), { ...focusInterest, searchTerm: searchTerm }));
     const research = {
       kind: "research",
+      researchId: focusInterest.id,
       at: now(),
       requestType: focusInterest.requestType || "",
       focusTitle: ["exploration", "wandering"].includes(focusInterest.source)
@@ -6738,6 +6821,7 @@ async function handleWander(options) {
         };
       }
     }
+    researchLog = researchLog.filter(function (entry) { return !(entry && entry.researchId === focusInterest.id); });
     researchLog.unshift(research);
     researchLog = researchLog.slice(0, 30);
     let followUpIdea = null;
@@ -6898,7 +6982,9 @@ async function handleWander(options) {
     });
     if (!alreadyLogged) {
       const failure = String(error && error.message || "The Library search could not be reached.").slice(0, 220);
+      researchLog = researchLog.filter(function (entry) { return !(entry && entry.researchId === focusInterest.id); });
       researchLog.unshift({
+        researchId: focusInterest.id,
         kind: "research", at: failedAt, requestType: focusInterest.requestType || "",
         focusTitle: focusInterest.title, focusQuestionTitle: focusInterest.title,
         searchTerm: searchTerm || focusInterest.title, searchQuestion: searchTerm || focusInterest.title,
@@ -7447,6 +7533,7 @@ function startMabel() {
     if (mabel) {
       deliverDueComfortPostboxMail();
       deliverDueCuriosityPostboxMail();
+      refreshPostboxNotice();
     }
   }, 15000);
 

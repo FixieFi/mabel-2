@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
   baking: { skillLevel: 0, pantry: [], treats: [], lastBakedAt: null },
   coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
   hobbyEvidence: [],
+  lifeLog: [],
   artExhibition: { weekOf: null, candidates: [], works: [] },
   artReferences: [],
   drawingPractice: { count: 0, artworkIds: [], firstAt: null, lastAt: null },
@@ -33,6 +34,21 @@ const DEFAULT_STATE = {
 
 function clamp(value) {
   return Math.max(0, Math.min(1, value));
+}
+
+function recordLifeAction(state, text, why, at = new Date().toISOString()) {
+  state.lifeLog = Array.isArray(state.lifeLog) ? state.lifeLog : [];
+  state.lifeLog.unshift({ id: "life-" + Date.parse(at) + "-" + Math.floor(Math.random() * 100000), at, kind: "did", text: cleanText(text, 220), why: cleanText(why, 260) });
+  state.lifeLog = state.lifeLog.slice(0, 40);
+}
+
+function evolveFromRepeatedPractice(state, trait, reason) {
+  const personality = state.personality || (state.personality = structuredClone(DEFAULT_STATE.personality));
+  personality.evolved_traits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  const key = makeId(trait);
+  if (personality.evolved_traits.some(item => makeId(item.trait) === key)) return;
+  personality.evolved_traits.unshift({ trait, reason, date_added: new Date().toISOString().slice(0, 10) });
+  personality.evolved_traits = personality.evolved_traits.slice(0, MAX_EVOLVED_TRAITS);
 }
 
 function jsonResponse(data, status = 200) {
@@ -171,9 +187,16 @@ async function loadState(env) {
   state.interests = Array.isArray(state.interests)
     ? state.interests.filter(item => item && !LEGACY_SEEDS.has(item.id)).slice(0, MAX_INTERESTS)
     : [];
+  state.lifeLog = Array.isArray(state.lifeLog) ? state.lifeLog.filter(item => item && item.id).slice(0, 40) : [];
   state.crafting = state.crafting && typeof state.crafting === "object" ? state.crafting : structuredClone(DEFAULT_STATE.crafting);
   state.crafting.skillLevel = Math.max(0, Math.min(5, Number(state.crafting.skillLevel) || 0));
-  state.crafting.materials = Array.isArray(state.crafting.materials) ? state.crafting.materials.filter(item => item && typeof item.name === "string").slice(0, 30) : [];
+  state.crafting.materials = Array.isArray(state.crafting.materials)
+    ? state.crafting.materials
+        .filter(item => item && typeof item.name === "string")
+        .map(item => ({ ...item, type: craftingMaterialType(item.name) }))
+        .filter(item => Boolean(item.type))
+        .slice(0, 30)
+    : [];
   state.crafting.projects = Array.isArray(state.crafting.projects) ? state.crafting.projects.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
   state.crafting.artInspirations = Array.isArray(state.crafting.artInspirations) ? state.crafting.artInspirations.filter(item => item && typeof item.key === "string").slice(0, 12) : [];
   state.crafting.lastIdeaAt = cleanText(state.crafting.lastIdeaAt, 40) || null;
@@ -342,12 +365,23 @@ function bakingIngredientType(value) {
   const name = String(value || "").toLowerCase();
   if (/\b(oats?|oat flakes?|oat biscuit crumbs?)\b/.test(name)) return "oats";
   if (/\b(blackberr(y|ies)|blueberr(y|ies)|raspberr(y|ies)|strawberr(y|ies)|berries)\b/.test(name)) return "berries";
-  if (/\b(cranberr(y|ies)|raisin(s)?)\b/.test(name)) return "dried fruit";
+  if (/\b(cranberr(y|ies)|raisins?|dried fruit)\b/.test(name)) return "dried fruit";
   if (/\b(apple|apples)\b/.test(name)) return "apple";
-  if (/\b(hazelnut(s)?|walnut(s)?|almond(s)?)\b/.test(name)) return "nuts";
-  if (/\b(sunflower seed(s)?|sesame seed(s)?)\b/.test(name)) return "seeds";
-  if (/\b(flour)\b/.test(name)) return "flour";
+  if (/\b(hazelnuts?|walnuts?|almonds?|nuts?)\b/.test(name)) return "nuts";
+  if (/\b(sunflower seeds?|sesame seeds?|seeds?)\b/.test(name)) return "seeds";
+  if (/\b(flour|crumbs?)\b/.test(name)) return "flour";
   if (/\b(honey|honeycomb)\b/.test(name)) return "honey";
+  if (/\b(edible|known-safe) mushrooms?\b/.test(name)) return "mushroom";
+  return "";
+}
+
+function craftingMaterialType(value) {
+  const name = String(value || "").toLowerCase();
+  if (/\b(twig|twigs|branch|branches|stick|sticks|wooden peg)\b/.test(name)) return "wood";
+  if (/\b(thread|string|yarn|ribbon|fabric|cloth|wool|woollen)\b/.test(name)) return "fibre";
+  if (/\b(paper|cardboard|card|ticket|envelope|notebook page)\b/.test(name)) return "paper";
+  if (/\b(button|bead|bottle cap|bottlecap|coin|washer|ring pull|shell|toy|cartridge|trading card|plastic horse|teddy bear|makeup brush)\b/.test(name)) return "small object";
+  if (/\b(leaf|leaves|moss|feather|flower stem|flower petal)\b/.test(name)) return "natural material";
   return "";
 }
 
@@ -356,13 +390,14 @@ function addFoundMaterial(state, name) {
   if (!cleanName) return;
   state.crafting.materials = Array.isArray(state.crafting.materials) ? state.crafting.materials : [];
   const key = makeId(cleanName);
-  if (state.crafting.materials.some(item => makeId(item.name) === key)) return;
-  const at = new Date().toISOString();
-  state.crafting.materials.unshift({ name: cleanName, at });
-  state.crafting.materials = state.crafting.materials.slice(0, 30);
+  const materialType = craftingMaterialType(cleanName);
+  if (materialType && !state.crafting.materials.some(item => makeId(item.name) === key)) {
+    state.crafting.materials.unshift({ name: cleanName, type: materialType, at: new Date().toISOString() });
+    state.crafting.materials = state.crafting.materials.slice(0, 30);
+  }
   const ingredient = bakingIngredientType(cleanName);
   if (ingredient && !state.baking.pantry.some(item => makeId(item.name) === key)) {
-    state.baking.pantry.unshift({ id: key + "-" + Date.now(), name: cleanName, ingredient, at });
+    state.baking.pantry.unshift({ id: key + "-" + Date.now(), name: cleanName, ingredient, at: new Date().toISOString() });
     state.baking.pantry = state.baking.pantry.slice(0, 30);
   }
 }
@@ -426,17 +461,22 @@ function trackRepeatedHobbyMention(state, message) {
 
 function maybeBakeTreat(state) {
   const hobby = state.interests.find(item => item && item.kind === "hobby" && /\bbak(e|ing)\b/i.test(String(item.title || "")));
-  if (!hobby || state.needs.food < 0.25 || state.needs.water < 0.25 || state.needs.rest < 0.25) return false;
+  // Food is a fullness score: bake when she has an appetite, but not when depleted.
+  if (!hobby || state.needs.food < 0.18 || state.needs.food > 0.78 ||
+      state.needs.water < 0.3 || state.needs.rest < 0.3) return false;
   const last = Date.parse(state.baking.lastBakedAt || "");
-  if (Number.isFinite(last) && Date.now() - last < 8 * 60 * 60 * 1000) return false;
+  if (Number.isFinite(last) && Date.now() - last < 2 * 60 * 60 * 1000) return false;
+  // Each treat needs two distinct food objects that are actually in Mabel's shared pantry.
   const recipes = [
-    { ingredients: ["oats", "berries"], title: "A blackberry oat cake", description: "Mabel crushed a few oats with a berry and baked a tiny cake in her sun-warmed stone nook." },
-    { ingredients: ["oats", "dried fruit"], title: "A cranberry oat biscuit", description: "Mabel pressed oats and dried fruit into a little biscuit and baked it until its edges turned golden." },
+    { ingredients: ["oats", "berries"], title: "A blackberry oat cake", description: "Mabel crushed oats and a blackberry into a little cake and warmed it on a sun-heated stone." },
+    { ingredients: ["oats", "dried fruit"], title: "A cranberry oat biscuit", description: "Mabel pressed oats and dried fruit into a small biscuit and baked it until its edges turned golden." },
     { ingredients: ["oats", "apple"], title: "A little apple oat cake", description: "Mabel folded a sliver of apple into crushed oats for a small, sweet cake." },
     { ingredients: ["oats", "nuts"], title: "A hazelnut oat biscuit", description: "Mabel tucked a bit of hazelnut into an oat biscuit and baked it in her tiny stone nook." },
     { ingredients: ["oats", "seeds"], title: "A sunflower seed oat cake", description: "Mabel scattered sunflower seeds through a small oat cake and let the sun-warmed stones do their work." },
-    { ingredients: ["flour", "honey"], title: "A little honey bun", description: "Mabel mixed a pinch of flour with honey and baked a tiny golden bun." },
-    { ingredients: ["flour", "dried fruit"], title: "A tiny fruit bun", description: "Mabel tucked dried fruit into a small bun and baked it in her stone nook." }
+    { ingredients: ["flour", "honey"], title: "A little honey bun", description: "Mabel mixed flour and honey into a tiny bun and baked it until the top turned golden." },
+    { ingredients: ["flour", "dried fruit"], title: "A tiny fruit bun", description: "Mabel tucked dried fruit into a small bun and baked it in her stone nook." },
+    { ingredients: ["flour", "berries"], title: "A berry tartlet", description: "Mabel folded a berry into a little flour pastry and made a warm tartlet." },
+    { ingredients: ["oats", "mushroom"], title: "A savoury mushroom oatcake", description: "Mabel made a small savoury oatcake with a mushroom she already knew was safe to eat." }
   ];
   const selected = recipes.map(recipe => ({
     recipe,
@@ -449,25 +489,28 @@ function maybeBakeTreat(state) {
   state.baking.pantry = state.baking.pantry.filter(item => !ids.has(item.id));
   state.baking.skillLevel = Math.min(5, (Number(state.baking.skillLevel) || 0) + 1);
   state.baking.lastBakedAt = at;
-  const treat = {
-    id: "bake-" + Date.now(),
-    title: selected.recipe.title,
-    description: selected.recipe.description,
-    ingredients: ingredientNames,
-    at,
+  state.baking.treats.unshift({
+    id: "bake-" + Date.now(), title: selected.recipe.title,
+    description: selected.recipe.description, ingredients: ingredientNames, at,
     skillLevel: state.baking.skillLevel
-  };
-  state.baking.treats.unshift(treat);
+  });
   state.baking.treats = state.baking.treats.slice(0, 20);
+  state.needs.food = clamp(state.needs.food + 0.24);
+  state.needs.rest = clamp(state.needs.rest - 0.025);
   hobby.pull = clamp((Number(hobby.pull) || 0.4) + 0.1);
   hobby.level = Math.min(5, 1 + Math.floor((state.baking.skillLevel - 1) / 3));
   hobby.stage = hobby.pull > 0.75 ? "pursuing" : "growing";
   hobby.events = Array.isArray(hobby.events) ? hobby.events : [];
-  hobby.events.unshift({ at, text: "Mabel baked " + selected.recipe.title.toLowerCase() + " from ingredients she found: " + ingredientNames.join(" and ") + "." });
+  hobby.events.unshift({ at, text: "Mabel baked and ate " + selected.recipe.title.toLowerCase() + " from " + ingredientNames.join(" and ") + "." });
   hobby.events = hobby.events.slice(0, 12);
-  state.activity = "baking " + selected.recipe.title.toLowerCase();
-  state.thought = "I wonder what small sweet thing I might try next.";
-  remember(state, "Mabel baked " + selected.recipe.title.toLowerCase() + " using " + ingredientNames.join(" and ") + ".", "baking");
+  state.activity = "baking and eating " + selected.recipe.title.toLowerCase();
+  state.thought = "That little treat has taken the edge off my hunger. I wonder what I can bake next.";
+  const actionText = "Mabel baked and ate " + selected.recipe.title.toLowerCase() + ".";
+  recordLifeAction(state, actionText, "She had an appetite and already had " + ingredientNames.join(" and ") + " in the pantry.", at);
+  if (state.baking.skillLevel >= 2) {
+    evolveFromRepeatedPractice(state, "Enjoys baking", "After baking more than one treat from gathered ingredients, Mabel began returning to baking by choice.");
+  }
+  remember(state, actionText + " She used " + ingredientNames.join(" and ") + ".", "baking");
   return true;
 }
 
@@ -726,8 +769,21 @@ function cleanCodeProject(raw) {
   return { title, language, code, note };
 }
 
+function advanceLifeNeeds(state) {
+  const nowMs = Date.now();
+  const previous = Date.parse(state.lastNeedsTickAt || state.lastLifeUpdate || "");
+  if (Number.isFinite(previous) && previous < nowMs) {
+    const minutes = Math.min(180, (nowMs - previous) / 60000);
+    state.needs.food = clamp(state.needs.food - minutes * 0.0008);
+    state.needs.water = clamp(state.needs.water - minutes * 0.001);
+    state.needs.rest = clamp(state.needs.rest - minutes * 0.00055);
+  }
+  state.lastNeedsTickAt = new Date(nowMs).toISOString();
+}
+
 async function runMabelLife(env) {
   const state = await loadState(env);
+  advanceLifeNeeds(state);
   const interests = state.interests.slice(0, 8)
     .map(item => "- " + item.title + ": " + item.question + " (" + item.stage + ", pull " + item.pull + ")")
     .join("\n") || "Mabel has no named interests yet. Let something new catch her attention without prescribing a topic.";
@@ -737,8 +793,10 @@ async function runMabelLife(env) {
   const craftMaterials = state.crafting.materials.slice(0, 12)
     .map(item => "- " + item.name + " (found " + cleanText(item.at, 10, "earlier") + ")")
     .join("\n") || "No reusable found objects are recorded yet.";
+  const lastCraftIdeaAt = Date.parse(state.crafting.lastIdeaAt || "");
   const craftingReady = state.crafting.materials.length >= 2 &&
-    (!state.crafting.lastIdeaAt || Date.now() - Date.parse(state.crafting.lastIdeaAt) > 6 * 60 * 60 * 1000);
+    state.needs.food >= 0.3 && state.needs.water >= 0.3 && state.needs.rest >= 0.35 &&
+    (!Number.isFinite(lastCraftIdeaAt) || Date.now() - lastCraftIdeaAt > 2 * 60 * 60 * 1000);
   const codingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
   const lastCodingAttempt = Date.parse(state.coding.lastAttemptAt || state.coding.lastCreatedAt || "");
   const codingDue = Boolean(codingHobby && (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
@@ -753,11 +811,11 @@ async function runMabelLife(env) {
     "Let ideas raised by real encounters continue into Mabel's later thoughts, research, and occasional art when they truly stay with her. Do not force every conversation into an interest or artwork.",
     "Interests should describe broad, human-readable pursuits or values (for example, music, exploring the wider world, making things, or understanding feelings), not one isolated object or a single search query.",
     "Mabel may develop a genuine interest in crafting after her own art, discoveries, or repeated wish to make useful things. Do not assign it in advance.",
-    "When supplied found materials genuinely inspire her, she may suggest one small mouse-sized invention using at least two of the actual listed materials. Prefer safe, gentle, useful ideas that solve a small mouse problem. Never invent materials. Return craftIdea null unless the idea feels earned. An idea is not an accomplished object: set tried:false unless Mabel actually tried it in this moment. When a previous project and its actual materials are still available, she may choose to test it during this moment if her needs and mood allow.",
+    "When a making moment is due, at least two listed materials are available, and Mabel has enough food, water, and rest, use this life moment to make one small, safe, useful mouse-sized object from those actual materials. If a making moment is not due, return craftIdea null. Never invent materials or use food as a craft supply. Set tried:true only if she actually makes it now; otherwise return a grounded idea with tried:false.",
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
     "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
     "When codingDue is true, Coding is already one of Mabel’s hobbies and she may write one tiny self-contained code experiment for her notebook. Use only basic JavaScript or Python; keep it under 36 lines and 1,800 characters, grounded in a real interest or useful mouse-sized idea. This is text for display only: never use network, browser, file, process, import, evaluation, or system access. Return codeProject null unless it is a complete small experiment.",
-    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea,codeProject}.",
+    "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject}. Do not set needs; those change only through elapsed time and concrete actions.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
     "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects.",
@@ -773,6 +831,7 @@ async function runMabelLife(env) {
     "Things Mabel has actually found and could use as materials:\n" + craftMaterials,
     "Mabel’s recent unprompted artwork that may inspire her approach:\n" + state.crafting.artInspirations.slice(0, 5).map(item => "- " + item.title + ": " + item.inspiration).join("\n"),
     "Existing crafting ideas: " + state.crafting.projects.slice(0, 5).map(item => item.title).join(", "),
+    "A crafting attempt is due: " + (craftingReady ? "yes; if a safe pair fits, make one and return tried:true" : "no; return craftIdea null"),
     "Personality: " + JSON.stringify(state.personality),
     "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment."),
     "Coding practice is due: " + (codingDue ? "yes; return a small codeProject" : "no; return codeProject null")
@@ -790,12 +849,6 @@ async function runMabelLife(env) {
     state.activity = cleanText(update.activity, 180, state.activity);
     state.thought = cleanText(update.thought, 220, state.thought);
     state.mood = cleanText(update.mood, 40, state.mood);
-
-    if (update.needs && typeof update.needs === "object") {
-      for (const key of Object.keys(DEFAULT_STATE.needs)) {
-        if (typeof update.needs[key] === "number") state.needs[key] = clamp(update.needs[key]);
-      }
-    }
 
     if (update.remember === true && update.memory) {
       remember(state, update.memory, "life");
@@ -841,11 +894,21 @@ async function runMabelLife(env) {
           project.tried = true;
           project.lastTriedAt = new Date().toISOString();
           state.crafting.skillLevel = Math.min(5, state.crafting.skillLevel + 1);
+          const used = new Set(selected.map(makeId));
+          state.crafting.materials = state.crafting.materials.filter(item => !used.has(makeId(item.name)));
+          state.needs.rest = clamp(state.needs.rest - 0.06);
+          state.needs.wonder = clamp(state.needs.wonder + 0.08);
+          state.activity = "making " + title.toLowerCase();
+          state.thought = idea;
+          recordLifeAction(state, "Mabel made " + title.toLowerCase() + " from " + selected.join(" and ") + ".", reason || idea);
+          if (state.crafting.skillLevel >= 2) {
+            evolveFromRepeatedPractice(state, "Enjoys making things", "After making more than one small object from things she found, Mabel kept choosing to invent and build.");
+          }
         }
         state.crafting.lastIdeaAt = new Date().toISOString();
-        remember(state, (craftIdea.tried === true ? "Mabel tried making " : "Mabel imagined making ") + title + " from " + selected.join(" and ") + ".", "crafting");
-        if (state.crafting.projects.length >= 2 && !state.interests.some(item => item.kind === "hobby" && /craft|making things/i.test(item.title))) {
-          upsertInterest(state, { id: "making-things", title: "Crafting", kind: "hobby", question: "What useful little things can Mabel make from what she finds?", evidence: "Several finds have led Mabel to imagine mouse-sized inventions." }, 0);
+        remember(state, (craftIdea.tried === true ? "Mabel made " : "Mabel imagined making ") + title + " from " + selected.join(" and ") + ".", "crafting");
+        if (state.crafting.skillLevel >= 2 && !state.interests.some(item => item.kind === "hobby" && /craft|making things/i.test(item.title))) {
+          upsertInterest(state, { id: "making-things", title: "Crafting", kind: "hobby", question: "What useful little things can Mabel make from what she finds?", evidence: "Mabel has actually made more than one small thing from materials she found." }, 0);
         }
       }
     }
@@ -900,6 +963,14 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
+  if (kind === "needs") {
+    if (!data.needs || typeof data.needs !== "object") return jsonResponse({ error: "A needs update is needed." }, 400);
+    for (const key of Object.keys(DEFAULT_STATE.needs)) {
+      if (typeof data.needs[key] === "number") state.needs[key] = clamp(data.needs[key]);
+    }
+    await saveState(env, state);
+    return jsonResponse({ ok: true, needs: state.needs });
+  }
   if (kind === "exhibition-vote") {
     const artworkId = makeId(cleanText(data.artworkId, 140));
     const visitorId = cleanText(data.visitorId, 100);
@@ -976,6 +1047,9 @@ async function handleSharedWorldEvent(request, env) {
     state.drawingPractice.artworkIds.unshift(artworkId);
     state.drawingPractice.artworkIds = state.drawingPractice.artworkIds.slice(0, 100);
     state.drawingPractice.count = Math.min(1000, state.drawingPractice.count + 1);
+    if (state.drawingPractice.count >= 6) {
+      evolveFromRepeatedPractice(state, "Enjoys drawing", "Mabel has returned to drawing many times, including after studying subjects that were new to her.");
+    }
     state.drawingPractice.firstAt = state.drawingPractice.firstAt || at;
     state.drawingPractice.lastAt = at;
     const count = state.drawingPractice.count;
@@ -1156,6 +1230,7 @@ export default {
           personality: state.personality,
           interests: state.interests,
           crafting: state.crafting,
+          lifeLog: state.lifeLog || [],
           artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
           artReferences: state.artReferences,
           drawingPractice: state.drawingPractice,
