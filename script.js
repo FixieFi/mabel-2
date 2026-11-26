@@ -474,18 +474,33 @@ function loadCuriosityPostboxQueue() {
 function saveCuriosityPostboxQueue() {
   try { localStorage.setItem(curiosityPostboxQueueStorageKey, JSON.stringify(curiosityPostboxQueue.slice(0, 8))); } catch (error) {}
 }
+function treasureReasonInMabelVoice(reason) {
+  const text = String(reason || "").trim().replace(/[.!?]+$/, "");
+  const rewrites = [
+    [/^it connects with mabel’s growing interest in /i, "it connects with my growing interest in "],
+    [/^it reminds mabel of something she and a visitor talked about$/i, "it reminds me of something you and I talked about"],
+    [/^it made mabel unexpectedly happy, so she kept it close$/i, "it made me unexpectedly happy, so I kept it close"],
+    [/^after carrying it for a while, mabel found she had grown a little attached to it$/i, "after carrying it for a while, I found I had grown a little attached to it"]
+  ];
+  for (const pair of rewrites) {
+    if (pair[0].test(text)) return text.replace(pair[0], pair[1]);
+  }
+  if (/\bmabel\b/i.test(text)) return "";
+  return text ? text.charAt(0).toLowerCase() + text.slice(1) : "";
+}
+
 function queueTreasureBoxPostboxMail(item, reason) {
   if (!item || !item.name || inferBindleItemSource(item) !== "wandering") return;
   const itemId = String(item.id || normalizeInterestTitle(item.name) + "-" + String(item.keptAt || now()).replace(/[^0-9]/g, "").slice(-10));
   const name = String(item.name).slice(0, 80);
-  const why = String(reason || item.keptReason || "").trim().replace(/[.!?]+$/, "");
+  const why = treasureReasonInMabelVoice(reason || item.keptReason || "");
   curiosityPostboxQueue = curiosityPostboxQueue.filter(function (queued) { return queued && queued.id !== "treasure-mail-" + itemId; });
   curiosityPostboxQueue.push({
     id: "treasure-mail-" + itemId,
     keepTrigger: "treasure-box",
     deliverAt: Date.now() + 45 * 1000 + Math.floor(Math.random() * 75 * 1000),
-    title: "A little treasure Mabel kept",
-    text: "I tucked the " + name + " into my treasure box because " + (why || "it stayed on my mind") + ". I thought you might like to know I decided to keep it.",
+    title: "A little treasure I kept",
+    text: "I tucked the " + name + " into my treasure box" + (why ? " because " + why.replace(/[.!?]+$/, "") : " because it stayed on my mind") + ". I thought you might like to know I decided to keep it.",
     sourceAt: item.keptAt || now()
   });
   curiosityPostboxQueue = curiosityPostboxQueue.slice(-8);
