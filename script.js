@@ -2050,7 +2050,7 @@ function applyExplorationFinds(findings) {
 function scheduleWanderingResearch(researchLead) {
   if (!researchLead || !researchLead.id) return;
   const delay = researchLead.requestType === "art-reference"
-    ? 2 * 60 * 1000 + Math.random() * 2 * 60 * 1000
+    ? 45 * 1000 + Math.random() * 45 * 1000
     : 60 * 1000 + Math.random() * 60 * 1000;
   window.setTimeout(function () {
     const queuedIdea = researchIdeas.find(function (idea) { return idea && idea.id === researchLead.id; });
@@ -2757,7 +2757,7 @@ function updateActivityLog() {
     return;
   }
 
-  activityEntries.slice(0, 20).reverse().forEach(function (entry) {
+  activityEntries.slice(0, 20).forEach(function (entry) {
     const item = document.createElement("li");
     const time = formatActivityTime(entry.at);
     item.textContent = time + " — " + entry.text;
@@ -6607,10 +6607,14 @@ async function handleWander(options) {
       const imageRelated = imageSources.filter(function (source) {
         return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
       });
-      if (imageRelated.length) {
+      // This request was already a search for the exact drawing subject. Wikipedia’s
+      // first image result can use a synonymous article title (for example, cattle
+      // for cow), so keep its safe image even when the text matcher is too strict.
+      const usableImageSources = imageRelated.length ? imageRelated : imageSources;
+      if (usableImageSources.length) {
         data = imageResult;
         rawSources = imageSources;
-        relatedSources = imageRelated;
+        relatedSources = usableImageSources;
         researchMethod = "in the public encyclopedia";
       }
     }
@@ -7191,7 +7195,7 @@ function startMabel() {
   });
   const resumeResearch = pendingResearch.find(function (idea) { return idea.requestType === "art-reference"; }) || pendingResearch[0];
   if (resumeResearch) {
-    window.setTimeout(function () { scheduleWanderingResearch(resumeResearch); }, 90 * 1000 + Math.random() * 90 * 1000);
+    scheduleWanderingResearch(resumeResearch);
   }
   const previousInterests = mabel.interests.slice();
   const retainedInterests = [];
