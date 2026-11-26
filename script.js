@@ -4405,9 +4405,11 @@ async function requestMabelArtwork(context, targetElement) {
       source: "visitor",
       text: context.comfortRequest
         ? "Mabel made a thoughtful drawing for her visitor."
-        : (requestedArtworkDescriptionSubject(context.message)
-          ? "Mabel made an initial drawing of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
-          : "Mabel made a little drawing for her visitor."),
+        : (context.referenceRetry && requestedArtworkDescriptionSubject(context.message)
+          ? "Mabel finished a more detailed study of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
+          : (requestedArtworkDescriptionSubject(context.message)
+            ? "Mabel made an initial drawing of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
+            : "Mabel made a little drawing for her visitor.")),
       why: "Mabel was thinking about " + String(creativeThought).replace(/[.?!]+$/, "") + " and wanted to explore it more creatively."
     });
   }
