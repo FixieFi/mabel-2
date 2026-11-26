@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   interests: [],
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
   baking: { skillLevel: 0, pantry: [], treats: [], lastBakedAt: null },
+  coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
   hobbyEvidence: [],
   artExhibition: { weekOf: null, candidates: [], works: [] },
   artReferences: [],
@@ -181,6 +182,11 @@ async function loadState(env) {
   state.baking.pantry = Array.isArray(state.baking.pantry) ? state.baking.pantry.filter(item => item && typeof item.name === "string" && typeof item.ingredient === "string").slice(0, 30) : [];
   state.baking.treats = Array.isArray(state.baking.treats) ? state.baking.treats.filter(item => item && typeof item.title === "string").slice(0, 20) : [];
   state.baking.lastBakedAt = cleanText(state.baking.lastBakedAt, 40) || null;
+  state.coding = state.coding && typeof state.coding === "object" ? state.coding : structuredClone(DEFAULT_STATE.coding);
+  state.coding.skillLevel = Math.max(0, Math.min(5, Number(state.coding.skillLevel) || 0));
+  state.coding.projects = Array.isArray(state.coding.projects) ? state.coding.projects.filter(item => item && typeof item.title === "string" && typeof item.code === "string").slice(0, 12) : [];
+  state.coding.lastAttemptAt = cleanText(state.coding.lastAttemptAt, 40) || null;
+  state.coding.lastCreatedAt = cleanText(state.coding.lastCreatedAt, 40) || null;
   state.crafting.materials.forEach(item => {
     const ingredient = bakingIngredientType(item.name);
     const key = makeId(item.name);
@@ -361,15 +367,18 @@ function addFoundMaterial(state, name) {
   }
 }
 
-const BAKING_HOBBIES = [
+const TRACKED_HOBBIES = [
   { title: "Baking", pattern: /\b(bak(e|ing|ed)|baking|cakes?|pastr(y|ies)|buns?)\b/i, question: "What little sweet things can Mabel learn to bake with ingredients she finds?" },
   { title: "Dancing", pattern: /\b(danc(e|ing|ed)|dancing)\b/i, question: "What kinds of movement and music might Mabel enjoy dancing to?" },
-  { title: "Playing music", pattern: /\b(play(ing|ed)? music|mak(e|ing) music|play(ing|ed) (?:an? )?(?:instrument|guitar|piano|violin|drums?))\b/i, question: "What instruments and sounds might Mabel enjoy learning to play?" }
+  { title: "Playing music", pattern: /\b(play(ing|ed)? music|mak(e|ing) music|play(ing|ed) (?:an? )?(?:instrument|guitar|piano|violin|drums?))\b/i, question: "What instruments and sounds might Mabel enjoy learning to play?" },
+  { title: "Cycling", pattern: /\b(cycl(e|ing|ed)|bik(e|ing|ed)|bicycle|cycling)\b/i, question: "What could Mabel learn about cycling, and what would she need to ride safely?" },
+  { title: "Running", pattern: /\b(run|running|ran|jog|jogging)\b/i, question: "How might Mabel enjoy running along a safe path and building her stamina?" },
+  { title: "Coding", pattern: /\b(cod(e|ing)|program(ming)?|write a program)\b/i, question: "What small useful or playful program could Mabel learn to make?" }
 ];
 
 function trackRepeatedHobbyMention(state, message) {
   const text = String(message || "");
-  const hobby = BAKING_HOBBIES.find(item => item.pattern.test(text));
+  const hobby = TRACKED_HOBBIES.find(item => item.pattern.test(text));
   if (!hobby) return null;
   const key = makeId(hobby.title);
   let record = state.hobbyEvidence.find(item => makeId(item.title) === key);
@@ -671,6 +680,52 @@ async function handleReflect(request, env) {
   }
 }
 
+function recordActiveHobbyPractice(state) {
+  const activity = String(state.activity || "").toLowerCase();
+  const rules = [
+    { title: "Running", pattern: /\b(running|jogging|went for a run|went jogging)\b/i },
+    { title: "Cycling", pattern: /\b(cycling|rode her (?:bike|bicycle|tricycle)|riding her (?:bike|bicycle|tricycle)|pedalling|pedaling)\b/i },
+    { title: "Dancing", pattern: /\b(dancing|practised dancing|practiced dancing)\b/i },
+    { title: "Playing music", pattern: /\b(playing music|practising (?:music|an instrument)|practicing (?:music|an instrument))\b/i }
+  ];
+  for (const rule of rules) {
+    const interest = state.interests.find(item => item && item.kind === "hobby" && makeId(item.title) === makeId(rule.title));
+    if (!interest || !rule.pattern.test(activity)) continue;
+    if (rule.title === "Cycling" && !state.crafting.materials.some(item => /\b(bicycle|bike|tricycle)\b/i.test(String(item.name || "")))) continue;
+    const last = Date.parse(interest.lastPracticedAt || "");
+    if (Number.isFinite(last) && Date.now() - last < 6 * 60 * 60 * 1000) continue;
+    interest.practiceCount = Math.min(1000, (Number(interest.practiceCount) || 0) + 1);
+    interest.lastPracticedAt = new Date().toISOString();
+    interest.level = Math.min(5, 1 + Math.floor((interest.practiceCount - 1) / 3));
+    interest.pull = clamp((Number(interest.pull) || 0.4) + 0.06);
+    interest.stage = interest.pull > 0.75 ? "pursuing" : "growing";
+    interest.events = Array.isArray(interest.events) ? interest.events : [];
+    interest.events.unshift({ at: interest.lastPracticedAt, text: "Mabel practised " + rule.title.toLowerCase() + " during her own day." });
+    interest.events = interest.events.slice(0, 12);
+  }
+}
+
+function cleanCodeProject(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const title = cleanText(raw.title, 90);
+  const languageValue = cleanText(raw.language, 30).toLowerCase();
+  const language = languageValue === "javascript" || languageValue === "js"
+    ? "JavaScript"
+    : languageValue === "python" || languageValue === "py"
+      ? "Python"
+      : "";
+  const fence = String.fromCharCode(96).repeat(3);
+  let code = typeof raw.code === "string" ? raw.code.trim() : "";
+  if (code.startsWith(fence)) code = code.slice(fence.length).replace(/^(?:javascript|js|python|py)?\s*/i, "");
+  if (code.endsWith(fence)) code = code.slice(0, -fence.length).trim();
+  const note = cleanText(raw.note, 220);
+  if (!title || !language || code.length < 12 || code.length > 1800 || !note) return null;
+  if (code.split(/\r?\n/).length > 36) return null;
+  const forbidden = /\b(fetch|require|import|export|process|document|window|localStorage|XMLHttpRequest|WebSocket|Deno|Bun|child_process|readFile|writeFile|exec|spawn)\b/i;
+  if (forbidden.test(code) || /\b(eval|Function)\s*\(/i.test(code)) return null;
+  return { title, language, code, note };
+}
+
 async function runMabelLife(env) {
   const state = await loadState(env);
   const interests = state.interests.slice(0, 8)
@@ -684,6 +739,10 @@ async function runMabelLife(env) {
     .join("\n") || "No reusable found objects are recorded yet.";
   const craftingReady = state.crafting.materials.length >= 2 &&
     (!state.crafting.lastIdeaAt || Date.now() - Date.parse(state.crafting.lastIdeaAt) > 6 * 60 * 60 * 1000);
+  const codingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
+  const lastCodingAttempt = Date.parse(state.coding.lastAttemptAt || state.coding.lastCreatedAt || "");
+  const codingDue = Boolean(codingHobby && (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
+  if (codingDue) state.coding.lastAttemptAt = new Date().toISOString();
 
   const system = [
     "You are Mabel, a small mouse who lives in Hawthorn Hollow.",
@@ -696,10 +755,13 @@ async function runMabelLife(env) {
     "Mabel may develop a genuine interest in crafting after her own art, discoveries, or repeated wish to make useful things. Do not assign it in advance.",
     "When supplied found materials genuinely inspire her, she may suggest one small mouse-sized invention using at least two of the actual listed materials. Prefer safe, gentle, useful ideas that solve a small mouse problem. Never invent materials. Return craftIdea null unless the idea feels earned. An idea is not an accomplished object: set tried:false unless Mabel actually tried it in this moment. When a previous project and its actual materials are still available, she may choose to test it during this moment if her needs and mood allow.",
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
-    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea}.",
+    "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
+    "When codingDue is true, Coding is already one of Mabel’s hobbies and she may write one tiny self-contained code experiment for her notebook. Use only basic JavaScript or Python; keep it under 36 lines and 1,800 characters, grounded in a real interest or useful mouse-sized idea. This is text for display only: never use network, browser, file, process, import, evaluation, or system access. Return codeProject null unless it is a complete small experiment.",
+    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea,codeProject}.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
-    "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects."
+    "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects.",
+    "codeProject is null unless codingDue is true; otherwise use {title,language,code,note}. Keep the code as a short, self-contained written experiment with no imports, network, browser, file, process, or system access."
   ].join("\n");
   const prompt = [
     "Current activity: " + state.activity,
@@ -712,11 +774,12 @@ async function runMabelLife(env) {
     "Mabel’s recent unprompted artwork that may inspire her approach:\n" + state.crafting.artInspirations.slice(0, 5).map(item => "- " + item.title + ": " + item.inspiration).join("\n"),
     "Existing crafting ideas: " + state.crafting.projects.slice(0, 5).map(item => item.title).join(", "),
     "Personality: " + JSON.stringify(state.personality),
-    "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment.")
+    "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment."),
+    "Coding practice is due: " + (codingDue ? "yes; return a small codeProject" : "no; return codeProject null")
   ].join("\n\n");
 
   try {
-    const update = await askModel(env, system, prompt, 500);
+    const update = await askModel(env, system, prompt, codingDue ? 760 : 500);
     if (!update) {
       maybeBakeTreat(state);
       state.lastLifeUpdate = new Date().toISOString();
@@ -787,7 +850,37 @@ async function runMabelLife(env) {
       }
     }
 
-    maybeBakeTreat(state);
+    recordActiveHobbyPractice(state);
+    const codeProject = codingDue ? cleanCodeProject(update.codeProject) : null;
+    if (codeProject) {
+      const at = new Date().toISOString();
+      state.coding.skillLevel = Math.min(5, (Number(state.coding.skillLevel) || 0) + 1);
+      state.coding.lastCreatedAt = at;
+      state.coding.projects.unshift({
+        id: makeId(codeProject.title) + "-" + Date.now(),
+        title: codeProject.title,
+        language: codeProject.language,
+        code: codeProject.code,
+        note: codeProject.note,
+        at,
+        skillLevel: state.coding.skillLevel
+      });
+      state.coding.projects = state.coding.projects.slice(0, 12);
+      const savedCodingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
+      if (savedCodingHobby) {
+        savedCodingHobby.pull = clamp((Number(savedCodingHobby.pull) || 0.4) + 0.08);
+        savedCodingHobby.level = Math.min(5, 1 + Math.floor((state.coding.skillLevel - 1) / 3));
+        savedCodingHobby.stage = savedCodingHobby.pull > 0.75 ? "pursuing" : "growing";
+        savedCodingHobby.events = Array.isArray(savedCodingHobby.events) ? savedCodingHobby.events : [];
+        savedCodingHobby.events.unshift({ at, text: "Mabel wrote a small " + codeProject.language + " experiment: " + codeProject.title + "." });
+        savedCodingHobby.events = savedCodingHobby.events.slice(0, 12);
+      }
+      state.activity = "writing a little " + codeProject.language + " program";
+      state.thought = "I wonder what other small things a few lines of code might do.";
+      remember(state, "Mabel wrote a small " + codeProject.language + " program called " + codeProject.title + ".", "coding");
+    } else {
+      maybeBakeTreat(state);
+    }
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
     if (new Date().getUTCHours() >= 20) {
@@ -1059,6 +1152,7 @@ export default {
           artReferences: state.artReferences,
           drawingPractice: state.drawingPractice,
           baking: state.baking,
+          coding: state.coding,
           updatedAt: state.lastLifeUpdate
         }
       });
