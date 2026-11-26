@@ -1747,7 +1747,7 @@ function addFeedEntry(entry) {
       return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     };
     const latestActionAge = latestAction ? Date.now() - Date.parse(latestAction.at || "") : Infinity;
-    if (latestAction && normalizeAction(latestAction.text) === normalizeAction(entry.text) && latestActionAge >= 0 && latestActionAge < 5 * 60 * 1000) return latestAction;
+    if (!entry.force && latestAction && normalizeAction(latestAction.text) === normalizeAction(entry.text) && latestActionAge >= 0 && latestActionAge < 5 * 60 * 1000) return latestAction;
   }
   const savedEntry = { at: now(), ...entry, ok: true };
   mabel.feed.unshift(savedEntry);
@@ -2045,6 +2045,7 @@ function scheduleWanderingResearch(researchLead) {
     addFeedEntry({
       at: libraryStartedAt,
       kind: "did",
+      force: true,
       text: queuedIdea.requestType === "art-reference"
         ? "Mabel went to the Library to find a visual reference for " + queuedIdea.title + "."
         : "Mabel went to the Library to research " + queuedIdea.title + ".",
@@ -6353,6 +6354,7 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
   mabel.now.updatedAt = now();
   addFeedEntry({
     kind: "did",
+    force: true,
     text: "Mabel went to her art studio to try drawing " + focusInterest.title + " again.",
     why: "She had studied a visual reference at the Library and wanted to explore the subject more creatively."
   });
@@ -6770,6 +6772,7 @@ async function handleWander(options) {
     addFeedEntry({
       at: research.at,
       kind: "did",
+      force: true,
       source: "library",
       text: "Mabel researched “" + research.searchQuestion + "” at the Library.",
       why: [research.researchMethod, research.researchSummary].filter(Boolean).join(" ")
