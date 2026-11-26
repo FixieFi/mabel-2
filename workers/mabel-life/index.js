@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
   baking: { skillLevel: 0, pantry: [], treats: [], lastBakedAt: null },
   coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
   hobbyEvidence: [],
+  lifeLog: [],
   artExhibition: { weekOf: null, candidates: [], works: [] },
   artReferences: [],
   drawingPractice: { count: 0, artworkIds: [], firstAt: null, lastAt: null },
@@ -33,6 +34,21 @@ const DEFAULT_STATE = {
 
 function clamp(value) {
   return Math.max(0, Math.min(1, value));
+}
+
+function recordLifeAction(state, text, why, at = new Date().toISOString()) {
+  state.lifeLog = Array.isArray(state.lifeLog) ? state.lifeLog : [];
+  state.lifeLog.unshift({ id: "life-" + Date.parse(at) + "-" + Math.floor(Math.random() * 100000), at, kind: "did", text: cleanText(text, 220), why: cleanText(why, 260) });
+  state.lifeLog = state.lifeLog.slice(0, 40);
+}
+
+function evolveFromRepeatedPractice(state, trait, reason) {
+  const personality = state.personality || (state.personality = structuredClone(DEFAULT_STATE.personality));
+  personality.evolved_traits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  const key = makeId(trait);
+  if (personality.evolved_traits.some(item => makeId(item.trait) === key)) return;
+  personality.evolved_traits.unshift({ trait, reason, date_added: new Date().toISOString().slice(0, 10) });
+  personality.evolved_traits = personality.evolved_traits.slice(0, MAX_EVOLVED_TRAITS);
 }
 
 function jsonResponse(data, status = 200) {
@@ -483,7 +499,12 @@ function maybeBakeTreat(state) {
   hobby.events = hobby.events.slice(0, 12);
   state.activity = "baking and eating " + selected.recipe.title.toLowerCase();
   state.thought = "That little treat has taken the edge off my hunger. I wonder what I can bake next.";
-  remember(state, "Mabel baked and ate " + selected.recipe.title.toLowerCase() + " using " + ingredientNames.join(" and ") + ".", "baking");
+  const actionText = "Mabel baked and ate " + selected.recipe.title.toLowerCase() + ".";
+  recordLifeAction(state, actionText, "She had an appetite and already had " + ingredientNames.join(" and ") + " in the pantry.", at);
+  if (state.baking.skillLevel >= 2) {
+    evolveFromRepeatedPractice(state, "Enjoys baking", "After baking more than one treat from gathered ingredients, Mabel began returning to baking by choice.");
+  }
+  remember(state, actionText + " She used " + ingredientNames.join(" and ") + ".", "baking");
   return true;
 }
 
@@ -663,6 +684,10 @@ async function runMabelLife(env) {
           state.needs.wonder = clamp(state.needs.wonder + 0.08);
           state.activity = "making " + title.toLowerCase();
           state.thought = idea;
+          recordLifeAction(state, "Mabel made " + title.toLowerCase() + " from " + selected.join(" and ") + ".", reason || idea);
+          if (state.crafting.skillLevel >= 2) {
+            evolveFromRepeatedPractice(state, "Enjoys making things", "After making more than one small object from things she found, Mabel kept choosing to invent and build.");
+          }
         }
         state.crafting.lastIdeaAt = new Date().toISOString();
         remember(state, (craftIdea.tried === true ? "Mabel made " : "Mabel imagined making ") + title + " from " + selected.join(" and ") + ".", "crafting");
@@ -806,6 +831,9 @@ async function handleSharedWorldEvent(request, env) {
     state.drawingPractice.artworkIds.unshift(artworkId);
     state.drawingPractice.artworkIds = state.drawingPractice.artworkIds.slice(0, 100);
     state.drawingPractice.count = Math.min(1000, state.drawingPractice.count + 1);
+    if (state.drawingPractice.count >= 6) {
+      evolveFromRepeatedPractice(state, "Enjoys drawing", "Mabel has returned to drawing many times, including after studying subjects that were new to her.");
+    }
     state.drawingPractice.firstAt = state.drawingPractice.firstAt || at;
     state.drawingPractice.lastAt = at;
     const count = state.drawingPractice.count;
@@ -986,6 +1014,7 @@ export default {
           personality: state.personality,
           interests: state.interests,
           crafting: state.crafting,
+          lifeLog: state.lifeLog || [],
           artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
           artReferences: state.artReferences,
           drawingPractice: state.drawingPractice,
