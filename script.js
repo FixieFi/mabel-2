@@ -103,6 +103,7 @@ const galleryStorageKey = "mabel-gallery-v1";
 const visitorProfileStorageKey = "mabel-visitor-profile-v1";
 const visitorGiftSeenStorageKey = "mabel-viewed-visitor-gift-v1";
 const visitorGiftHighlightStorageKey = "mabel-highlight-visitor-gift-v1";
+const lastRequestedArtworkSubjectStorageKey = "mabel-last-requested-artwork-subject-v1";
 
 const legacySeedInterestIds = new Set([
   "silver-thread",
@@ -318,6 +319,8 @@ const postboxSeenStorageKey = "mabel-viewed-postbox-item-v1";
 const researchShareCountStorageKey = "mabel-postbox-research-shares-v1";
 let mabelPostboxItems = [];
 let viewedPostboxIds = new Set();
+let postboxSeenThroughAt = 0;
+let postboxSeenThroughId = "";
 
 function loadMabelPostbox() {
   try {
@@ -337,17 +340,46 @@ function latestPostboxMail() {
   }) || null;
 }
 
+function applyPostboxSeenState(raw) {
+  let parsed = null;
+  try { parsed = JSON.parse(raw || ""); } catch (error) {}
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    postboxSeenThroughId = String(parsed.id || "");
+    postboxSeenThroughAt = Math.max(postboxSeenThroughAt, Number(parsed.at) || 0);
+    return;
+  }
+  const ids = Array.isArray(parsed) ? parsed.map(String) : (typeof parsed === "string" && parsed ? [parsed] : (raw ? [String(raw)] : []));
+  viewedPostboxIds = new Set(ids.slice(-200));
+  const newestSeen = mabelPostboxItems.find(function (entry) {
+    return entry && entry.id && viewedPostboxIds.has(String(entry.id));
+  });
+  if (newestSeen) {
+    postboxSeenThroughId = String(newestSeen.id);
+    const seenAt = Date.parse(newestSeen.at || "");
+    if (Number.isFinite(seenAt)) postboxSeenThroughAt = Math.max(postboxSeenThroughAt, seenAt);
+  } else if (ids.length) {
+    postboxSeenThroughId = ids[0];
+  }
+}
 function markPostboxNoticeSeen() {
-  const newIds = mabelPostboxItems.filter(function (entry) { return entry && entry.id; }).map(function (entry) { return String(entry.id); });
-  viewedPostboxIds = new Set(Array.from(viewedPostboxIds).concat(newIds).slice(-200));
-  try { localStorage.setItem(postboxSeenStorageKey, JSON.stringify(Array.from(viewedPostboxIds))); } catch (error) {}
+  const latest = latestPostboxMail();
+  postboxSeenThroughAt = Date.now();
+  postboxSeenThroughId = latest && latest.id ? String(latest.id) : "";
+  mabelPostboxItems.forEach(function (entry) {
+    if (entry && entry.id) viewedPostboxIds.add(String(entry.id));
+  });
+  try {
+    localStorage.setItem(postboxSeenStorageKey, JSON.stringify({ id: postboxSeenThroughId, at: postboxSeenThroughAt }));
+  } catch (error) {}
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
 function refreshPostboxNotice() {
   if (!postboxNoticeCard) return;
   const unread = mabelPostboxItems.filter(function (entry) {
-    return entry && entry.id && !viewedPostboxIds.has(String(entry.id)) &&
-      (Boolean(entry.artwork) || (typeof entry.text === "string" && entry.text.trim().length > 0));
+    if (!entry || !entry.id || (!entry.artwork && !(typeof entry.text === "string" && entry.text.trim()))) return false;
+    const at = Date.parse(entry.at || "");
+    if (Number.isFinite(at)) return at > postboxSeenThroughAt;
+    return String(entry.id) !== postboxSeenThroughId && !viewedPostboxIds.has(String(entry.id));
   });
   if (!unread.length) {
     postboxNoticeCard.classList.add("hidden");
@@ -1075,7 +1107,7 @@ function renderMabelCard(artwork) {
     node("path", { d: d, fill: colour, opacity: opacity });
   }
 
-  const referenceStudy = artwork.referenceRetry === true;
+  const referenceStudy = artwork.referenceRetry === true && Boolean(artwork.referenceObservation);
   const background = palette[0];
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: background });
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: "#f4ead6", opacity: 0.24 });
@@ -1341,6 +1373,29 @@ function renderMabelCard(artwork) {
       palette[2], 0.8, 0.75);
     path("M " + (cx + 19) + " " + (cy + 47) + " Q " + (cx + 41) + " " + (cy + 40) + " " + (cx + 37) + " " + (cy + 25),
       palette[1], 2, 0.55);
+  } else if (/^(?:mabel and her visitor|mouse and visitor)$/.test(subject)) {
+    // A clear two-figure fallback for requests to draw the visitor and Mabel together.
+    ellipse(52, 61, 12, 16, palette[1], 0.82, -18);
+    ellipse(68, 61, 12, 16, palette[1], 0.82, 18);
+    softBlob(60, 75, 23, 21, palette[1], 0.92);
+    ellipse(54, 72, 1.8, 2.5, "#432a5e", 0.9, 0);
+    ellipse(66, 72, 1.8, 2.5, "#432a5e", 0.9, 0);
+    path("M 48 94 Q 60 112 74 94", palette[2], 2, 0.8);
+    path("M 30 160 Q 34 124 58 119 Q 83 124 88 160 Z", palette[1], 2, 0.8, palette[1]);
+    path("M 102 160 Q 106 124 130 119 Q 154 124 158 160 Z", palette[2], 2, 0.82, palette[2]);
+    softBlob(130, 79, 24, 29, "#f0dfc8", 0.96);
+    ellipse(122, 76, 1.8, 2.4, "#432a5e", 0.9, 0);
+    ellipse(138, 76, 1.8, 2.4, "#432a5e", 0.9, 0);
+    path("M 122 91 Q 130 97 138 91", "#8b5260", 1.3, 0.78);
+  } else if (/^(?:person|man|woman|human)$/.test(subject)) {
+    // Build a readable human figure in local fallback drawings.
+    path("M 45 158 Q 48 112 66 106 L 80 100 L 94 106 Q 112 112 115 158 Z", palette[1], 2, 0.84, palette[1]);
+    path("M 67 103 L 67 87 Q 80 95 93 87 L 93 108", "#d7b996", 1.2, 0.8, "#d7b996");
+    softBlob(80, 63, 27, 33, palette[2], 0.95);
+    path("M 54 57 Q 80 30 106 57", palette[1], 4, 0.7);
+    ellipse(71, 62, 1.8, 2.5, "#432a5e", 0.9, 0);
+    ellipse(89, 62, 1.8, 2.5, "#432a5e", 0.9, 0);
+    path("M 74 80 Q 80 85 86 80", "#8b5260", 1.4, 0.8);
   } else if (subject === "visitor") {
     const cx = 80 + random() * 4;
     const cy = 77 + random() * 4;
@@ -1379,6 +1434,21 @@ function renderMabelCard(artwork) {
     if (/\b(?:beard|facial hair)\b/i.test(visitorAppearance)) {
       softBlob(cx, cy + 22, 13, 8, hairColour, 0.42);
     }
+  } else if (subject === "mouse and cat") {
+    // Keep both requested animals distinct and visible in local fallback art.
+    softBlob(48, 82, 20, 24, palette[2], 0.92);
+    ellipse(37, 60, 8, 13, palette[1], 0.9, -18);
+    ellipse(58, 60, 8, 13, palette[1], 0.9, 18);
+    ellipse(43, 80, 1.8, 2.4, "#432a5e", 0.9, 0);
+    ellipse(53, 80, 1.8, 2.4, "#432a5e", 0.9, 0);
+    path("M 31 104 Q 48 116 65 104 M 64 104 Q 83 116 78 128", palette[1], 1.8, 0.78);
+    const cx = 111;
+    const cy = 83;
+    path("M 91 67 L 88 45 Q 100 51 105 57 Q 118 49 132 45 L 129 68 Q 139 82 130 103 Q 111 121 91 103 Q 82 84 91 67 Z", palette[1], 2, 0.84, palette[1]);
+    ellipse(cx - 10, cy - 2, 2, 2.8, "#432a5e", 0.9, 0);
+    ellipse(cx + 10, cy - 2, 2, 2.8, "#432a5e", 0.9, 0);
+    path("M 106 91 Q 111 96 116 91", "#432a5e", 1.2, 0.82);
+    path("M 91 94 Q 78 91 72 87 M 91 100 Q 78 102 73 104 M 130 94 Q 143 91 148 87 M 130 100 Q 143 102 148 104", palette[2], 0.8, 0.7);
   } else if (subject === "cat") {
     const cx = 78 + random() * 8;
     const cy = 82 + random() * 8;
@@ -1475,9 +1545,9 @@ function prepareArtworkForGallery(artwork, context) {
     artwork.title = "Mabel drew her visitor";
     artwork.subject = "visitor";
     artwork.selfPortrait = false;
-    artwork.description = "Mabel drew her visitor" + (appearance.length
-      ? ", using details they had shared: " + appearance.join("; ") + "."
-      : ", leaving any details she has not been told open.");
+    artwork.description = appearance.length
+      ? "Mabel drew her visitor using what she has learned about them."
+      : "Mabel drew her visitor using her imagination.";
     artwork.visitorAppearance = appearance;
     artwork.note = artwork.description;
   } else if (requestedSubject) {
@@ -1568,18 +1638,18 @@ function updateArtExhibition() {
   if (!list) return;
   list.replaceChildren();
   const exhibition = sharedMabelBrain && sharedMabelBrain.artExhibition;
-  const weekOf = String(exhibition && exhibition.weekOf || "");
+  const dayOf = String(exhibition && (exhibition.dayOf || exhibition.weekOf) || "");
   const works = exhibition && Array.isArray(exhibition.works) ? exhibition.works : [];
   if (period) {
-    const date = new Date(weekOf + "T00:00:00Z");
-    period.textContent = weekOf && !isNaN(date.getTime())
-      ? "This week’s exhibition · week of " + date.toLocaleDateString([], { dateStyle: "long", timeZone: "UTC" })
-      : "Mabel’s little exhibition changes each week.";
+    const date = new Date(dayOf + "T00:00:00Z");
+    period.textContent = dayOf && !isNaN(date.getTime())
+      ? "Today’s art exhibition · " + date.toLocaleDateString([], { dateStyle: "long", timeZone: "UTC" })
+      : "Mabel’s little art exhibition changes daily.";
   }
   if (!works.length) {
     const empty = document.createElement("li");
     empty.className = "gallery-empty";
-    empty.textContent = "Mabel hasn’t chosen this week’s drawings yet. Her own little Gallery is still here.";
+    empty.textContent = "Mabel hasn’t chosen today’s drawings yet. Her own little Gallery is still here.";
     list.appendChild(empty);
     return;
   }
@@ -2682,7 +2752,12 @@ function updateBrain() {
   const thought = document.getElementById("brain-thought");
   const shared = sharedMabelBrain || {};
   const personality = shared.personality || (mabel && mabel.personality) || {};
-  const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
+  const savedCoreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
+  const coreTraits = savedCoreTraits.length
+    ? savedCoreTraits
+    : (Array.isArray(mabel && mabel.personality && mabel.personality.core_traits) && mabel.personality.core_traits.length
+      ? mabel.personality.core_traits
+      : ["gentle", "curious", "thoughtful", "quietly playful"]);
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
   updateCrafting();
   updateBaking();
@@ -3661,6 +3736,7 @@ function captureVisitorFacts(message) {
   }
   const appearancePatterns = [
     /\bI\s+(?:have|got|wear|am wearing)\s+[^.!?\n]{1,100}\b(?:hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes|eye colour|eye color|bald|curly|straight|blonde|blond|brunette|ginger|red-haired|red hair|brown hair|black hair|grey hair|gray hair)\b[^.!?\n]*/i,
+    /\bI(?:'m| am)\s+(?:a|an)\s+(?:man|woman|nonbinary person|non-binary person)\s+with\s+[^.!?\n]{1,80}\b(?:hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes)\b[^.!?\n]*/i,
     /\bI(?:'m| am)\s+(?:a|an)\s+(?:man|woman|nonbinary person|non-binary person)\b/i,
     /\bmy\s+(?:hair|eyes|glasses|spectacles|mustache|moustache|beard|freckles)\s+(?:is|are)\s+[^.!?\n]{1,80}/i
   ];
@@ -3673,6 +3749,8 @@ function captureVisitorFacts(message) {
 
 function formatVisitorFact(value) {
   let fact = String(value || "").trim().replace(/^They shared:\s*/i, "").replace(/^Visitor says:\s*/i, "");
+  const compoundAppearance = fact.match(/^I(?:'m| am)\s+(?:a|an)\s+(man|woman|nonbinary person|non-binary person)\s+with\s+(.+?)\s+(hair|glasses|spectacles|mustache|moustache|beard|facial hair|freckles|eyes)\.?$/i);
+  if (compoundAppearance) return "Visitor is " + compoundAppearance[1].toLowerCase() + " and has " + compoundAppearance[2].trim() + " " + compoundAppearance[3].toLowerCase() + ".";
   let match = fact.match(/^(?:My name is|Their name is)\s+(.+?)\.?$/i);
   if (match) return "Visitor’s name is " + match[1].replace(/\.$/, "") + ".";
   match = fact.match(/^(?:Their favorite|Their favourite)\s+(.+?)\s+is\s+(.+?)\.?$/i);
@@ -4067,7 +4145,7 @@ function requestedArtworkDescriptionSubject(message) {
 
 function shouldResearchArtworkReference(subject) {
   const key = normalizeInterestTitle(subject);
-  if (!key || /^(mabel|mouse|visitor|me|you|self portrait)$/.test(key)) return false;
+  if (!key || /^(mabel|mouse|visitor|me|you|self portrait|mabel and her visitor|mouse and visitor)$/.test(key)) return false;
   const familiar = new Set(["cat", "dog", "rabbit", "fox", "bird", "flower", "mushroom", "fossil", "button", "shell", "moon", "star", "fish", "house", "tree", "leaf", "apple", "heart", "cloud", "sun"]);
   if (familiar.has(key)) return false;
   // An explicit request deserves a fresh Library-to-studio pass, even if Mabel
@@ -4132,18 +4210,44 @@ function visitorAppearanceDetails(message) {
   return Array.from(new Set(details)).slice(0, 6);
 }
 
+function recentRequestedArtworkSubject() {
+  try {
+    const saved = localStorage.getItem(lastRequestedArtworkSubjectStorageKey);
+    if (saved && !/^(it|this|that|something|anything|picture|drawing|artwork)$/i.test(saved)) return saved;
+  } catch (error) {}
+  const recent = Array.isArray(gallery) ? gallery.find(function (item) {
+    return item && typeof item.subject === "string" && item.subject.trim() &&
+      !/^(it|this|that|something|anything|picture|drawing|artwork)$/i.test(item.subject.trim());
+  }) : null;
+  return recent ? recent.subject.trim() : "";
+}
+
 function requestedArtworkSubject(message) {
   const text = String(message || "").trim();
+  if (/\b(?:draw|sketch|paint|illustrate|picture|drawing|painting|artwork)\b/i.test(text) &&
+      /\b(?:us|both of us|me and you|you and me)\b/i.test(text) ||
+      /\b(?:draw|sketch|paint|illustrate)\s+(?:me with mabel|mabel and me)\b/i.test(text)) {
+    return "Mabel and her visitor";
+  }
+  if (/\b(?:draw|sketch|paint|illustrate)\s+(?:it|that|this)(?:\s+again)?\b|\b(?:draw|sketch|paint|illustrate)\s+another\s+one\b|\b(?:draw|sketch|paint|illustrate)\s+the\s+same\b/i.test(text)) {
+    return recentRequestedArtworkSubject();
+  }
   if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:you|yourself|mabel)|sketch (?:you|yourself|mabel)|paint (?:you|yourself|mabel)|illustrate (?:you|yourself|mabel)|picture of (?:you|mabel))\b/i.test(text)) return "mabel";
   const openEnded = /\b(?:draw|sketch|paint|illustrate|make|create)\s+(?:(?:me|us)\s+)?(?:(?:a|an|some|the)\s+)?(?:picture|image|art|artwork|drawing|painting|illustration|something|anything)\s*(?:please|for me)?[.!?]*$/i.test(text);
   if (openEnded) return "";
   if (isVisitorPortraitRequest(text)) return "visitor";
   const lower = text.toLowerCase();
+  if (/\b(?:mouse|mabel)\b.{0,24}\bcat\b|\bcat\b.{0,24}\b(?:mouse|mabel)\b/i.test(lower)) return "mouse and cat";
+  if (/\b(?:mouse|mabel)\b.{0,30}\bvisitor\b|\bvisitor\b.{0,30}\b(?:mouse|mabel)\b/i.test(lower)) return "Mabel and her visitor";
   const knownSubjects = [
     [/\bpower\s+ranger\b/i, "power ranger"], [/\b(?:cat|kitten)\b/i, "cat"],
     [/\b(?:dog|puppy)\b/i, "dog"], [/\b(?:rabbit|bunny)\b/i, "rabbit"],
     [/\bfox\b/i, "fox"], [/\b(?:bird|robin|sparrow)\b/i, "bird"],
     [/\b(?:flower|bouquet)\b/i, "flower"], [/\b(?:mushroom|toadstool)\b/i, "mushroom"],
+    [/\bhorse\b/i, "horse"], [/\bcow\b/i, "cow"], [/\bdolphin\b/i, "dolphin"],
+    [/\b(?:car|automobile|vehicle)\b/i, "car"],
+    [/\bman\b/i, "man"], [/\bwoman\b/i, "woman"], [/\b(?:person|human)\b/i, "person"],
+    [/\b(?:mouse|mice)\b/i, "mouse"],
     [/\bfossil\b/i, "fossil"], [/\bbutton\b/i, "button"], [/\bshell\b/i, "shell"],
     [/\bmoon\b/i, "moon"], [/\bstar\b/i, "star"], [/\bfish\b/i, "fish"],
     [/\b(?:house|cottage)\b/i, "house"]
@@ -4200,7 +4304,7 @@ function makeMabelFallbackArtwork(context) {
       : subject === "visitor"
         ? "Mabel drew her visitor"
         : subject
-          ? "Mabel's little study of a " + subject
+          ? "Mabel's little study of " + subject
           : openEndedRequest
             ? abstractTitles[Math.floor(Math.random() * abstractTitles.length)]
             : "Mabel's " + mood + " marks",
@@ -4268,9 +4372,15 @@ async function requestMabelArtwork(context, targetElement) {
           ? "Draw Mabel’s visitor as the subject. Use only the explicitly shared appearance details in visitorAppearance; do not invent gender, hair, glasses, facial hair, age, or other features that are not provided. Give the artwork the exact title “Mabel drew her visitor”."
           : context.comfortRequest
             ? "Make a warm, happy comfort drawing for this visitor. First use a favorite animal, hobby, or interest explicitly stated in visitorPreferences if one is clearly available. If no such preference is present, draw Mabel the mouse holding a love heart, or Mabel beside the visitor with a bouquet of flowers and little hearts. Do not use unrelated things Mabel found as the subject. Do not invent the visitor's appearance; use only visitorAppearance details when drawing them. Keep the written title and description about the visitor's comfort, not about a random object."
-            : requestedArtworkDescriptionSubject(context.message)
-              ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
-              : "This is an open-ended request for a picture, not an instruction to draw an object named picture. Choose any subject that genuinely catches Mabel’s attention, or create an abstract, playful piece and let the marks decide what it is. Give it a specific, natural title and a short description.") + requestedArtworkColorInstruction(context.message) + (context.referenceImageInstruction ? " " + context.referenceImageInstruction : ""),
+            : /^(?:mabel and her visitor|mouse and visitor)$/i.test(requestedArtworkDescriptionSubject(context.message))
+              ? "Draw both figures together in one scene: Mabel, a small mouse, and her human visitor. Make the mouse clearly mouse-like with round ears and a tail; make the visitor clearly human. Show them side by side, sharing the moment. Use only visitor appearance details she has actually learned."
+              : /^(?:mouse and cat)$/i.test(requestedArtworkDescriptionSubject(context.message))
+                ? "Draw both a mouse and a cat together, with both complete recognizable animals visible. Do not leave either one out."
+                : /^(?:person|man|woman|human)$/i.test(requestedArtworkDescriptionSubject(context.message))
+                  ? "Draw a recognizable human figure with a head, face, torso, two arms, and two legs; keep the whole person visible."
+                  : requestedArtworkDescriptionSubject(context.message)
+                    ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
+                    : "This is an open-ended request for a picture, not an instruction to draw an object named picture. Choose any subject that genuinely catches Mabel’s attention, or create an abstract, playful piece and let the marks decide what it is. Give it a specific, natural title and a short description.") + requestedArtworkColorInstruction(context.message) + (context.referenceImageInstruction ? " " + context.referenceImageInstruction : ""),
         requestedColors: requestedArtworkColors(context.message),
         selfPortrait: selfPortrait,
         referenceImageUrl: context.referenceImageUrl || (storedReference && storedReference.imageUrl) || (selfPortrait ? new URL("images/mabel.png", window.location.href).href : ""),
@@ -4310,6 +4420,12 @@ async function requestMabelArtwork(context, targetElement) {
     if (response.ok) {
       const data = await response.json();
       artwork = data.artwork || null;
+      if ((context.referenceRetry || storedReference) && artwork &&
+          (!Array.isArray(artwork.vectorPaths) || artwork.vectorPaths.length < 8)) {
+        // Very sparse reference outputs are not useful as a second study; the
+        // subject-specific local renderer will make one clear fallback instead.
+        artwork = null;
+      }
       if (typeof data.referenceObservation === "string" && data.referenceObservation.trim()) {
         context.referenceObservation = data.referenceObservation.trim().slice(0, 700);
       }
@@ -4339,7 +4455,8 @@ async function requestMabelArtwork(context, targetElement) {
 
   const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   const comfortRequest = source === "comfort" && context.comfortRequest === true;
-  if (!artwork && explicitRequest && !context.referenceUnavailable && !context.referenceRetry) {
+  if (!artwork && (explicitRequest || ((context.referenceRetry || storedReference) && !declined))) {
+    // A single failed reference-model attempt should still leave a drawing.
     artwork = makeMabelFallbackArtwork(context);
   }
   if (!artwork && comfortRequest) {
@@ -4574,6 +4691,9 @@ async function handleVisitorMessage() {
   const visitorMessageAt = now();
   const activityTopic = message.replace(/\s+/g, " ").slice(0, 100);
   const drawingSubject = isArtworkRequest(message) ? requestedArtworkDescriptionSubject(message) : "";
+  if (drawingSubject && !/^(?:visitor|mabel)$/i.test(drawingSubject)) {
+    try { localStorage.setItem(lastRequestedArtworkSubjectStorageKey, drawingSubject); } catch (error) {}
+  }
   addFeedEntry({
     at: visitorMessageAt,
     kind: "did",
@@ -7328,25 +7448,7 @@ function startMabel() {
   comfortPostboxQueue = loadComfortPostboxQueue();
   try {
     const savedSeen = localStorage.getItem(postboxSeenStorageKey) || "";
-    let parsedSeen = [];
-    try {
-      const value = JSON.parse(savedSeen);
-      if (Array.isArray(value)) parsedSeen = value;
-      else if (typeof value === "string" && value) {
-        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === value; });
-        parsedSeen = seenIndex >= 0
-          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
-          : [value];
-      }
-    } catch (error) {
-      if (savedSeen) {
-        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === savedSeen; });
-        parsedSeen = seenIndex >= 0
-          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
-          : [savedSeen];
-      }
-    }
-    viewedPostboxIds = new Set(parsedSeen.map(String).slice(-200));
+    applyPostboxSeenState(savedSeen);
   } catch (error) { viewedPostboxIds = new Set(); }
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks().filter(function (spark) { return isGroundedResearchTrigger(spark); });
@@ -7542,12 +7644,7 @@ function startMabel() {
       updateMabelPostbox();
       refreshPostboxNotice();
     } else if (event.key === postboxSeenStorageKey) {
-      try {
-        const parsed = JSON.parse(event.newValue || "[]");
-        viewedPostboxIds = new Set(Array.isArray(parsed) ? parsed.map(String).slice(-200) : []);
-      } catch (error) {
-        viewedPostboxIds = new Set(event.newValue ? [String(event.newValue)] : []);
-      }
+      applyPostboxSeenState(event.newValue || "");
       refreshPostboxNotice();
     } else if (event.key === visitorGiftSeenStorageKey && event.newValue) {
       try {
