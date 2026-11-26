@@ -17,7 +17,7 @@ const DEFAULT_STATE = {
   coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
   hobbyEvidence: [],
   lifeLog: [],
-  artExhibition: { weekOf: null, candidates: [], works: [] },
+  artExhibition: { dayOf: null, candidates: [], works: [] },
   artReferences: [],
   drawingPractice: { count: 0, artworkIds: [], firstAt: null, lastAt: null },
   personality: {
@@ -86,10 +86,8 @@ function makeId(value) {
     .replace(/^-+|-+$/g, "") || "thread-" + Date.now();
 }
 
-function artExhibitionWeekOf(date = new Date()) {
-  const monday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
-  return monday.toISOString().slice(0, 10);
+function artExhibitionDayOf(date = new Date()) {
+  return date.toISOString().slice(0, 10);
 }
 
 function cleanExhibitionArtwork(raw) {
@@ -104,7 +102,7 @@ function cleanExhibitionArtwork(raw) {
     id: makeId(cleanText(raw.id, 140, title + "-" + (Number.isFinite(seed) ? seed : ""))),
     source: "autonomous",
     title,
-    description: "A little drawing Mabel chose for this week’s exhibition.",
+    description: "A little drawing Mabel chose for today’s exhibition.",
     exhibitionReason: cleanText(raw.exhibitionReason, 220, cleanText(raw.inspirationTitle, 100)
       ? "Mabel chose this because a thought about " + cleanText(raw.inspirationTitle, 100) + " stayed with her."
       : "She was especially pleased with the colours and little details in this one."),
@@ -218,10 +216,10 @@ async function loadState(env) {
     }
   });
   state.hobbyEvidence = Array.isArray(state.hobbyEvidence) ? state.hobbyEvidence.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
-  const currentExhibitionWeek = artExhibitionWeekOf();
+  const currentExhibitionDay = artExhibitionDayOf();
   state.artExhibition = state.artExhibition && typeof state.artExhibition === "object" ? state.artExhibition : structuredClone(DEFAULT_STATE.artExhibition);
-  if (state.artExhibition.weekOf !== currentExhibitionWeek) {
-    state.artExhibition = { weekOf: currentExhibitionWeek, candidates: [], works: [] };
+  if (state.artExhibition.dayOf !== currentExhibitionDay) {
+    state.artExhibition = { dayOf: currentExhibitionDay, candidates: [], works: [] };
   } else {
     const candidates = Array.isArray(state.artExhibition.candidates) ? state.artExhibition.candidates.map(cleanExhibitionArtwork).filter(Boolean) : [];
     state.artExhibition.candidates = candidates.slice(0, 24);
@@ -987,7 +985,7 @@ async function handleSharedWorldEvent(request, env) {
     const bond = Math.max(0, Number(data.bond) || 0);
     if (!visitorId || bond < 35) return jsonResponse({ error: "A closer friendship with Mabel is needed before voting." }, 403);
     const candidate = state.artExhibition.candidates.find(item => item && item.id === artworkId);
-    if (!candidate) return jsonResponse({ error: "That drawing is not in this week’s exhibition shortlist." }, 404);
+    if (!candidate) return jsonResponse({ error: "That drawing is not in today’s exhibition shortlist." }, 404);
     candidate.votedBy = Array.isArray(candidate.votedBy) ? candidate.votedBy : [];
     if (candidate.votedBy.includes(visitorId)) return jsonResponse({ ok: true, alreadyVoted: true });
     candidate.votedBy.push(visitorId);
@@ -1241,7 +1239,7 @@ export default {
           interests: state.interests,
           crafting: state.crafting,
           lifeLog: state.lifeLog || [],
-          artExhibition: { weekOf: state.artExhibition.weekOf, works: state.artExhibition.works },
+          artExhibition: { dayOf: state.artExhibition.dayOf, works: state.artExhibition.works },
           artReferences: state.artReferences,
           drawingPractice: state.drawingPractice,
           baking: state.baking,
