@@ -974,13 +974,8 @@ async function handleSharedWorldEvent(request, env) {
         const delta = Number(data.deltas[key]);
         if (Number.isFinite(delta)) state.needs[key] = clamp(Number(state.needs[key]) + delta);
       }
-    } else if (data.needs && typeof data.needs === "object") {
-      // Keep accepting older clients while they transition to event deltas.
-      for (const key of Object.keys(DEFAULT_STATE.needs)) {
-        if (typeof data.needs[key] === "number") state.needs[key] = clamp(data.needs[key]);
-      }
     } else {
-      return jsonResponse({ error: "A needs update is needed." }, 400);
+      return jsonResponse({ error: "Needs changes must be sent as per-action deltas." }, 400);
     }
     if (eventId) state.appliedNeedEvents.push(eventId);
     await saveState(env, state);
