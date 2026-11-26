@@ -2520,6 +2520,51 @@ function updateBaking() {
   }
 }
 
+function updateCoding() {
+  const coding = sharedMabelBrain && sharedMabelBrain.coding || {};
+  const level = document.getElementById("coding-level");
+  const list = document.getElementById("coding-projects");
+  const skill = Math.max(0, Number(coding.skillLevel) || 0);
+  if (level) level.textContent = skill
+    ? "Coding practice · Level " + skill + " — Mabel is learning through small experiments."
+    : "If coding becomes one of Mabel’s hobbies, she may start a tiny programming experiment.";
+  if (!list) return;
+  list.replaceChildren();
+  const projects = Array.isArray(coding.projects) ? coding.projects.slice(0, 6) : [];
+  if (!projects.length) {
+    const empty = document.createElement("li");
+    empty.className = "brain-trait-empty";
+    empty.textContent = "Mabel hasn’t written a little program yet.";
+    list.appendChild(empty);
+    return;
+  }
+  projects.forEach(function (project) {
+    const item = document.createElement("li");
+    item.className = "interest-item coding-project";
+    const title = document.createElement("strong");
+    title.className = "interest-title";
+    title.textContent = project.title || "A tiny code experiment";
+    item.appendChild(title);
+    if (project.at) {
+      const time = document.createElement("time");
+      time.dateTime = project.at;
+      time.textContent = new Date(project.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      item.appendChild(time);
+    }
+    const note = document.createElement("p");
+    note.className = "interest-reason";
+    note.textContent = project.note || "";
+    item.appendChild(note);
+    const code = document.createElement("pre");
+    code.className = "coding-project-code";
+    const codeText = document.createElement("code");
+    codeText.textContent = String(project.code || "").slice(0, 1800);
+    code.appendChild(codeText);
+    item.appendChild(code);
+    list.appendChild(item);
+  });
+}
+
 function updateBrain() {
   const mood = document.getElementById("brain-mood");
   const moodScore = document.getElementById("brain-mood-score");
@@ -2530,6 +2575,7 @@ function updateBrain() {
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
   updateCrafting();
   updateBaking();
+  updateCoding();
   if (mood) mood.textContent = shared.mood || mabel.now.mood || "quiet";
   if (thought) thought.textContent = "“" + (shared.thought || mabel.now.thought || "Mabel is listening to the hollow.") + "”";
   if (moodScore) {
@@ -6025,6 +6071,7 @@ const diverseWanderFinds = [
   { kind: "treasure", name: "a chipped chess knight", note: "Mabel thought it looked brave despite the missing paint." },
   { kind: "treasure", name: "a little piece of blue-and-white pottery", note: "A broken bit of somebody’s cup, now a bright tile." },
   { kind: "treasure", name: "a tiny toy bus with one wheel missing", note: "It had stopped at the edge of a mossy road." },
+  { kind: "treasure", name: "a mouse-sized red tricycle with one squeaky pedal", note: "Mabel wondered how far three little wheels could carry her." },
   { kind: "treasure", name: "a dried clover pressed flat in a book page", note: "A small green memory from a much larger story." },
   { kind: "food", name: "a crumb of oat biscuit", note: "A useful little bite for the road." },
   { kind: "food", name: "half a dried cranberry", note: "Tart, chewy, and a very good travelling snack." },
