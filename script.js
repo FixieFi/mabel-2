@@ -7041,6 +7041,9 @@ function startMabel() {
   updateVisitorProfile();
   showSparkNotice();
   refreshGalleryNotice();
+  window.setTimeout(function () {
+    if (mabel && document.visibilityState === "visible") noticeNextVisitorBoardNote();
+  }, 5000);
 
   tabButtons.forEach(function (button) {
     button.addEventListener("click", function () {
