@@ -547,6 +547,139 @@ function deliverDueComfortPostboxMail() {
     saveComfortPostboxQueue();
   }
 }
+function loadArtworkFeedbackVotes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(artworkFeedbackStorageKey) || "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch (error) { return {}; }
+}
+
+function saveArtworkFeedbackVotes(votes) {
+  try { localStorage.setItem(artworkFeedbackStorageKey, JSON.stringify(votes)); } catch (error) {}
+}
+
+function loadPendingArtworkFeedback() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(pendingArtworkFeedbackStorageKey) || "[]");
+    return Array.isArray(saved) ? saved.filter(function (item) { return item && item.id && item.subject; }).slice(0, 100) : [];
+  } catch (error) { return []; }
+}
+
+function savePendingArtworkFeedback(queue) {
+  try { localStorage.setItem(pendingArtworkFeedbackStorageKey, JSON.stringify(queue.slice(0, 100))); } catch (error) {}
+}
+
+let artworkFeedbackSyncInProgress = false;
+
+function artworkFeedbackId(artwork) {
+  return String(artwork && (artwork.id || artwork.at || artwork.createdAt || (artwork.title || "drawing") + "-" + (artwork.seed || "")) || "drawing").slice(0, 140);
+}
+
+function canRateArtwork(artwork) {
+  if (!artwork) return false;
+  const subject = normalizeInterestTitle(artwork.subject || "");
+  if (!subject || ["cat", "visitor", "mouse", "mabel"].includes(subject)) return false;
+  return artwork.source === "visitor" || artwork.referenceRetry === true || artwork.usedVisualReference === true;
+}
+
+function addArtworkFeedbackControls(artwork, container) {
+  if (!container || !canRateArtwork(artwork)) return;
+  const artworkId = artworkFeedbackId(artwork);
+  const votes = loadArtworkFeedbackVotes();
+  const savedVote = votes[artworkId] || "";
+  const feedback = document.createElement("div");
+  feedback.className = "art-feedback";
+  feedback.setAttribute("role", "group");
+  feedback.setAttribute("aria-label", "Rate how recognizable Mabel’s drawing is");
+  const prompt = document.createElement("span");
+  prompt.className = "art-feedback-prompt";
+  prompt.textContent = artwork.referenceRetry
+    ? "Did studying the reference help this drawing?"
+    : "How close did this drawing feel to its subject?";
+  feedback.appendChild(prompt);
+  const status = document.createElement("span");
+  status.className = "art-feedback-status";
+  status.setAttribute("aria-live", "polite");
+  status.textContent = savedVote ? "Your feedback: " + (savedVote === "up" ? "helpful" : "not quite") : "";
+  feedback.appendChild(status);
+  [["up", "👍 Looks close"], ["down", "👎 Not quite"]].forEach(function (choice) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "art-feedback-button" + (savedVote === choice[0] ? " selected" : "");
+    button.textContent = choice[1];
+    button.setAttribute("aria-pressed", String(savedVote === choice[0]));
+    button.addEventListener("click", function (event) {
+      event.stopPropagation();
+      recordArtworkFeedback(artwork, choice[0], status, feedback);
+    });
+    feedback.appendChild(button);
+  });
+  container.appendChild(feedback);
+}
+
+function recordArtworkFeedback(artwork, vote, status, container) {
+  const artworkId = artworkFeedbackId(artwork);
+  const subject = String(artwork.subject || artwork.title || "").trim().slice(0, 100);
+  const visitorId = currentVisitorSessionId();
+  const feedbackId = ("art-feedback-" + visitorId + "-" + artworkId).slice(0, 140);
+  const entry = {
+    id: feedbackId,
+    artworkId: artworkId,
+    visitorId: visitorId,
+    subject: subject,
+    vote: vote,
+    referenceUsed: artwork.referenceRetry === true || artwork.usedVisualReference === true,
+    referenceTitle: String(artwork.referenceTitle || artwork.inspirationTitle || "").slice(0, 120),
+    at: now()
+  };
+  const votes = loadArtworkFeedbackVotes();
+  votes[artworkId] = vote;
+  const voteKeys = Object.keys(votes);
+  if (voteKeys.length > 200) voteKeys.slice(0, voteKeys.length - 200).forEach(function (key) { delete votes[key]; });
+  saveArtworkFeedbackVotes(votes);
+  const queue = loadPendingArtworkFeedback().filter(function (item) { return item.id !== feedbackId; });
+  queue.unshift(entry);
+  savePendingArtworkFeedback(queue);
+  if (status) status.textContent = "Saved — Mabel will keep this in mind.";
+  if (container) {
+    container.querySelectorAll(".art-feedback-button").forEach(function (button) {
+      const selected = (vote === "up" && button.textContent.indexOf("Looks close") >= 0) ||
+        (vote === "down" && button.textContent.indexOf("Not quite") >= 0);
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+  }
+  flushPendingArtworkFeedback();
+}
+
+async function flushPendingArtworkFeedback() {
+  if (artworkFeedbackSyncInProgress) return;
+  if (!sharedMabelBrain) await refreshSharedMabelBrain();
+  if (!sharedMabelBrain) return;
+  artworkFeedbackSyncInProgress = true;
+  let sentAny = false;
+  try {
+    const queuedItems = loadPendingArtworkFeedback();
+    for (const item of queuedItems) {
+      try {
+        const response = await fetch(MABEL_BRAIN_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "art-feedback", feedback: item })
+        });
+        if (!response.ok) continue;
+        savePendingArtworkFeedback(loadPendingArtworkFeedback().filter(function (saved) { return saved.id !== item.id; }));
+        sentAny = true;
+      } catch (error) {
+        // Keep the rating here and retry after the shared Brain responds again.
+      }
+    }
+  } finally {
+    artworkFeedbackSyncInProgress = false;
+    if (sentAny) window.setTimeout(refreshSharedMabelBrain, 250);
+  }
+}
+
 function updateMabelPostbox() {
   const list = document.getElementById("mabel-postbox");
   if (!list) return;
@@ -594,8 +727,9 @@ function updateMabelPostbox() {
       item.appendChild(link);
     }
     if (entry.artwork) {
-      const card = renderMabelCard({ ...entry.artwork, source: "comfort" });
+      const card = renderMabelCard({ ...entry.artwork, source: entry.artwork.source || "comfort" });
       if (card) item.appendChild(card);
+      addArtworkFeedbackControls(entry.artwork, item);
     }
     (Array.isArray(entry.sources) ? entry.sources : []).forEach(function (source) {
       const url = safeExternalUrl(source && source.url);
@@ -1797,6 +1931,7 @@ function updateGallery() {
       });
       item.appendChild(button);
     }
+    addArtworkFeedbackControls(artwork, item);
     if (artwork.source === "autonomous") {
       const vote = document.createElement("button");
       vote.type = "button";
@@ -2914,6 +3049,7 @@ async function refreshSharedMabelBrain() {
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
       queueBrowserHobbiesForSharedBrain();
+      flushPendingArtworkFeedback();
       if (mabel && Array.isArray(data.brain.lifeLog)) {
         data.brain.lifeLog.slice().reverse().forEach(function (entry) {
           if (!entry || !entry.id || mabel.feed.some(function (saved) { return saved && saved.sharedLifeId === entry.id; })) return;
@@ -3383,6 +3519,7 @@ function updateBindle() {
       bindleHistoryElement.appendChild(emptyHistory);
     }
   }
+  if (historyRepaired) saveBindle();
 }
 
 function updateAutonomousExplorerLog() {
@@ -4491,6 +4628,10 @@ async function requestMabelArtwork(context, targetElement) {
         referenceObservation: context.referenceObservation || (storedReference && storedReference.visualNotes) || "",
         referenceTitle: context.referenceTitle || (storedReference && storedReference.sourceTitle) || "",
         referenceFact: context.referenceFact || (storedReference && storedReference.fact) || "",
+        referenceFeedback: (sharedMabelBrain && Array.isArray(sharedMabelBrain.artFeedback) ? sharedMabelBrain.artFeedback : [])
+          .filter(function (item) { return normalizeInterestTitle(item.subject) === normalizeInterestTitle(subjectForWorker); })
+          .slice(0, 8)
+          .map(function (item) { return { vote: item.vote, referenceUsed: Boolean(item.referenceUsed), referenceTitle: item.referenceTitle || "" }; }),
         referenceImageInstruction: context.referenceImageInstruction || (storedReference
           ? "Use the saved Library reference to make the exact subject recognizable. Keep its real silhouette and distinctive features, but make an original Mabel-style drawing; do not paste, trace, or embed the reference image."
           : selfPortrait
@@ -6801,7 +6942,6 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
         why: "A visitor’s gift inspired the first drawing; Mabel returned to the Library for a visual reference and practiced it again."
       });
     } else {
-      refinedArtwork.postboxFirst = true;
       addMabelPostboxItem({
         kind: "artwork",
         title: "Mabel brought you a new drawing of " + focusInterest.title,
@@ -6809,6 +6949,7 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
         artwork: refinedArtwork,
         sources: [{ title: reference.sourceTitle, url: reference.pageUrl }]
       });
+      saveToMabelGallery(refinedArtwork);
       addFeedEntry({
         kind: "did",
         text: "Mabel brought her new drawing of " + focusInterest.title + " to the Postbox.",
