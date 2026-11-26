@@ -1506,9 +1506,9 @@ function prepareArtworkForGallery(artwork, context) {
     artwork.title = "Mabel drew her visitor";
     artwork.subject = "visitor";
     artwork.selfPortrait = false;
-    artwork.description = "Mabel drew her visitor" + (appearance.length
-      ? ", using details they had shared: " + appearance.join("; ") + "."
-      : ", leaving any details she has not been told open.");
+    artwork.description = appearance.length
+      ? "Mabel drew her visitor using what she has learned about them."
+      : "Mabel drew her visitor using her imagination.";
     artwork.visitorAppearance = appearance;
     artwork.note = artwork.description;
   } else if (requestedSubject) {
