@@ -345,14 +345,14 @@ function markPostboxNoticeSeen() {
   }
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
-function refreshPostboxNotice(force) {
+function refreshPostboxNotice() {
   const latest = latestPostboxMail();
   if (!postboxNoticeCard || !latest || !latest.id) {
     if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
     return;
   }
   const postboxPanel = document.getElementById("postbox");
-  if (postboxPanel && postboxPanel.classList.contains("active") && !force) {
+  if (postboxPanel && postboxPanel.classList.contains("active")) {
     markPostboxNoticeSeen();
     return;
   }
@@ -387,7 +387,7 @@ function addMabelPostboxItem(item) {
   mabelPostboxItems = mabelPostboxItems.slice(0, 30);
   saveMabelPostbox();
   updateMabelPostbox();
-  refreshPostboxNotice(true);
+  refreshPostboxNotice();
 }
 function loadComfortPostboxQueue() {
   try {
@@ -7212,7 +7212,15 @@ function switchTab(tabName) {
     panel.classList.toggle("active", panel.id === tabName);
   });
   if (tabName === "visitor-board") loadVisitorBoard();
-  if (tabName === "postbox") markPostboxNoticeSeen();
+  if (tabName === "postbox") {
+    markPostboxNoticeSeen();
+    const postboxPanel = document.getElementById("postbox");
+    if (postboxPanel) {
+      window.requestAnimationFrame(function () {
+        postboxPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
   showSparkNotice();
   refreshGalleryNotice();
   updateVisitorGiftNotice();
@@ -7533,7 +7541,6 @@ function startMabel() {
     if (mabel) {
       deliverDueComfortPostboxMail();
       deliverDueCuriosityPostboxMail();
-      refreshPostboxNotice();
     }
   }, 15000);
 
