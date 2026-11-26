@@ -6542,7 +6542,7 @@ async function handleWander(options) {
     : focusInterest.source === "exploration"
       ? String(researchKeywordFromFinding(focusInterest.title) || focusInterest.searchTerm || focusInterest.title).trim()
       : String(focusInterest.searchTerm || deriveResearchKeyword(focusInterest) || focusInterest.title).trim();
-  if (focusInterest.requestType === "art-reference" && /^a?\\s*car$/i.test(String(focusInterest.title || "").trim())) {
+  if (focusInterest.requestType === "art-reference" && /^a?\s*car$/i.test(String(focusInterest.title || "").trim())) {
     searchTerm = "automobile road vehicle";
   }
   const displayTitle = searchTerm || focusInterest.title;
@@ -6570,7 +6570,7 @@ async function handleWander(options) {
         interests: [focusInterest],
         guidingAim: MABEL_GUIDING_AIM,
         researchInstruction: focusInterest.requestType === "art-reference"
-          ? "Research the requested drawing subject " + focusInterest.title + " online to find a reliable visual reference. Return the exact subject, a relevant article title, the canonical page URL, a real image thumbnail URL from the article if one is available, and one short factual sentence. Do not invent an image URL or use a generic image unrelated to this subject." + (/^a?\\s*car$/i.test(String(focusInterest.title || "").trim()) ? " Here car means a road-going automobile, not CAR as an acronym or the Central African Republic." : "")
+          ? "Research the requested drawing subject " + focusInterest.title + " online to find a reliable visual reference. Return the exact subject, a relevant article title, the canonical page URL, a real image thumbnail URL from the article if one is available, and one short factual sentence. Do not invent an image URL or use a generic image unrelated to this subject." + (/^a?\s*car$/i.test(String(focusInterest.title || "").trim()) ? " Here car means a road-going automobile, not CAR as an acronym or the Central African Republic." : "")
           : focusInterest.isGiftResearch
           ? "Research this exact visitor gift: " + focusInterest.title + ". Search online for reliable web pages about what it is; do not describe the physical gift itself as something Mabel read. If reliable sources confirm it is ordinary edible food, return edibleFood true and a brief source-grounded edibleReason. If it is not food or you cannot confirm it is safe to eat, return edibleFood false. Never guess that an unfamiliar object, plant, or mushroom is edible. Return real webpage titles, URLs, and snippets."
           : focusInterest.isGuidingAimStep
