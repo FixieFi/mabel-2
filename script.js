@@ -1638,18 +1638,18 @@ function updateArtExhibition() {
   if (!list) return;
   list.replaceChildren();
   const exhibition = sharedMabelBrain && sharedMabelBrain.artExhibition;
-  const weekOf = String(exhibition && exhibition.weekOf || "");
+  const dayOf = String(exhibition && (exhibition.dayOf || exhibition.weekOf) || "");
   const works = exhibition && Array.isArray(exhibition.works) ? exhibition.works : [];
   if (period) {
-    const date = new Date(weekOf + "T00:00:00Z");
-    period.textContent = weekOf && !isNaN(date.getTime())
-      ? "This week’s exhibition · week of " + date.toLocaleDateString([], { dateStyle: "long", timeZone: "UTC" })
-      : "Mabel’s little exhibition changes each week.";
+    const date = new Date(dayOf + "T00:00:00Z");
+    period.textContent = dayOf && !isNaN(date.getTime())
+      ? "Today’s art exhibition · " + date.toLocaleDateString([], { dateStyle: "long", timeZone: "UTC" })
+      : "Mabel’s little art exhibition changes daily.";
   }
   if (!works.length) {
     const empty = document.createElement("li");
     empty.className = "gallery-empty";
-    empty.textContent = "Mabel hasn’t chosen this week’s drawings yet. Her own little Gallery is still here.";
+    empty.textContent = "Mabel hasn’t chosen today’s drawings yet. Her own little Gallery is still here.";
     list.appendChild(empty);
     return;
   }
