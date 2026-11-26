@@ -7101,9 +7101,10 @@ async function handleWander(options) {
       if (legacyUrl) rawSources.push({ title: String(data.sourceTitle).slice(0, 160), url: legacyUrl, snippet: "", imageUrl: "" });
     }
     let relatedSources = rawSources.filter(function (source) {
-      return focusInterest.isGuidingAimStep ||
-        researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
+      return !/disambiguation/i.test(source.title || "") && (focusInterest.isGuidingAimStep ||
+        researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm }));
     });
+    let directCommonsVisuals = [];
     if (!focusInterest.isGuidingAimStep && searchTerm && !relatedSources.length) {
       const encyclopediaResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
       if (encyclopediaResult && Array.isArray(encyclopediaResult.sources)) {
@@ -7132,39 +7133,20 @@ async function handleWander(options) {
         }
       }
     }
-    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return safeWikimediaImageUrl(source.imageUrl); })) {
-      const imageResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
-      const imageSources = imageResult && Array.isArray(imageResult.sources) ? imageResult.sources.filter(function (source) {
-        return source && source.title && safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url);
-      }) : [];
-      const imageRelated = imageSources.filter(function (source) {
-        return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
-      });
-      // This request was already a search for the exact drawing subject. Wikipedia’s
-      // first image result can use a synonymous article title (for example, cattle
-      // for cow), so keep its safe image even when the text matcher is too strict.
-      const usableImageSources = imageRelated.length ? imageRelated : imageSources;
-      if (usableImageSources.length) {
-        data = imageResult;
-        rawSources = imageSources;
-        relatedSources = usableImageSources;
-        researchMethod = "in the public encyclopedia";
-      }
-    }
     if (focusInterest.requestType === "art-reference") {
       const commonsResult = await fetchWikimediaCommonsReference(searchTerm).catch(function () { return null; });
       const commonsSources = commonsResult && Array.isArray(commonsResult.sources) ? commonsResult.sources : [];
       const commonsVisuals = commonsSources.filter(function (source) {
-        return safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url);
+        return safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url) && !/disambiguation/i.test(source.title || "");
       });
       const commonsRelated = commonsVisuals.filter(function (source) {
         return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
       });
-      const usableCommonsSources = commonsRelated.length ? commonsRelated : commonsVisuals;
-      if (usableCommonsSources.length) {
+      directCommonsVisuals = commonsRelated.length ? commonsRelated : commonsVisuals;
+      if (directCommonsVisuals.length && !relatedSources.length) {
         data = commonsResult;
         rawSources = commonsSources;
-        relatedSources = usableCommonsSources;
+        relatedSources = directCommonsVisuals;
         researchMethod = "following links from a Library search";
       }
     }
@@ -7204,7 +7186,7 @@ async function handleWander(options) {
         ? String(data.researchSummary || "").slice(0, 1200)
         : "",
       thoughts: relevant && Array.isArray(data.thoughts) ? data.thoughts.slice(0, 3).map(function (thought) { return String(thought).slice(0, 260); }) : [],
-      sources: relevant ? relatedSources : [],
+      sources: relevant ? (directCommonsVisuals.length ? [directCommonsVisuals[0], ...relatedSources].slice(0, 3) : relatedSources) : [],
       url: relevant ? (relatedSources[0]?.url || safeExternalUrl(data.url) || "") : "",
       musing: relevant
         ? /\b(?:found|picked up|came across)\s+(?:a|an|the)\s+(?:coin|button|toy|lid|shell|stone|key|cap|figure|flower|fossil|marble|bead)\b/i.test(String(data.musing || ""))
@@ -7224,7 +7206,7 @@ async function handleWander(options) {
     }
 
     if (focusInterest.requestType === "art-reference") {
-      const visualSource = relatedSources.find(function (source) { return source && safeWikimediaImageUrl(source.imageUrl); });
+      const visualSource = directCommonsVisuals[0] || relatedSources.find(function (source) { return source && safeWikimediaImageUrl(source.imageUrl); });
       if (visualSource) {
         research.artReference = {
           subject: focusInterest.title,
