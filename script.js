@@ -1032,12 +1032,13 @@ function renderMabelCard(artwork) {
     node("path", { d: d, fill: colour, opacity: opacity });
   }
 
+  const referenceStudy = artwork.referenceRetry === true;
   const background = palette[0];
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: background });
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: "#f4ead6", opacity: 0.24 });
 
   // Layered, irregular washes give each picture its own balance and weight.
-  const washCount = 3 + Math.floor(random() * 4);
+  const washCount = referenceStudy ? 1 : 3 + Math.floor(random() * 4);
   for (let i = 0; i < washCount; i += 1) {
     softBlob(
       25 + random() * 110,
@@ -1050,7 +1051,7 @@ function renderMabelCard(artwork) {
   }
 
   // Loose brush marks keep the drawing from resolving into a repeated icon.
-  const markCount = 18 + Math.floor(random() * 27);
+  const markCount = referenceStudy ? 0 : 18 + Math.floor(random() * 27);
   for (let i = 0; i < markCount; i += 1) {
     const x = -8 + random() * 176;
     const y = -8 + random() * 176;
@@ -1388,9 +1389,12 @@ function renderMabelCard(artwork) {
     });
   }
 
-  for (let i = 0; i < 45; i += 1) {
-    ellipse(random() * 160, random() * 160, 0.3 + random() * 0.8, 0.3 + random() * 0.8,
-      palette[2], 0.12 + random() * 0.15, 0);
+  const grainCount = referenceStudy ? 5 : 45;
+  for (let i = 0; i < grainCount; i += 1) {
+    const x = referenceStudy ? 8 + (i * 29) % 144 : random() * 160;
+    const y = referenceStudy ? 10 + (i * 47) % 140 : random() * 160;
+    ellipse(x, y, 0.3 + random() * 0.8, 0.3 + random() * 0.8,
+      palette[2], referenceStudy ? 0.06 : 0.12 + random() * 0.15, 0);
   }
 
   const card = document.createElement("div");
@@ -3973,6 +3977,7 @@ function queueArtworkReferenceResearch(message, options) {
   options = options || {};
   const subject = requestedArtworkDescriptionSubject(message);
   if (!subject || !shouldResearchArtworkReference(subject)) return null;
+  if (findSharedArtReference(subject)) return null;
   const lead = addResearchIdea({
     id: "art-reference-" + normalizeInterestTitle(subject),
     title: subject,
@@ -4115,10 +4120,31 @@ function makeMabelFallbackArtwork(context) {
   };
 }
 
+function findSharedArtReference(subject) {
+  const wanted = normalizeInterestTitle(subject);
+  if (!wanted || !sharedMabelBrain || !Array.isArray(sharedMabelBrain.artReferences)) return null;
+  return sharedMabelBrain.artReferences.find(function (reference) {
+    if (!reference || !reference.imageUrl) return false;
+    const labels = [reference.subject].concat(Array.isArray(reference.aliases) ? reference.aliases : []);
+    return labels.some(function (label) {
+      return normalizeInterestTitle(label) === wanted;
+    });
+  }) || null;
+}
+
 async function requestMabelArtwork(context, targetElement) {
+  context = context || {};
+  if (!sharedMabelBrain) await refreshSharedMabelBrain();
   const source = context.source || "autonomous";
   const visitorPortrait = isVisitorPortraitRequest(context.message);
   const appearanceDetails = visitorAppearanceDetails(context.message);
+  const requestedSubject = visitorPortrait ? "visitor" : (context.comfortRequest
+    ? (context.comfortSubject || "Mabel beside her visitor")
+    : requestedArtworkDescriptionSubject(context.message));
+  const selfPortrait = requestedArtworkSubject(context.message) === "mabel";
+  const storedReference = !visitorPortrait && !context.comfortRequest && !selfPortrait
+    ? findSharedArtReference(requestedSubject)
+    : null;
   let artwork = null;
   let declined = false;
 
@@ -4131,7 +4157,7 @@ async function requestMabelArtwork(context, targetElement) {
         source: source,
         message: context.message || "",
         comfortRequest: context.comfortRequest === true,
-        requestedSubject: visitorPortrait ? "visitor" : (context.comfortRequest ? (context.comfortSubject || "Mabel beside her visitor") : requestedArtworkDescriptionSubject(context.message)),
+        requestedSubject: requestedSubject,
         visitorPortrait: visitorPortrait,
         visitorAppearance: appearanceDetails,
         visitorPreferences: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; }),
@@ -4143,14 +4169,18 @@ async function requestMabelArtwork(context, targetElement) {
               ? "The title and written description must clearly name or describe the requested subject: " + requestedArtworkDescriptionSubject(context.message) + ". Make the drawing visibly about that subject."
               : "This is an open-ended request for a picture, not an instruction to draw an object named picture. Choose any subject that genuinely catches Mabel’s attention, or create an abstract, playful piece and let the marks decide what it is. Give it a specific, natural title and a short description.") + requestedArtworkColorInstruction(context.message) + (context.referenceImageInstruction ? " " + context.referenceImageInstruction : ""),
         requestedColors: requestedArtworkColors(context.message),
-        selfPortrait: requestedArtworkSubject(context.message) === "mabel",
-        referenceImageUrl: context.referenceImageUrl || new URL("images/mabel.png", window.location.href).href,
+        selfPortrait: selfPortrait,
+        referenceImageUrl: context.referenceImageUrl || (storedReference && storedReference.imageUrl) || (selfPortrait ? new URL("images/mabel.png", window.location.href).href : ""),
         referenceRetry: context.referenceRetry === true,
-        referenceTitle: context.referenceTitle || "",
-        referenceFact: context.referenceFact || "",
-        referenceImageInstruction: context.referenceImageInstruction || (requestedArtworkSubject(context.message) === "mabel"
-          ? "Use mabel.png only as a visual reference for Mabel’s mouse features and proportions. Create a new original drawing; never paste or embed the reference image as a layer."
-          : ""),
+        useVisualReference: context.useVisualReference === true || Boolean(storedReference),
+        referenceObservation: context.referenceObservation || (storedReference && storedReference.visualNotes) || "",
+        referenceTitle: context.referenceTitle || (storedReference && storedReference.sourceTitle) || "",
+        referenceFact: context.referenceFact || (storedReference && storedReference.fact) || "",
+        referenceImageInstruction: context.referenceImageInstruction || (storedReference
+          ? "Use the saved Library reference to make the exact subject recognizable. Keep its real silhouette and distinctive features, but make an original Mabel-style drawing; do not paste, trace, or embed the reference image."
+          : selfPortrait
+            ? "Use mabel.png only as a visual reference for Mabel’s mouse features and proportions. Create a new original drawing; never paste or embed the reference image as a layer."
+            : ""),
         mood: context.mood || mabel.now.mood,
         activity: context.activity || mabel.now.doing,
         thought: context.thought || mabel.now.thought,
@@ -4177,6 +4207,9 @@ async function requestMabelArtwork(context, targetElement) {
     if (response.ok) {
       const data = await response.json();
       artwork = data.artwork || null;
+      if (typeof data.referenceObservation === "string" && data.referenceObservation.trim()) {
+        context.referenceObservation = data.referenceObservation.trim().slice(0, 700);
+      }
       declined = data.declined === true;
       if (data.referenceUnavailable === true) {
         context.referenceUnavailable = true;
@@ -4237,8 +4270,9 @@ async function requestMabelArtwork(context, targetElement) {
   }
   artwork = prepareArtworkForGallery(artwork, { ...context, source: source, inspiration: artworkInspiration });
   if (visitorPortrait) artwork.visitorPortrait = true;
-  if (context.referenceRetry) {
+  if (context.referenceRetry || storedReference) {
     artwork.referenceRetry = true;
+    artwork.referenceObservation = context.referenceObservation || "";
     artwork.inspirationContext = context.inspiration && context.inspiration.question || "Mabel wanted to explore " + (artwork.subject || artwork.title || "this subject") + " more creatively after studying a visual reference at the Library.";
   }
   if (context.comfortRequest) {
@@ -6413,6 +6447,16 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
     inspiration: inspiration
   };
   const refinedArtwork = await requestMabelArtwork(artContext, null);
+  if (artContext.referenceObservation) {
+    reference.visualNotes = String(artContext.referenceObservation).slice(0, 700);
+    fetch(MABEL_BRAIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "art-reference", artReference: reference })
+    }).then(function (response) {
+      if (response.ok) refreshSharedMabelBrain();
+    }).catch(function () {});
+  }
   if (refinedArtwork) {
     const firstFact = reference.fact ? " One thing Mabel learned: " + reference.fact : "";
     if (focusInterest.isGiftArtReference) {
