@@ -7533,6 +7533,7 @@ function startMabel() {
     if (mabel) {
       deliverDueComfortPostboxMail();
       deliverDueCuriosityPostboxMail();
+      refreshPostboxNotice();
     }
   }, 15000);
 
