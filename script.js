@@ -84,13 +84,16 @@ const visitorSessionStorageKey = "mabel-visitor-session-v1";
 
 function currentVisitorSessionId() {
   try {
-    let id = sessionStorage.getItem(visitorSessionStorageKey);
+    let id = localStorage.getItem(visitorSessionStorageKey);
+    if (!id) id = sessionStorage.getItem(visitorSessionStorageKey);
     if (!id) {
       id = window.crypto && typeof window.crypto.randomUUID === "function"
         ? window.crypto.randomUUID()
         : "visit-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
-      sessionStorage.setItem(visitorSessionStorageKey, id);
+      localStorage.setItem(visitorSessionStorageKey, id);
     }
+    localStorage.setItem(visitorSessionStorageKey, id);
+    try { sessionStorage.setItem(visitorSessionStorageKey, id); } catch (ignored) {}
     return id;
   } catch (error) {
     return "visit-" + Math.floor(Date.now() / 60000);
@@ -726,7 +729,7 @@ function promoteResearchIdeaToInterest(candidate, spark) {
 
 function saveBindle() {
   try {
-    sessionStorage.setItem(bindleStorageKey, JSON.stringify(bindle));
+    localStorage.setItem(bindleStorageKey, JSON.stringify(bindle));
   } catch (error) {
     // Local storage may be unavailable.
   }
@@ -1678,8 +1681,9 @@ function openGalleryArtworkDetails(artwork) {
 
 function loadBindle() {
   try {
-    const saved = sessionStorage.getItem(bindleStorageKey);
+    const saved = localStorage.getItem(bindleStorageKey) || sessionStorage.getItem(bindleStorageKey);
     if (saved) {
+      try { localStorage.setItem(bindleStorageKey, saved); } catch (ignored) {}
       const loaded = JSON.parse(saved);
       return { food: [], water: [], treasures: [], treasureBox: [], history: [], ...loaded };
     }
@@ -3611,7 +3615,7 @@ function resetThisBrowserMabel() {
     mabelStorageKey, reflectionQueueStorageKey, wanderingsStorageKey, researchLogStorageKey,
     boardReadKeysStorageKey, sparksStorageKey, autonomousResearchStorageKey, viewedSparkStorageKey,
     viewedArtworkStorageKey, autonomousStorageKey, reflectionStorageKey, bindleStorageKey,
-    galleryStorageKey, visitorProfileStorageKey, visitorGiftSeenStorageKey, researchIdeasStorageKey,
+    galleryStorageKey, visitorProfileStorageKey, visitorGiftSeenStorageKey, visitorSessionStorageKey, researchIdeasStorageKey,
     mabelPostboxStorageKey, comfortPostboxQueueStorageKey, postboxSeenStorageKey, researchShareCountStorageKey
   ].forEach(function (key) {
     try { localStorage.removeItem(key); } catch (error) {}
@@ -3911,13 +3915,10 @@ function shouldResearchArtworkReference(subject) {
   if (!key || /^(mabel|mouse|visitor|me|you|self portrait)$/.test(key)) return false;
   const familiar = new Set(["cat", "dog", "rabbit", "fox", "bird", "flower", "mushroom", "fossil", "button", "shell", "moon", "star", "fish", "house", "tree", "leaf", "apple", "heart", "cloud", "sun"]);
   if (familiar.has(key)) return false;
-  const sharedReferences = sharedMabelBrain && Array.isArray(sharedMabelBrain.artReferences) ? sharedMabelBrain.artReferences : [];
-  if (sharedReferences.some(function (item) { return normalizeInterestTitle(item.subject || item.title) === key; })) return false;
-  return !researchLog.some(function (entry) {
-    return entry && entry.requestType === "art-reference" &&
-      normalizeInterestTitle(entry.searchTerm || entry.focusTitle) === key &&
-      entry.artReference && safeExternalUrl(entry.artReference.imageUrl);
-  });
+  // An explicit request deserves a fresh Library-to-studio pass, even if Mabel
+  // has studied this subject before. The saved reference is not a reason to
+  // silently skip the visitor's requested second drawing.
+  return true;
 }
 
 function queueArtworkReferenceResearch(message, options) {
@@ -4382,6 +4383,7 @@ async function handleVisitorMessage() {
   conversation = Array.isArray(conversation) ? conversation : [];
 
   const explicitResearchRequest = parseExplicitResearchRequest(message);
+  const asksAboutBoard = /\b(?:notice\s*board|noticeboard|visitor(?:s)?[’']?\s+board|board\s+note|notes?\s+on\s+the\s+board|\bboard\b)\b/i.test(message);
   messagePending = true;
   createChatExchange(message);
   if (messageElement) messageElement.disabled = true;
@@ -4391,6 +4393,27 @@ async function handleVisitorMessage() {
   try {
     captureVisitorFacts(message);
     replyElement.textContent = "Mabel is listening...";
+    let currentBoardContext = [];
+    if (asksAboutBoard) {
+      try {
+        const boardResponse = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
+        if (boardResponse.ok) {
+          const boardData = await boardResponse.json();
+          currentBoardContext = (Array.isArray(boardData.messages) ? boardData.messages : [])
+            .filter(function (note) { return note && String(note.message || "").trim(); })
+            .slice(0, 8)
+            .map(function (note) {
+              return {
+                kind: "visitor-board-note",
+                text: "Current shared Visitors’ noticeboard note: “" + String(note.message).trim().slice(0, 240) + "”" +
+                  (note.name ? " (signed “" + String(note.name).trim().slice(0, 40) + "”; this is only the note’s sign-off)." : "")
+              };
+            });
+        }
+      } catch (boardError) {
+        // Chat still works if the shared noticeboard is temporarily unavailable.
+      }
+    }
     const response = await fetch(MABEL_AI_URL, {
       method: "POST",
       headers: {
@@ -4405,7 +4428,7 @@ async function handleVisitorMessage() {
         interests: mabel.interests,
         memories: visitorProfile.facts.slice(0, 8).map(function (fact) {
           return { kind: "visitor-fact", text: fact.text };
-        }),
+        }).concat(currentBoardContext),
         conversation: [],
         itemKnowledge: mabel.knowledge.slice(0, 16),
         recentMoments: mabel.feed.slice(0, 12).map(function (entry) { return { at: entry.at, kind: entry.kind, text: entry.text }; }),
@@ -4415,6 +4438,8 @@ async function handleVisitorMessage() {
         },
         replyGuidance: explicitResearchRequest
           ? "Answer this one visitor message directly and warmly in a complete, self-contained reply. They asked you to research “" + explicitResearchRequest.title + "”. Say you will look into it; do not claim findings before the Library search returns. Do not ask a question or expect another message."
+          : asksAboutBoard
+          ? "The visitor is asking about the shared Visitors’ noticeboard. Use the supplied current visitor-board-note memories to answer about the actual notes currently there. Mention a specific note or say plainly that the board is empty/unavailable if none were supplied. Do not invent a note, confuse the sign-off with a verified identity, or repeatedly bring the board up when it was not asked about. Answer this one message directly and do not ask a follow-up question."
           : "Answer this one visitor message directly and warmly in a complete, self-contained reply. Use visitor facts, recent moments, and item knowledge only when clearly relevant. If the visitor asks how you feel or what you need, answer about your own current mood and needs; never turn their question back on them. Answer yes/no questions first. Do not invent what the visitor said, bring up an unrelated old subject, ask a follow-up question, or expect another message.",
         wanderings: wanderings.slice(0, 10).map(function (item) {
           return {
@@ -4449,6 +4474,7 @@ async function handleVisitorMessage() {
       replyElement.textContent = "My thoughts are all fuzzy right now.";
       if (isArtworkRequest(message)) {
         await requestMabelArtwork({ source: "visitor", message: message, forceLocalFallback: true }, replyElement);
+        queueArtworkReferenceResearch(message);
       } else if (visitorSeemsDistressed(message)) {
         const comfortArt = await requestMabelArtwork({
           source: "comfort",
@@ -4617,6 +4643,7 @@ async function handleVisitorMessage() {
     }
     if (isArtworkRequest(message)) {
       await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
+      queueArtworkReferenceResearch(message);
     }
   } finally {
     messagePending = false;
@@ -6651,7 +6678,7 @@ async function handleWander(options) {
 
     saveMabel();
     updatePage();
-    if (focusInterest.requestType === "art-reference" && relevant && research.artReference && research.artReference.imageUrl) {
+    if (focusInterest.requestType === "art-reference" && research.artReference && research.artReference.imageUrl) {
       const reference = research.artReference;
       fetch(MABEL_BRAIN_URL, {
         method: "POST",
