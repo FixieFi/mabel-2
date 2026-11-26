@@ -533,8 +533,22 @@ function cleanCodeProject(raw) {
   return { title, language, code, note };
 }
 
+function advanceLifeNeeds(state) {
+  const nowMs = Date.now();
+  const previous = Date.parse(state.lastNeedsTickAt || state.lastLifeUpdate || "");
+  if (Number.isFinite(previous) && previous < nowMs) {
+    const minutes = Math.min(180, (nowMs - previous) / 60000);
+    // Shared needs drift slowly with elapsed time; concrete actions do the rest.
+    state.needs.food = clamp(state.needs.food - minutes * 0.0008);
+    state.needs.water = clamp(state.needs.water - minutes * 0.001);
+    state.needs.rest = clamp(state.needs.rest - minutes * 0.00055);
+  }
+  state.lastNeedsTickAt = new Date(nowMs).toISOString();
+}
+
 async function runMabelLife(env) {
   const state = await loadState(env);
+  advanceLifeNeeds(state);
   const interests = state.interests.slice(0, 8)
     .map(item => "- " + item.title + ": " + item.question + " (" + item.stage + ", pull " + item.pull + ")")
     .join("\n") || "Mabel has no named interests yet. Let something new catch her attention without prescribing a topic.";
@@ -565,7 +579,7 @@ async function runMabelLife(env) {
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
     "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
     "When codingDue is true, Coding is already one of Mabel’s hobbies and she may write one tiny self-contained code experiment for her notebook. Use only basic JavaScript or Python; keep it under 36 lines and 1,800 characters, grounded in a real interest or useful mouse-sized idea. This is text for display only: never use network, browser, file, process, import, evaluation, or system access. Return codeProject null unless it is a complete small experiment.",
-    "Return only JSON: {activity,thought,mood,remember,memory,needs,interest,pendingThought,craftIdea,codeProject}.",
+    "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject}. Do not set needs; those change only through elapsed time and concrete actions.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
     "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects.",
@@ -598,12 +612,6 @@ async function runMabelLife(env) {
     state.activity = cleanText(update.activity, 180, state.activity);
     state.thought = cleanText(update.thought, 220, state.thought);
     state.mood = cleanText(update.mood, 40, state.mood);
-
-    if (update.needs && typeof update.needs === "object") {
-      for (const key of Object.keys(DEFAULT_STATE.needs)) {
-        if (typeof update.needs[key] === "number") state.needs[key] = clamp(update.needs[key]);
-      }
-    }
 
     if (update.remember === true && update.memory) {
       remember(state, update.memory, "life");
@@ -714,6 +722,14 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
+  if (kind === "needs") {
+    if (!data.needs || typeof data.needs !== "object") return jsonResponse({ error: "A needs update is needed." }, 400);
+    for (const key of Object.keys(DEFAULT_STATE.needs)) {
+      if (typeof data.needs[key] === "number") state.needs[key] = clamp(data.needs[key]);
+    }
+    await saveState(env, state);
+    return jsonResponse({ ok: true, needs: state.needs });
+  }
   if (kind === "exhibition-vote") {
     const artworkId = makeId(cleanText(data.artworkId, 140));
     const visitorId = cleanText(data.visitorId, 100);
