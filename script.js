@@ -103,6 +103,7 @@ const galleryStorageKey = "mabel-gallery-v1";
 const visitorProfileStorageKey = "mabel-visitor-profile-v1";
 const visitorGiftSeenStorageKey = "mabel-viewed-visitor-gift-v1";
 const visitorGiftHighlightStorageKey = "mabel-highlight-visitor-gift-v1";
+const lastRequestedArtworkSubjectStorageKey = "mabel-last-requested-artwork-subject-v1";
 
 const legacySeedInterestIds = new Set([
   "silver-thread",
@@ -1372,6 +1373,29 @@ function renderMabelCard(artwork) {
       palette[2], 0.8, 0.75);
     path("M " + (cx + 19) + " " + (cy + 47) + " Q " + (cx + 41) + " " + (cy + 40) + " " + (cx + 37) + " " + (cy + 25),
       palette[1], 2, 0.55);
+  } else if (/^(?:mabel and her visitor|mouse and visitor)$/.test(subject)) {
+    // A clear two-figure fallback for requests to draw the visitor and Mabel together.
+    ellipse(52, 61, 12, 16, palette[1], 0.82, -18);
+    ellipse(68, 61, 12, 16, palette[1], 0.82, 18);
+    softBlob(60, 75, 23, 21, palette[1], 0.92);
+    ellipse(54, 72, 1.8, 2.5, "#432a5e", 0.9, 0);
+    ellipse(66, 72, 1.8, 2.5, "#432a5e", 0.9, 0);
+    path("M 48 94 Q 60 112 74 94", palette[2], 2, 0.8);
+    path("M 30 160 Q 34 124 58 119 Q 83 124 88 160 Z", palette[1], 2, 0.8, palette[1]);
+    path("M 102 160 Q 106 124 130 119 Q 154 124 158 160 Z", palette[2], 2, 0.82, palette[2]);
+    softBlob(130, 79, 24, 29, "#f0dfc8", 0.96);
+    ellipse(122, 76, 1.8, 2.4, "#432a5e", 0.9, 0);
+    ellipse(138, 76, 1.8, 2.4, "#432a5e", 0.9, 0);
+    path("M 122 91 Q 130 97 138 91", "#8b5260", 1.3, 0.78);
+  } else if (/^(?:person|man|woman|human)$/.test(subject)) {
+    // Build a readable human figure in local fallback drawings.
+    path("M 45 158 Q 48 112 66 106 L 80 100 L 94 106 Q 112 112 115 158 Z", palette[1], 2, 0.84, palette[1]);
+    path("M 67 103 L 67 87 Q 80 95 93 87 L 93 108", "#d7b996", 1.2, 0.8, "#d7b996");
+    softBlob(80, 63, 27, 33, palette[2], 0.95);
+    path("M 54 57 Q 80 30 106 57", palette[1], 4, 0.7);
+    ellipse(71, 62, 1.8, 2.5, "#432a5e", 0.9, 0);
+    ellipse(89, 62, 1.8, 2.5, "#432a5e", 0.9, 0);
+    path("M 74 80 Q 80 85 86 80", "#8b5260", 1.4, 0.8);
   } else if (subject === "visitor") {
     const cx = 80 + random() * 4;
     const cy = 77 + random() * 4;
@@ -2713,7 +2737,12 @@ function updateBrain() {
   const thought = document.getElementById("brain-thought");
   const shared = sharedMabelBrain || {};
   const personality = shared.personality || (mabel && mabel.personality) || {};
-  const coreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
+  const savedCoreTraits = Array.isArray(personality.core_traits) ? personality.core_traits : [];
+  const coreTraits = savedCoreTraits.length
+    ? savedCoreTraits
+    : (Array.isArray(mabel && mabel.personality && mabel.personality.core_traits) && mabel.personality.core_traits.length
+      ? mabel.personality.core_traits
+      : ["gentle", "curious", "thoughtful", "quietly playful"]);
   const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
   updateCrafting();
   updateBaking();
@@ -4163,18 +4192,42 @@ function visitorAppearanceDetails(message) {
   return Array.from(new Set(details)).slice(0, 6);
 }
 
+function recentRequestedArtworkSubject() {
+  try {
+    const saved = localStorage.getItem(lastRequestedArtworkSubjectStorageKey);
+    if (saved && !/^(it|this|that|something|anything|picture|drawing|artwork)$/i.test(saved)) return saved;
+  } catch (error) {}
+  const recent = Array.isArray(gallery) ? gallery.find(function (item) {
+    return item && typeof item.subject === "string" && item.subject.trim() &&
+      !/^(it|this|that|something|anything|picture|drawing|artwork)$/i.test(item.subject.trim());
+  }) : null;
+  return recent ? recent.subject.trim() : "";
+}
+
 function requestedArtworkSubject(message) {
   const text = String(message || "").trim();
+  if (/\b(?:draw|sketch|paint|illustrate)\s+(?:us|both of us)(?:\s+together)?\b|\b(?:draw|sketch|paint|illustrate)\s+(?:me and you|you and me)\b|\b(?:draw|sketch|paint|illustrate)\s+us\s+together\b/i.test(text)) {
+    return "Mabel and her visitor";
+  }
+  if (/\b(?:draw|sketch|paint|illustrate)\s+(?:it|that|this)(?:\s+again)?\b|\b(?:draw|sketch|paint|illustrate)\s+another\s+one\b|\b(?:draw|sketch|paint|illustrate)\s+the\s+same\b/i.test(text)) {
+    return recentRequestedArtworkSubject();
+  }
   if (/\b(self[ -]?portrait|portrait of (?:yourself|mabel)|draw (?:you|yourself|mabel)|sketch (?:you|yourself|mabel)|paint (?:you|yourself|mabel)|illustrate (?:you|yourself|mabel)|picture of (?:you|mabel))\b/i.test(text)) return "mabel";
   const openEnded = /\b(?:draw|sketch|paint|illustrate|make|create)\s+(?:(?:me|us)\s+)?(?:(?:a|an|some|the)\s+)?(?:picture|image|art|artwork|drawing|painting|illustration|something|anything)\s*(?:please|for me)?[.!?]*$/i.test(text);
   if (openEnded) return "";
   if (isVisitorPortraitRequest(text)) return "visitor";
   const lower = text.toLowerCase();
+  if (/\b(?:mouse|mabel)\b.{0,24}\bcat\b|\bcat\b.{0,24}\b(?:mouse|mabel)\b/i.test(lower)) return "mouse and cat";
+  if (/\b(?:mouse|mabel)\b.{0,30}\bvisitor\b|\bvisitor\b.{0,30}\b(?:mouse|mabel)\b/i.test(lower)) return "Mabel and her visitor";
   const knownSubjects = [
     [/\bpower\s+ranger\b/i, "power ranger"], [/\b(?:cat|kitten)\b/i, "cat"],
     [/\b(?:dog|puppy)\b/i, "dog"], [/\b(?:rabbit|bunny)\b/i, "rabbit"],
     [/\bfox\b/i, "fox"], [/\b(?:bird|robin|sparrow)\b/i, "bird"],
     [/\b(?:flower|bouquet)\b/i, "flower"], [/\b(?:mushroom|toadstool)\b/i, "mushroom"],
+    [/\bhorse\b/i, "horse"], [/\bcow\b/i, "cow"], [/\bdolphin\b/i, "dolphin"],
+    [/\b(?:car|automobile|vehicle)\b/i, "car"],
+    [/\b(?:man|woman|person|human)\b/i, "person"],
+    [/\b(?:mouse|mice)\b/i, "mouse"],
     [/\bfossil\b/i, "fossil"], [/\bbutton\b/i, "button"], [/\bshell\b/i, "shell"],
     [/\bmoon\b/i, "moon"], [/\bstar\b/i, "star"], [/\bfish\b/i, "fish"],
     [/\b(?:house|cottage)\b/i, "house"]
@@ -4231,7 +4284,7 @@ function makeMabelFallbackArtwork(context) {
       : subject === "visitor"
         ? "Mabel drew her visitor"
         : subject
-          ? "Mabel's little study of a " + subject
+          ? "Mabel's little study of " + subject
           : openEndedRequest
             ? abstractTitles[Math.floor(Math.random() * abstractTitles.length)]
             : "Mabel's " + mood + " marks",
@@ -4605,6 +4658,9 @@ async function handleVisitorMessage() {
   const visitorMessageAt = now();
   const activityTopic = message.replace(/\s+/g, " ").slice(0, 100);
   const drawingSubject = isArtworkRequest(message) ? requestedArtworkDescriptionSubject(message) : "";
+  if (drawingSubject && !/^(?:visitor|mabel)$/i.test(drawingSubject)) {
+    try { localStorage.setItem(lastRequestedArtworkSubjectStorageKey, drawingSubject); } catch (error) {}
+  }
   addFeedEntry({
     at: visitorMessageAt,
     kind: "did",
