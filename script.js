@@ -4420,7 +4420,7 @@ async function requestMabelArtwork(context, targetElement) {
     if (response.ok) {
       const data = await response.json();
       artwork = data.artwork || null;
-      if (context.referenceRetry && artwork &&
+      if ((context.referenceRetry || storedReference) && artwork &&
           (!Array.isArray(artwork.vectorPaths) || artwork.vectorPaths.length < 8)) {
         // Very sparse reference outputs are not useful as a second study; the
         // subject-specific local renderer will make one clear fallback instead.
@@ -4455,7 +4455,7 @@ async function requestMabelArtwork(context, targetElement) {
 
   const explicitRequest = source === "visitor" && isArtworkRequest(context.message);
   const comfortRequest = source === "comfort" && context.comfortRequest === true;
-  if (!artwork && explicitRequest) {
+  if (!artwork && (explicitRequest || ((context.referenceRetry || storedReference) && !declined))) {
     // A single failed reference-model attempt should still leave a drawing.
     artwork = makeMabelFallbackArtwork(context);
   }
