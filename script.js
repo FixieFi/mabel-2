@@ -7332,9 +7332,19 @@ function startMabel() {
     try {
       const value = JSON.parse(savedSeen);
       if (Array.isArray(value)) parsedSeen = value;
-      else if (typeof value === "string" && value) parsedSeen = [value];
+      else if (typeof value === "string" && value) {
+        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === value; });
+        parsedSeen = seenIndex >= 0
+          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
+          : [value];
+      }
     } catch (error) {
-      if (savedSeen) parsedSeen = [savedSeen];
+      if (savedSeen) {
+        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === savedSeen; });
+        parsedSeen = seenIndex >= 0
+          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
+          : [savedSeen];
+      }
     }
     viewedPostboxIds = new Set(parsedSeen.map(String).slice(-200));
   } catch (error) { viewedPostboxIds = new Set(); }
