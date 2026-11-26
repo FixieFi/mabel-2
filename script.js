@@ -345,14 +345,14 @@ function markPostboxNoticeSeen() {
   }
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
-function refreshPostboxNotice() {
+function refreshPostboxNotice(force) {
   const latest = latestPostboxMail();
   if (!postboxNoticeCard || !latest || !latest.id) {
     if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
     return;
   }
   const postboxPanel = document.getElementById("postbox");
-  if (postboxPanel && postboxPanel.classList.contains("active")) {
+  if (postboxPanel && postboxPanel.classList.contains("active") && !force) {
     markPostboxNoticeSeen();
     return;
   }
@@ -387,7 +387,7 @@ function addMabelPostboxItem(item) {
   mabelPostboxItems = mabelPostboxItems.slice(0, 30);
   saveMabelPostbox();
   updateMabelPostbox();
-  refreshPostboxNotice();
+  refreshPostboxNotice(true);
 }
 function loadComfortPostboxQueue() {
   try {
@@ -697,6 +697,15 @@ function registerSharedDrawing(artwork, context) {
     } else {
       refreshSharedMabelBrain();
     }
+  }).catch(function () {});
+}
+
+function persistSharedNeeds() {
+  if (!mabel || !mabel.needs) return;
+  fetch(MABEL_BRAIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "needs", needs: mabel.needs })
   }).catch(function () {});
 }
 
@@ -2020,6 +2029,7 @@ function chooseAction() {
   });
   saveMabel();
   updatePage();
+  persistSharedNeeds();
 }
 
 function applyExplorationFinds(findings) {
@@ -2699,6 +2709,11 @@ async function refreshSharedMabelBrain() {
     const data = await response.json();
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
+      if (mabel && data.brain.needs && typeof data.brain.needs === "object") {
+        mabel.needs = { ...mabel.needs, ...data.brain.needs };
+        saveMabel();
+        updateNeeds();
+      }
       updateBrain();
       updateInterests();
       updateMindTopics();
@@ -3399,6 +3414,7 @@ function accrueActiveVisitorTime() {
     visitorProfile.activeBondToday += earned;
   }
   mabel.needs.connection = clampNeed((Number(mabel.needs.connection) || 0) + 0.006);
+  persistSharedNeeds();
   saveVisitorProfile();
   saveMabel();
   updateNeeds();
@@ -4740,6 +4756,7 @@ async function handleVisitorMessage() {
     saveMabel();
     updateHomeObjects();
     updatePage();
+    persistSharedNeeds();
 
     messageElement.value = "";
     window.setTimeout(function () {
