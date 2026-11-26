@@ -6408,7 +6408,15 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
   });
   if (researchEntry) {
     researchEntry.redrawAttempts = Math.max(0, Number(researchEntry.redrawAttempts) || 0) + 1;
-    if (researchEntry.redrawAttempts >= 3) researchEntry.redrawFailedAt = now();
+    if (researchEntry.redrawAttempts >= 3) {
+      researchEntry.redrawFailedAt = now();
+    } else {
+      const retryDelay = 5 * 60 * 1000;
+      researchEntry.redrawDueAt = new Date(Date.now() + retryDelay).toISOString();
+      window.setTimeout(function () {
+        redrawResearchReference(focusInterest, reference, researchEntry);
+      }, retryDelay);
+    }
     saveResearchLog();
   }
   saveMabel();
