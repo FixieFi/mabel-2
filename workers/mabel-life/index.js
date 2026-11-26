@@ -369,6 +369,7 @@ function bakingIngredientType(value) {
   if (/\b(apple|apples)\b/.test(name)) return "apple";
   if (/\b(hazelnuts?|walnuts?|almonds?|nuts?)\b/.test(name)) return "nuts";
   if (/\b(sunflower seeds?|sesame seeds?|seeds?)\b/.test(name)) return "seeds";
+  if (/\b(sugar cubes?|sugar|caster sugar|granulated sugar|brown sugar)\b/.test(name)) return "sugar";
   if (/\b(flour|crumbs?)\b/.test(name)) return "flour";
   if (/\b(honey|honeycomb)\b/.test(name)) return "honey";
   if (/\b(edible|known-safe) mushrooms?\b/.test(name)) return "mushroom";
@@ -473,6 +474,7 @@ function maybeBakeTreat(state) {
     { ingredients: ["oats", "apple"], title: "A little apple oat cake", description: "Mabel folded a sliver of apple into crushed oats for a small, sweet cake." },
     { ingredients: ["oats", "nuts"], title: "A hazelnut oat biscuit", description: "Mabel tucked a bit of hazelnut into an oat biscuit and baked it in her tiny stone nook." },
     { ingredients: ["oats", "seeds"], title: "A sunflower seed oat cake", description: "Mabel scattered sunflower seeds through a small oat cake and let the sun-warmed stones do their work." },
+    { ingredients: ["flour", "sugar"], title: "A tiny sugar bun", description: "Mabel worked flour and a little sugar into a small bun, then baked it until its edges were crisp and sweet." },
     { ingredients: ["flour", "honey"], title: "A little honey bun", description: "Mabel mixed flour and honey into a tiny bun and baked it until the top turned golden." },
     { ingredients: ["flour", "dried fruit"], title: "A tiny fruit bun", description: "Mabel tucked dried fruit into a small bun and baked it in her stone nook." },
     { ingredients: ["flour", "berries"], title: "A berry tartlet", description: "Mabel folded a berry into a little flour pastry and made a warm tartlet." },
@@ -784,6 +786,11 @@ function advanceLifeNeeds(state) {
 async function runMabelLife(env) {
   const state = await loadState(env);
   advanceLifeNeeds(state);
+  if (maybeBakeTreat(state)) {
+    state.lastLifeUpdate = new Date().toISOString();
+    await saveState(env, state);
+    return state;
+  }
   const interests = state.interests.slice(0, 8)
     .map(item => "- " + item.title + ": " + item.question + " (" + item.stage + ", pull " + item.pull + ")")
     .join("\n") || "Mabel has no named interests yet. Let something new catch her attention without prescribing a topic.";
@@ -1155,6 +1162,23 @@ async function handleSharedWorldEvent(request, env) {
     }, 0.08);
     if (!saved) return jsonResponse({ error: "Mabel could not keep that hobby yet." }, 400);
     state.currentThread = saved.id;
+  } else if (kind === "pantry-gift") {
+    const eventId = cleanText(data.eventId, 140);
+    const itemName = cleanText(data.item, 100);
+    state.appliedPantryGiftEvents = Array.isArray(state.appliedPantryGiftEvents) ? state.appliedPantryGiftEvents.slice(-300) : [];
+    if (eventId && state.appliedPantryGiftEvents.includes(eventId)) return jsonResponse({ ok: true, duplicate: true });
+    const ingredient = bakingIngredientType(itemName);
+    if (ingredient) {
+      const key = makeId(itemName);
+      if (!state.baking.pantry.some(item => makeId(item.name) === key)) {
+        state.baking.pantry.unshift({ id: (eventId || key) + "-pantry", name: itemName, ingredient, at: new Date().toISOString() });
+        state.baking.pantry = state.baking.pantry.slice(0, 30);
+      }
+      if (eventId) {
+        state.appliedPantryGiftEvents.push(eventId);
+        state.appliedPantryGiftEvents = state.appliedPantryGiftEvents.slice(-300);
+      }
+    }
   } else if (kind === "exploration") {
     const names = Array.isArray(data.finds) ? data.finds.map(name => cleanText(name, 100)).filter(Boolean).slice(0, 3) : [];
     for (const name of names) addFoundMaterial(state, name);
