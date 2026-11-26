@@ -3029,15 +3029,7 @@ function updateBindle() {
         newBadge.textContent = "✧ Newly noticed";
         row.appendChild(newBadge);
         row.classList.add("newly-noticed-gift");
-        if (typeof IntersectionObserver === "function") {
-          const observer = new IntersectionObserver(function (entries) {
-            if (entries.some(function (entry) { return entry.isIntersecting && entry.intersectionRatio >= 0.65; })) {
-              observer.disconnect();
-              window.setTimeout(function () { clearVisitorGiftHighlight(value.giftId); }, 1200);
-            }
-          }, { threshold: [0.65] });
-          observer.observe(row);
-        }
+
       }
       if (value && value.action) {
         const status = document.createElement("span");
@@ -7075,6 +7067,11 @@ Use "evolved_trait": null when there is no well-supported new trait.
 }
 
 function switchTab(tabName) {
+  const activePanel = document.querySelector(".tab-panel.active");
+  if (activePanel && activePanel.id === "hollow" && tabName !== "hollow") {
+    const highlightedGiftId = getVisitorGiftHighlightId();
+    if (highlightedGiftId) clearVisitorGiftHighlight(highlightedGiftId);
+  }
   if (tabName === "inner-life") markSparkNoticeSeen();
   if (tabName === "gallery-tab") markGalleryNoticeSeen();
   if (tabName === "art-exhibition") refreshSharedMabelBrain();
@@ -7156,12 +7153,8 @@ function startMabel() {
   mabelPostboxItems = loadMabelPostbox();
   comfortPostboxQueue = loadComfortPostboxQueue();
   try {
+    // Leave existing mail unread until the visitor opens the Postbox.
     lastViewedPostboxId = localStorage.getItem(postboxSeenStorageKey) || "";
-    const latestMail = latestPostboxMail();
-    if (!lastViewedPostboxId && latestMail && latestMail.id) {
-      lastViewedPostboxId = String(latestMail.id);
-      localStorage.setItem(postboxSeenStorageKey, lastViewedPostboxId);
-    }
   } catch (error) { lastViewedPostboxId = ""; }
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks().filter(function (spark) { return isGroundedResearchTrigger(spark); });
