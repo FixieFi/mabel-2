@@ -318,6 +318,8 @@ const postboxSeenStorageKey = "mabel-viewed-postbox-item-v1";
 const researchShareCountStorageKey = "mabel-postbox-research-shares-v1";
 let mabelPostboxItems = [];
 let viewedPostboxIds = new Set();
+let postboxSeenThroughAt = 0;
+let postboxSeenThroughId = "";
 
 function loadMabelPostbox() {
   try {
@@ -337,17 +339,46 @@ function latestPostboxMail() {
   }) || null;
 }
 
+function applyPostboxSeenState(raw) {
+  let parsed = null;
+  try { parsed = JSON.parse(raw || ""); } catch (error) {}
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    postboxSeenThroughId = String(parsed.id || "");
+    postboxSeenThroughAt = Math.max(postboxSeenThroughAt, Number(parsed.at) || 0);
+    return;
+  }
+  const ids = Array.isArray(parsed) ? parsed.map(String) : (typeof parsed === "string" && parsed ? [parsed] : (raw ? [String(raw)] : []));
+  viewedPostboxIds = new Set(ids.slice(-200));
+  const newestSeen = mabelPostboxItems.find(function (entry) {
+    return entry && entry.id && viewedPostboxIds.has(String(entry.id));
+  });
+  if (newestSeen) {
+    postboxSeenThroughId = String(newestSeen.id);
+    const seenAt = Date.parse(newestSeen.at || "");
+    if (Number.isFinite(seenAt)) postboxSeenThroughAt = Math.max(postboxSeenThroughAt, seenAt);
+  } else if (ids.length) {
+    postboxSeenThroughId = ids[0];
+  }
+}
 function markPostboxNoticeSeen() {
-  const newIds = mabelPostboxItems.filter(function (entry) { return entry && entry.id; }).map(function (entry) { return String(entry.id); });
-  viewedPostboxIds = new Set(Array.from(viewedPostboxIds).concat(newIds).slice(-200));
-  try { localStorage.setItem(postboxSeenStorageKey, JSON.stringify(Array.from(viewedPostboxIds))); } catch (error) {}
+  const latest = latestPostboxMail();
+  postboxSeenThroughAt = Date.now();
+  postboxSeenThroughId = latest && latest.id ? String(latest.id) : "";
+  mabelPostboxItems.forEach(function (entry) {
+    if (entry && entry.id) viewedPostboxIds.add(String(entry.id));
+  });
+  try {
+    localStorage.setItem(postboxSeenStorageKey, JSON.stringify({ id: postboxSeenThroughId, at: postboxSeenThroughAt }));
+  } catch (error) {}
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
 function refreshPostboxNotice() {
   if (!postboxNoticeCard) return;
   const unread = mabelPostboxItems.filter(function (entry) {
-    return entry && entry.id && !viewedPostboxIds.has(String(entry.id)) &&
-      (Boolean(entry.artwork) || (typeof entry.text === "string" && entry.text.trim().length > 0));
+    if (!entry || !entry.id || (!entry.artwork && !(typeof entry.text === "string" && entry.text.trim()))) return false;
+    const at = Date.parse(entry.at || "");
+    if (Number.isFinite(at)) return at > postboxSeenThroughAt;
+    return String(entry.id) !== postboxSeenThroughId && !viewedPostboxIds.has(String(entry.id));
   });
   if (!unread.length) {
     postboxNoticeCard.classList.add("hidden");
@@ -7328,25 +7359,7 @@ function startMabel() {
   comfortPostboxQueue = loadComfortPostboxQueue();
   try {
     const savedSeen = localStorage.getItem(postboxSeenStorageKey) || "";
-    let parsedSeen = [];
-    try {
-      const value = JSON.parse(savedSeen);
-      if (Array.isArray(value)) parsedSeen = value;
-      else if (typeof value === "string" && value) {
-        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === value; });
-        parsedSeen = seenIndex >= 0
-          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
-          : [value];
-      }
-    } catch (error) {
-      if (savedSeen) {
-        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === savedSeen; });
-        parsedSeen = seenIndex >= 0
-          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
-          : [savedSeen];
-      }
-    }
-    viewedPostboxIds = new Set(parsedSeen.map(String).slice(-200));
+    applyPostboxSeenState(savedSeen);
   } catch (error) { viewedPostboxIds = new Set(); }
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks().filter(function (spark) { return isGroundedResearchTrigger(spark); });
@@ -7542,12 +7555,7 @@ function startMabel() {
       updateMabelPostbox();
       refreshPostboxNotice();
     } else if (event.key === postboxSeenStorageKey) {
-      try {
-        const parsed = JSON.parse(event.newValue || "[]");
-        viewedPostboxIds = new Set(Array.isArray(parsed) ? parsed.map(String).slice(-200) : []);
-      } catch (error) {
-        viewedPostboxIds = new Set(event.newValue ? [String(event.newValue)] : []);
-      }
+      applyPostboxSeenState(event.newValue || "");
       refreshPostboxNotice();
     } else if (event.key === visitorGiftSeenStorageKey && event.newValue) {
       try {
