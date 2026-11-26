@@ -4138,12 +4138,12 @@ async function requestMabelArtwork(context, targetElement) {
   const source = context.source || "autonomous";
   const visitorPortrait = isVisitorPortraitRequest(context.message);
   const appearanceDetails = visitorAppearanceDetails(context.message);
-  const requestedSubject = visitorPortrait ? "visitor" : (context.comfortRequest
+  const subjectForWorker = visitorPortrait ? "visitor" : (context.comfortRequest
     ? (context.comfortSubject || "Mabel beside her visitor")
     : requestedArtworkDescriptionSubject(context.message));
   const selfPortrait = requestedArtworkSubject(context.message) === "mabel";
   const storedReference = !visitorPortrait && !context.comfortRequest && !selfPortrait
-    ? findSharedArtReference(requestedSubject)
+    ? findSharedArtReference(subjectForWorker)
     : null;
   let artwork = null;
   let declined = false;
@@ -4157,7 +4157,7 @@ async function requestMabelArtwork(context, targetElement) {
         source: source,
         message: context.message || "",
         comfortRequest: context.comfortRequest === true,
-        requestedSubject: requestedSubject,
+        requestedSubject: subjectForWorker,
         visitorPortrait: visitorPortrait,
         visitorAppearance: appearanceDetails,
         visitorPreferences: visitorProfile.facts.slice(0, 12).map(function (fact) { return fact.text; }),
