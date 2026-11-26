@@ -4209,7 +4209,7 @@ function recentRequestedArtworkSubject() {
 
 function requestedArtworkSubject(message) {
   const text = String(message || "").trim();
-  if (/\b(?:draw|sketch|paint|illustrate)\s+(?:us|both of us)(?:\s+together)?\b|\b(?:draw|sketch|paint|illustrate)\s+(?:me and you|you and me)\b|\b(?:draw|sketch|paint|illustrate)\s+us\s+together\b/i.test(text)) {
+  if (/\b(?:draw|sketch|paint|illustrate)\s+(?:us|both of us)(?:\s+together)?\b|\b(?:draw|sketch|paint|illustrate)\s+(?:me and you|you and me|me with mabel|mabel and me)\b|\b(?:draw|sketch|paint|illustrate)\s+us\s+together\b/i.test(text)) {
     return "Mabel and her visitor";
   }
   if (/\b(?:draw|sketch|paint|illustrate)\s+(?:it|that|this)(?:\s+again)?\b|\b(?:draw|sketch|paint|illustrate)\s+another\s+one\b|\b(?:draw|sketch|paint|illustrate)\s+the\s+same\b/i.test(text)) {
@@ -4229,7 +4229,7 @@ function requestedArtworkSubject(message) {
     [/\b(?:flower|bouquet)\b/i, "flower"], [/\b(?:mushroom|toadstool)\b/i, "mushroom"],
     [/\bhorse\b/i, "horse"], [/\bcow\b/i, "cow"], [/\bdolphin\b/i, "dolphin"],
     [/\b(?:car|automobile|vehicle)\b/i, "car"],
-    [/\b(?:man|woman|person|human)\b/i, "person"],
+    [/\bman\b/i, "man"], [/\bwoman\b/i, "woman"], [/\b(?:person|human)\b/i, "person"],
     [/\b(?:mouse|mice)\b/i, "mouse"],
     [/\bfossil\b/i, "fossil"], [/\bbutton\b/i, "button"], [/\bshell\b/i, "shell"],
     [/\bmoon\b/i, "moon"], [/\bstar\b/i, "star"], [/\bfish\b/i, "fish"],
