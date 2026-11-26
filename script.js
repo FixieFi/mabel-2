@@ -4418,6 +4418,12 @@ async function requestMabelArtwork(context, targetElement) {
     if (response.ok) {
       const data = await response.json();
       artwork = data.artwork || null;
+      if (context.referenceRetry && artwork &&
+          (!Array.isArray(artwork.vectorPaths) || artwork.vectorPaths.length < 8)) {
+        // Very sparse reference outputs are not useful as a second study; the
+        // subject-specific local renderer will make one clear fallback instead.
+        artwork = null;
+      }
       if (typeof data.referenceObservation === "string" && data.referenceObservation.trim()) {
         context.referenceObservation = data.referenceObservation.trim().slice(0, 700);
       }
