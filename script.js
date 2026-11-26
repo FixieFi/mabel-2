@@ -2709,6 +2709,21 @@ async function refreshSharedMabelBrain() {
     const data = await response.json();
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
+      if (mabel && Array.isArray(data.brain.lifeLog)) {
+        data.brain.lifeLog.slice().reverse().forEach(function (entry) {
+          if (!entry || !entry.id || mabel.feed.some(function (saved) { return saved && saved.sharedLifeId === entry.id; })) return;
+          mabel.feed.unshift({
+            id: "shared-" + entry.id,
+            sharedLifeId: entry.id,
+            at: entry.at || now(),
+            kind: entry.kind || "did",
+            text: entry.text || "Mabel did something during her day.",
+            why: entry.why || "A moment from Mabel’s own life."
+          });
+        });
+        mabel.feed = mabel.feed.slice(0, 80);
+        updateActivityLog();
+      }
       if (mabel && data.brain.needs && typeof data.brain.needs === "object") {
         mabel.needs = { ...mabel.needs, ...data.brain.needs };
         saveMabel();
@@ -2905,6 +2920,20 @@ function updateResearchLog() {
     }
     if (entry.failed) {
       sentence.textContent = "Mabel searched for “" + searchTerm + "” at the Library, but the search did not return a usable result. She’ll try again later.";
+      item.appendChild(sentence);
+      list.appendChild(item);
+      return;
+    }
+    if (entry.requestType === "art-reference") {
+      sentence.textContent = "At the Library, Mabel looked up “" + searchTerm + "” to find a visual reference for " + (entry.focusQuestionTitle || subject) + ".";
+      if (firstSource) {
+        const link = document.createElement("a");
+        link.href = safeExternalUrl(firstSource.url) || "#";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = " She found “" + firstSource.title + "”.";
+        sentence.appendChild(link);
+      }
       item.appendChild(sentence);
       list.appendChild(item);
       return;
