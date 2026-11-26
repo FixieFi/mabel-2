@@ -64,6 +64,7 @@ const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
 const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
 const MABEL_BRAIN_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-brain";
+const sharedHobbySyncQueueStorageKey = "mabel-shared-hobby-sync-queue-v1";
 
 const mabelStorageKey = "mabel-character-v5";
 const conversationStorageKey = "mabel-conversation-session-v3";
@@ -775,13 +776,86 @@ function persistSharedNeeds() {
   }).catch(function () {});
 }
 
-function persistSharedHobbyInterest(interest) {
+function loadSharedHobbySyncQueue() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(sharedHobbySyncQueueStorageKey) || "[]");
+    return Array.isArray(saved) ? saved.filter(function (item) {
+      return item && item.interest && item.interest.title;
+    }).slice(0, 30) : [];
+  } catch (error) { return []; }
+}
+
+function saveSharedHobbySyncQueue(queue) {
+  try { localStorage.setItem(sharedHobbySyncQueueStorageKey, JSON.stringify(queue.slice(0, 30))); }
+  catch (error) { /* The next visit can rebuild this queue from Mabel's browser state. */ }
+}
+
+let sharedHobbySyncInProgress = false;
+
+function queueSharedHobbyInterest(interest) {
   if (!interest || interest.kind !== "hobby" || !isConcreteHumanHobby(interest.title)) return;
-  fetch(MABEL_BRAIN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind: "hobby", interest: { id: interest.id, title: interest.title, question: interest.question, reason: interest.reason || interest.originText || "", pull: interest.pull || 0.5 } })
-  }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
+  const payload = {
+    id: String(interest.id || interest.title).slice(0, 100),
+    title: String(interest.title).slice(0, 100),
+    question: String(interest.question || "What might Mabel learn by practising " + interest.title + "?").slice(0, 220),
+    reason: String(interest.reason || interest.originText || "This activity kept catching Mabel's attention.").slice(0, 180),
+    pull: typeof interest.pull === "number" ? interest.pull : 0.5
+  };
+  const queue = loadSharedHobbySyncQueue();
+  const key = normalizeInterestTitle(payload.title);
+  const existing = queue.findIndex(function (item) {
+    return normalizeInterestTitle(item.interest && item.interest.title) === key;
+  });
+  const queued = { id: "shared-hobby-" + key, interest: payload };
+  if (existing >= 0) queue[existing] = queued;
+  else queue.unshift(queued);
+  saveSharedHobbySyncQueue(queue.slice(0, 30));
+  if (sharedMabelBrain) flushSharedHobbySyncQueue();
+}
+
+async function flushSharedHobbySyncQueue() {
+  if (sharedHobbySyncInProgress || !sharedMabelBrain) return;
+  sharedHobbySyncInProgress = true;
+  let wroteAny = false;
+  try {
+    const queuedItems = loadSharedHobbySyncQueue();
+    for (const queued of queuedItems) {
+      const currentQueue = loadSharedHobbySyncQueue();
+      if (!currentQueue.some(function (item) { return item.id === queued.id; })) continue;
+      try {
+        const response = await fetch(MABEL_BRAIN_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "hobby", interest: queued.interest })
+        });
+        if (!response.ok) continue;
+        saveSharedHobbySyncQueue(loadSharedHobbySyncQueue().filter(function (item) {
+          return item.id !== queued.id;
+        }));
+        wroteAny = true;
+      } catch (error) {
+        // Keep the hobby queued and retry after the shared Brain responds again.
+      }
+    }
+  } finally {
+    sharedHobbySyncInProgress = false;
+    if (wroteAny) window.setTimeout(refreshSharedMabelBrain, 250);
+  }
+}
+
+function queueBrowserHobbiesForSharedBrain() {
+  if (!mabel || !sharedMabelBrain) return;
+  const sharedTitles = new Set((Array.isArray(sharedMabelBrain.interests) ? sharedMabelBrain.interests : [])
+    .filter(function (interest) { return interest && interest.kind === "hobby"; })
+    .map(function (interest) { return normalizeInterestTitle(interest.title); }));
+  mabel.interests.filter(function (interest) {
+    return interest && interest.kind === "hobby" && !sharedTitles.has(normalizeInterestTitle(interest.title));
+  }).forEach(queueSharedHobbyInterest);
+  flushSharedHobbySyncQueue();
+}
+
+function persistSharedHobbyInterest(interest) {
+  queueSharedHobbyInterest(interest);
 }
 
 function promoteResearchIdeaToInterest(candidate, spark) {
@@ -2816,6 +2890,7 @@ async function refreshSharedMabelBrain() {
     const data = await response.json();
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
+      queueBrowserHobbiesForSharedBrain();
       if (mabel && Array.isArray(data.brain.lifeLog)) {
         data.brain.lifeLog.slice().reverse().forEach(function (entry) {
           if (!entry || !entry.id || mabel.feed.some(function (saved) { return saved && saved.sharedLifeId === entry.id; })) return;
