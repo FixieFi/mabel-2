@@ -317,6 +317,8 @@ const mabelPostboxStorageKey = "mabel-private-postbox-v1";
 const comfortPostboxQueueStorageKey = "mabel-comfort-postbox-queue-v1";
 let comfortPostboxQueue = [];
 const postboxSeenStorageKey = "mabel-viewed-postbox-item-v1";
+const artworkFeedbackStorageKey = "mabel-artwork-feedback-v1";
+const pendingArtworkFeedbackStorageKey = "mabel-pending-artwork-feedback-v1";
 const researchShareCountStorageKey = "mabel-postbox-research-shares-v1";
 let mabelPostboxItems = [];
 let viewedPostboxIds = new Set();
@@ -464,21 +466,27 @@ function loadCuriosityPostboxQueue() {
   try {
     const saved = localStorage.getItem(curiosityPostboxQueueStorageKey);
     const parsed = saved ? JSON.parse(saved) : [];
-    return Array.isArray(parsed) ? parsed.slice(0, 8) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(function (item) { return item && item.keepTrigger === "treasure-box"; }).slice(-8)
+      : [];
   } catch (error) { return []; }
 }
 function saveCuriosityPostboxQueue() {
   try { localStorage.setItem(curiosityPostboxQueueStorageKey, JSON.stringify(curiosityPostboxQueue.slice(0, 8))); } catch (error) {}
 }
-function queueCuriosityPostboxMail(found, outingAt) {
-  if (!found || !found.name) return;
-  const reason = String(found.note || "").trim();
+function queueTreasureBoxPostboxMail(item, reason) {
+  if (!item || !item.name || inferBindleItemSource(item) !== "wandering") return;
+  const itemId = String(item.id || normalizeInterestTitle(item.name) + "-" + String(item.keptAt || now()).replace(/[^0-9]/g, "").slice(-10));
+  const name = String(item.name).slice(0, 80);
+  const why = String(reason || item.keptReason || "").trim().replace(/[.!?]+$/, "");
+  curiosityPostboxQueue = curiosityPostboxQueue.filter(function (queued) { return queued && queued.id !== "treasure-mail-" + itemId; });
   curiosityPostboxQueue.push({
-    id: "curiosity-mail-" + Date.now() + "-" + Math.floor(Math.random() * 10000),
+    id: "treasure-mail-" + itemId,
+    keepTrigger: "treasure-box",
     deliverAt: Date.now() + 45 * 1000 + Math.floor(Math.random() * 75 * 1000),
-    title: "Something caught Mabel’s curiosity",
-    text: "I keep thinking about the " + found.name + (reason ? ". " + reason.replace(/[.!?]+$/, "") : "") + ". I wonder what its story is, and I’d like to find out more.",
-    sourceAt: outingAt || now()
+    title: "A little treasure Mabel kept",
+    text: "I tucked the " + name + " into my treasure box because " + (why || "it stayed on my mind") + ". I thought you might like to know I decided to keep it.",
+    sourceAt: item.keptAt || now()
   });
   curiosityPostboxQueue = curiosityPostboxQueue.slice(-8);
   saveCuriosityPostboxQueue();
@@ -900,14 +908,27 @@ function saveBindle() {
   }
 }
 
+function inferBindleItemSource(item) {
+  if (!item) return "";
+  if (item.source) return item.source;
+  const objects = mabel && mabel.world && Array.isArray(mabel.world.objects) ? mabel.world.objects : [];
+  if (item.giftId) {
+    const linked = objects.find(function (object) { return object && object.id === item.giftId; });
+    if (linked && linked.source) return linked.source;
+  }
+  const name = normalizeInterestTitle(item.name || "");
+  if (!name) return "";
+  const found = objects.find(function (object) {
+    return object && object.source === "wandering" && normalizeInterestTitle(object.name || "") === name;
+  });
+  return found ? "wandering" : "";
+}
+
 function recordBindleDeparture(item, action, at) {
   if (!item || !item.name) return;
   bindle.history = Array.isArray(bindle.history) ? bindle.history : [];
   const giftId = item.giftId || "";
-  const linkedObject = giftId && mabel.world && Array.isArray(mabel.world.objects)
-    ? mabel.world.objects.find(function (object) { return object && object.id === giftId; })
-    : null;
-  const itemSource = item.source || linkedObject && linkedObject.source || "";
+  const itemSource = inferBindleItemSource(item);
   bindle.history.unshift({
     name: String(item.name),
     note: String(item.note || ""),
@@ -961,8 +982,10 @@ function bindleItemResonance(item) {
 
 function moveBindleItemToTreasureBox(item, reason) {
   bindle.treasureBox = Array.isArray(bindle.treasureBox) ? bindle.treasureBox : [];
-  bindle.treasureBox.unshift({ ...item, keptReason: reason, keptAt: now() });
+  const keptItem = { ...item, source: inferBindleItemSource(item), keptReason: reason, keptAt: now() };
+  bindle.treasureBox.unshift(keptItem);
   bindle.treasureBox = bindle.treasureBox.slice(0, 30);
+  if (keptItem.source === "wandering") queueTreasureBoxPostboxMail(keptItem, reason);
   if (item && item.giftId && mabel.world && Array.isArray(mabel.world.objects)) {
     const gift = mabel.world.objects.find(function (object) { return object && object.id === item.giftId; });
     if (gift) {
@@ -2224,7 +2247,7 @@ function applyExplorationFinds(findings) {
         mabel.needs.food = clampNeed(mabel.needs.food + 0.24);
         addFeedEntry({ kind: "did", text: "Mabel found and ate " + name + ".", why: note || "She was hungry." });
       } else {
-        bindle.food.unshift({ name: name, note: note });
+        bindle.food.unshift({ id: "wander-food-" + Date.now() + "-" + Math.floor(Math.random() * 100000), name: name, note: note, source: "wandering" });
         trimBindleItems(bindle.food, 8);
       }
     } else if (kind === "water") {
@@ -2232,13 +2255,14 @@ function applyExplorationFinds(findings) {
         mabel.needs.water = clampNeed(mabel.needs.water + 0.26);
         addFeedEntry({ kind: "did", text: "Mabel found water and had a drink.", why: note || name });
       } else {
-        bindle.water.unshift({ name: name, note: note });
+        bindle.water.unshift({ id: "wander-water-" + Date.now() + "-" + Math.floor(Math.random() * 100000), name: name, note: note, source: "wandering" });
         trimBindleItems(bindle.water, 5);
       }
     } else {
-      bindle.treasures.unshift({ name: name, note: note });
+      const findId = "wander-find-" + Date.now() + "-" + Math.floor(Math.random() * 100000);
+      bindle.treasures.unshift({ id: findId, name: name, note: note, source: "wandering" });
       trimBindleItems(bindle.treasures, 12);
-      mabel.world.objects.unshift({ name: name, at: now(), source: "wandering", visitSessionId: currentVisitorSessionId(), note: note, reaction: "" });
+      mabel.world.objects.unshift({ id: findId, name: name, at: now(), source: "wandering", visitSessionId: currentVisitorSessionId(), note: note, reaction: "" });
       mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
       mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
     }
@@ -2376,7 +2400,6 @@ async function handleExplore(options) {
         originAt: outing.at,
         grounded: true
       });
-      queueCuriosityPostboxMail(found, outing.at);
     });
     const researchIdeasFromFinds = finds.map(function (found) {
       const evidence = "Mabel found " + found.name + " while wandering. " + String(found.note || "");
@@ -3270,7 +3293,11 @@ function updateBindle() {
       row.className = "bindle-item";
       if (value && value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
       row.textContent = value.name || String(value);
-      const source = value && (value.source || value.giftId && (mabel.world.objects || []).find(function (object) { return object && object.id === value.giftId; })?.source);
+      const source = inferBindleItemSource(value);
+      if (value && source === "wandering" && !value.source) {
+        value.source = "wandering";
+        historyRepaired = true;
+      }
       if (value && source === "visitor") {
         if (value.giftId) row.id = "bindle-gift-" + String(value.giftId).replace(/[^a-z0-9_-]/gi, "");
         row.classList.add("visitor-gift");
