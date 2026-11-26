@@ -939,15 +939,23 @@ async function handleSharedWorldEvent(request, env) {
       return jsonResponse({ error: "A verified encyclopedia reference is needed." }, 400);
     }
     const key = makeId(subject);
+    state.artReferences = Array.isArray(state.artReferences) ? state.artReferences : [];
+    const prior = state.artReferences.find(item => makeId(item.subject || "") === key) || {};
+    const suppliedAliases = Array.isArray(supplied.aliases)
+      ? supplied.aliases.filter(item => typeof item === "string").map(item => cleanText(item, 80)).filter(Boolean).slice(0, 8)
+      : [];
     const saved = {
       subject,
+      aliases: Array.from(new Set([subject, ...suppliedAliases])),
       imageUrl,
       pageUrl,
       sourceTitle: cleanText(supplied.sourceTitle, 160),
       fact: cleanText(supplied.fact, 260),
-      at: cleanText(supplied.at, 40) || new Date().toISOString()
+      visualNotes: cleanText(supplied.visualNotes, 700) || cleanText(prior.visualNotes, 700),
+      at: cleanText(supplied.at, 40) || new Date().toISOString(),
+      lastUsedAt: cleanText(prior.lastUsedAt, 40),
+      useCount: Math.max(0, Number(prior.useCount) || 0)
     };
-    state.artReferences = Array.isArray(state.artReferences) ? state.artReferences : [];
     state.artReferences = state.artReferences.filter(item => makeId(item.subject || "") !== key);
     state.artReferences.unshift(saved);
     state.artReferences = state.artReferences.slice(0, 40);
