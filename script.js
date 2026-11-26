@@ -7109,7 +7109,7 @@ async function handleWander(options) {
       const encyclopediaResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
       if (encyclopediaResult && Array.isArray(encyclopediaResult.sources)) {
         const fallbackSources = encyclopediaResult.sources.filter(function (source) {
-          return source && source.title && safeExternalUrl(source.url);
+          return source && source.title && !/disambiguation/i.test(source.title) && safeExternalUrl(source.url);
         }).map(function (source) {
           return {
             title: String(source.title).slice(0, 160),
