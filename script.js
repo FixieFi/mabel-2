@@ -1746,7 +1746,8 @@ function addFeedEntry(entry) {
     const normalizeAction = function (value) {
       return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     };
-    if (latestAction && normalizeAction(latestAction.text) === normalizeAction(entry.text)) return latestAction;
+    const latestActionAge = latestAction ? Date.now() - Date.parse(latestAction.at || "") : Infinity;
+    if (!entry.force && latestAction && normalizeAction(latestAction.text) === normalizeAction(entry.text) && latestActionAge >= 0 && latestActionAge < 5 * 60 * 1000) return latestAction;
   }
   const savedEntry = { at: now(), ...entry, ok: true };
   mabel.feed.unshift(savedEntry);
@@ -2033,6 +2034,10 @@ function scheduleWanderingResearch(researchLead) {
   window.setTimeout(function () {
     const queuedIdea = researchIdeas.find(function (idea) { return idea && idea.id === researchLead.id; });
     if (!mabel || !queuedIdea || queuedIdea.lastResearchedAt) return;
+    if (queuedIdea.requestType === "art-reference") {
+      queuedIdea.artReferenceAttempts = (Number(queuedIdea.artReferenceAttempts) || 0) + 1;
+      saveResearchIdeas();
+    }
     mabel.now.doing = "going to the Library";
     mabel.now.thought = "I want to find out a little more about " + queuedIdea.title + ".";
     const libraryStartedAt = now();
@@ -2040,6 +2045,7 @@ function scheduleWanderingResearch(researchLead) {
     addFeedEntry({
       at: libraryStartedAt,
       kind: "did",
+      force: true,
       text: queuedIdea.requestType === "art-reference"
         ? "Mabel went to the Library to find a visual reference for " + queuedIdea.title + "."
         : "Mabel went to the Library to research " + queuedIdea.title + ".",
@@ -2055,6 +2061,15 @@ function scheduleWanderingResearch(researchLead) {
         if (exploreStatus) exploreStatus.textContent = "Mabel has come back from the Library with a little fact for your postbox.";
       } else if (exploreStatus) {
         exploreStatus.textContent = "Sometimes a finding sends Mabel to the Library; today, she has brought back a little wonder.";
+      }
+      if (queuedIdea.requestType === "art-reference" && !(result && result.artReference && result.artReference.imageUrl)) {
+        if ((Number(queuedIdea.artReferenceAttempts) || 0) < 3) {
+          window.setTimeout(function () { scheduleWanderingResearch(queuedIdea); }, 5 * 60 * 1000);
+        } else {
+          addFeedEntry({ kind: "did", text: "Mabel will look for another visual reference for " + queuedIdea.title + " later.", why: "The first few Library searches did not return a picture the art studio could use." });
+          saveMabel();
+          updatePage();
+        }
       }
     });
   }, delay);
@@ -6332,6 +6347,85 @@ function chooseResearchPostcardSentence(research) {
   return "";
 }
 
+async function redrawResearchReference(focusInterest, reference, researchEntry) {
+  if (!mabel || !focusInterest || !reference || !reference.imageUrl) return false;
+  mabel.now.doing = "painting in her art studio";
+  mabel.now.thought = "I want to see whether this new detail helps me draw " + focusInterest.title + ".";
+  mabel.now.updatedAt = now();
+  addFeedEntry({
+    kind: "did",
+    force: true,
+    text: "Mabel went to her art studio to try drawing " + focusInterest.title + " again.",
+    why: "She had studied a visual reference at the Library and wanted to explore the subject more creatively."
+  });
+  saveMabel();
+  updatePage();
+  const inspiration = {
+    title: focusInterest.title,
+    question: "Mabel wanted to explore " + focusInterest.title + " more creatively after studying a visual reference at the Library."
+  };
+  const artContext = {
+    source: focusInterest.isGiftArtReference ? "autonomous" : "visitor",
+    message: "Draw " + focusInterest.title,
+    referenceImageUrl: reference.imageUrl,
+    referenceTitle: reference.sourceTitle || "",
+    referenceFact: reference.fact || "",
+    referenceRetry: true,
+    referenceImageInstruction: "Study the actual image at the supplied reference URL. Use its visible shape and distinguishing details to guide a fresh drawing of " + focusInterest.title + " in Mabel’s handmade style; do not paste, trace, or embed the reference image.",
+    inspiration: inspiration
+  };
+  const refinedArtwork = await requestMabelArtwork(artContext, null);
+  if (refinedArtwork) {
+    const firstFact = reference.fact ? " One thing Mabel learned: " + reference.fact : "";
+    if (focusInterest.isGiftArtReference) {
+      addFeedEntry({
+        kind: "did",
+        text: "Mabel added a new study of " + focusInterest.title + " to her Gallery.",
+        why: "A visitor’s gift inspired the first drawing; Mabel returned to the Library for a visual reference and practiced it again."
+      });
+    } else {
+      addMabelPostboxItem({
+        kind: "artwork",
+        title: "Mabel brought you a new drawing of " + focusInterest.title,
+        text: inspiration.question + firstFact,
+        artwork: refinedArtwork,
+        sources: [{ title: reference.sourceTitle, url: reference.pageUrl }]
+      });
+      addFeedEntry({
+        kind: "did",
+        text: "Mabel brought her new drawing of " + focusInterest.title + " to the Postbox.",
+        why: "She wanted to share the second study after learning from a visual reference."
+      });
+    }
+    if (researchEntry) researchEntry.redrawDeliveredAt = now();
+    saveResearchLog();
+    updatePage();
+    return true;
+  }
+
+  addFeedEntry({
+    kind: "did",
+    text: "Mabel could not finish the second drawing of " + focusInterest.title + " yet.",
+    why: "The Library reference is saved, so she can return to the art studio later."
+  });
+  if (researchEntry) {
+    researchEntry.redrawAttempts = Math.max(0, Number(researchEntry.redrawAttempts) || 0) + 1;
+    if (researchEntry.redrawAttempts >= 3) {
+      researchEntry.redrawFailedAt = now();
+    } else {
+      const retryDelay = 5 * 60 * 1000;
+      researchEntry.redrawDueAt = new Date(Date.now() + retryDelay).toISOString();
+      window.setTimeout(function () {
+        redrawResearchReference(focusInterest, reference, researchEntry);
+      }, retryDelay);
+    }
+    saveResearchLog();
+  }
+  saveMabel();
+  updatePage();
+  return false;
+}
+
 async function handleWander(options) {
   if (!mabel) return;
   const focusInterest = options && options.focusInterest;
@@ -6609,7 +6703,12 @@ async function handleWander(options) {
         normalizeInterestTitle(item.title) === normalizeInterestTitle(focusInterest.ideaTitle || focusInterest.title);
     });
     if (researchedIdea) {
-      researchedIdea.lastResearchedAt = research.at;
+      const usableArtReference = focusInterest.requestType === "art-reference" && research.artReference && research.artReference.imageUrl;
+      if (focusInterest.requestType === "art-reference" && !usableArtReference && (Number(researchedIdea.artReferenceAttempts) || 0) < 3) {
+        researchedIdea.lastResearchedAt = "";
+      } else {
+        researchedIdea.lastResearchedAt = research.at;
+      }
       saveResearchIdeas();
     }
 
@@ -6671,8 +6770,11 @@ async function handleWander(options) {
     mabel.now.mood = "curious";
     mabel.now.updatedAt = now();
     addFeedEntry({
-      kind: "noticed",
-      text: "Mabel researched: " + research.searchQuestion + ".",
+      at: research.at,
+      kind: "did",
+      force: true,
+      source: "library",
+      text: "Mabel researched “" + research.searchQuestion + "” at the Library.",
       why: [research.researchMethod, research.researchSummary].filter(Boolean).join(" ")
     });
 
@@ -6687,64 +6789,11 @@ async function handleWander(options) {
       }).then(function (response) {
         if (response.ok) refreshSharedMabelBrain();
       }).catch(function () {});
-      await new Promise(function (resolve) { window.setTimeout(resolve, 90 * 1000 + Math.random() * 90 * 1000); });
-      mabel.now.doing = "painting in her art studio";
-      mabel.now.thought = "I want to see whether this new detail helps me draw " + focusInterest.title + ".";
-      mabel.now.updatedAt = now();
-      addFeedEntry({
-        kind: "did",
-        text: "Mabel went to her art studio to try drawing " + focusInterest.title + " again.",
-        why: "She had studied a visual reference at the Library and wanted to explore the subject more creatively."
-      });
-      saveMabel();
-      updatePage();
-      const inspiration = {
-        title: focusInterest.title,
-        question: "Mabel wanted to explore " + focusInterest.title + " more creatively after studying a visual reference at the Library."
-      };
-      const artContext = {
-        source: focusInterest.isGiftArtReference ? "autonomous" : "visitor",
-        message: "Draw " + focusInterest.title,
-        referenceImageUrl: reference.imageUrl,
-        referenceTitle: reference.sourceTitle || "",
-        referenceFact: reference.fact || "",
-        referenceRetry: true,
-        referenceImageInstruction: "Study the actual image at the supplied reference URL. Use its visible shape and distinguishing details to guide a fresh drawing of " + focusInterest.title + " in Mabel’s handmade style; do not paste, trace, or embed the reference image.",
-        inspiration: inspiration
-      };
-      let refinedArtwork = await requestMabelArtwork(artContext, null);
-      if (!refinedArtwork && !artContext.referenceUnavailable) refinedArtwork = await requestMabelArtwork({ ...artContext, forceLocalFallback: true }, null);
-      if (refinedArtwork) {
-        const firstFact = reference.fact ? " One thing Mabel learned: " + reference.fact : "";
-        if (focusInterest.isGiftArtReference) {
-          addFeedEntry({
-            kind: "did",
-            text: "Mabel added a new study of " + focusInterest.title + " to her Gallery.",
-            why: "A visitor’s gift inspired the first drawing; Mabel returned to the Library for a visual reference and practiced it again."
-          });
-        } else {
-          addMabelPostboxItem({
-            kind: "artwork",
-            title: "Mabel brought you a new drawing of " + focusInterest.title,
-            text: inspiration.question + firstFact,
-            artwork: refinedArtwork,
-            sources: [{ title: reference.sourceTitle, url: reference.pageUrl }]
-          });
-          addFeedEntry({
-            kind: "did",
-            text: "Mabel brought her new drawing of " + focusInterest.title + " to the Postbox.",
-            why: "She wanted to share the second study after learning from a visual reference."
-          });
-        }
-        updatePage();
-      } else if (artContext.referenceUnavailable) {
-        addFeedEntry({
-          kind: "did",
-          text: "Mabel could not study the Library picture for her drawing yet.",
-          why: artContext.referenceUnavailableReason || "The image reference was unavailable to the artwork studio."
-        });
-        updatePage();
-      }
+      const redrawDelay = 90 * 1000 + Math.random() * 90 * 1000;
+      research.redrawDueAt = new Date(Date.now() + redrawDelay).toISOString();
+      saveResearchLog();
+      await new Promise(function (resolve) { window.setTimeout(resolve, redrawDelay); });
+      await redrawResearchReference(focusInterest, reference, research);
     }
     if (wanderStatus) {
       wanderStatus.textContent = relevant
@@ -7041,8 +7090,32 @@ function startMabel() {
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks().filter(function (spark) { return isGroundedResearchTrigger(spark); });
   researchIdeas = loadResearchIdeas();
+  const unfinishedReferenceRedraw = researchLog.find(function (entry) {
+    return entry && entry.requestType === "art-reference" && entry.artReference && entry.artReference.imageUrl &&
+      !entry.redrawDeliveredAt && !entry.redrawFailedAt && (Number(entry.redrawAttempts) || 0) < 3;
+  });
+  if (unfinishedReferenceRedraw) {
+    const referenceIdea = researchIdeas.find(function (idea) {
+      return idea && normalizeInterestTitle(idea.title) === normalizeInterestTitle(unfinishedReferenceRedraw.focusQuestionTitle || unfinishedReferenceRedraw.focusTitle);
+    });
+    const referenceFocus = referenceIdea || {
+      title: unfinishedReferenceRedraw.artReference.subject || unfinishedReferenceRedraw.focusTitle,
+      requestType: "art-reference",
+      source: unfinishedReferenceRedraw.focusSource || "conversation",
+      isGiftArtReference: false
+    };
+    const dueAt = Date.parse(unfinishedReferenceRedraw.redrawDueAt || "");
+    const resumeDelay = Number.isFinite(dueAt) ? Math.max(15000, dueAt - Date.now()) : 30000;
+    window.setTimeout(function () {
+      redrawResearchReference(referenceFocus, unfinishedReferenceRedraw.artReference, unfinishedReferenceRedraw);
+    }, resumeDelay);
+  }
   const pendingResearch = researchIdeas.filter(function (idea) {
-    return idea && ["research-follow-up", "art-reference"].includes(idea.requestType) && !idea.lastResearchedAt;
+    const hasSavedReference = idea && idea.requestType === "art-reference" && researchLog.some(function (entry) {
+      return entry && entry.requestType === "art-reference" && entry.artReference && entry.artReference.imageUrl &&
+        normalizeInterestTitle(entry.focusQuestionTitle || entry.focusTitle) === normalizeInterestTitle(idea.title);
+    });
+    return idea && ["research-follow-up", "art-reference"].includes(idea.requestType) && !idea.lastResearchedAt && !hasSavedReference;
   });
   const resumeResearch = pendingResearch.find(function (idea) { return idea.requestType === "art-reference"; }) || pendingResearch[0];
   if (resumeResearch) {
