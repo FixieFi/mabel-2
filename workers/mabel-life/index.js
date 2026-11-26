@@ -189,7 +189,13 @@ async function loadState(env) {
     : [];
   state.crafting = state.crafting && typeof state.crafting === "object" ? state.crafting : structuredClone(DEFAULT_STATE.crafting);
   state.crafting.skillLevel = Math.max(0, Math.min(5, Number(state.crafting.skillLevel) || 0));
-  state.crafting.materials = Array.isArray(state.crafting.materials) ? state.crafting.materials.filter(item => item && typeof item.name === "string").slice(0, 30) : [];
+  state.crafting.materials = Array.isArray(state.crafting.materials)
+    ? state.crafting.materials
+        .filter(item => item && typeof item.name === "string")
+        .map(item => ({ ...item, type: craftingMaterialType(item.name) }))
+        .filter(item => Boolean(item.type))
+        .slice(0, 30)
+    : [];
   state.crafting.projects = Array.isArray(state.crafting.projects) ? state.crafting.projects.filter(item => item && typeof item.title === "string").slice(0, 12) : [];
   state.crafting.artInspirations = Array.isArray(state.crafting.artInspirations) ? state.crafting.artInspirations.filter(item => item && typeof item.key === "string").slice(0, 12) : [];
   state.crafting.lastIdeaAt = cleanText(state.crafting.lastIdeaAt, 40) || null;
@@ -364,7 +370,7 @@ function bakingIngredientType(value) {
   if (/\b(sunflower seeds?|sesame seeds?|seeds?)\b/.test(name)) return "seeds";
   if (/\b(flour|crumbs?)\b/.test(name)) return "flour";
   if (/\b(honey|honeycomb)\b/.test(name)) return "honey";
-  if (/\b(mushrooms?)\b/.test(name)) return "mushroom";
+  if (/\b(edible|known-safe) mushrooms?\b/.test(name)) return "mushroom";
   return "";
 }
 
