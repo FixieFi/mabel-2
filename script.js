@@ -2799,6 +2799,17 @@ function safeExternalUrl(value) {
   }
 }
 
+function safeWikimediaImageUrl(value) {
+  const safe = safeExternalUrl(value);
+  if (!safe) return "";
+  try {
+    const host = new URL(safe).hostname.toLowerCase();
+    return host === "upload.wikimedia.org" || host.endsWith(".wikimedia.org") ? safe : "";
+  } catch (error) {
+    return "";
+  }
+}
+
 function syncNoticedItemsIntoBindle() {
   ensureHollowWorld();
   bindle = bindle && typeof bindle === "object" ? bindle : { food: [], water: [], treasures: [] };
@@ -6377,10 +6388,10 @@ async function handleWander(options) {
         }
       }
     }
-    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return source.imageUrl; })) {
+    if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return safeWikimediaImageUrl(source.imageUrl); })) {
       const imageResult = await fetchPublicResearchFallback(searchTerm).catch(function () { return null; });
       const imageSources = imageResult && Array.isArray(imageResult.sources) ? imageResult.sources.filter(function (source) {
-        return source && source.title && source.imageUrl && safeExternalUrl(source.url);
+        return source && source.title && safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url);
       }) : [];
       const imageRelated = imageSources.filter(function (source) {
         return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
@@ -6396,7 +6407,7 @@ async function handleWander(options) {
       const commonsResult = await fetchWikimediaCommonsReference(searchTerm).catch(function () { return null; });
       const commonsSources = commonsResult && Array.isArray(commonsResult.sources) ? commonsResult.sources : [];
       const commonsRelated = commonsSources.filter(function (source) {
-        return source.imageUrl && safeExternalUrl(source.url) &&
+        return safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url) &&
           researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
       });
       if (commonsRelated.length) {
@@ -6461,11 +6472,11 @@ async function handleWander(options) {
     }
 
     if (focusInterest.requestType === "art-reference") {
-      const visualSource = relatedSources.find(function (source) { return source && safeExternalUrl(source.imageUrl); });
+      const visualSource = relatedSources.find(function (source) { return source && safeWikimediaImageUrl(source.imageUrl); });
       if (visualSource) {
         research.artReference = {
           subject: focusInterest.title,
-          imageUrl: safeExternalUrl(visualSource.imageUrl),
+          imageUrl: safeWikimediaImageUrl(visualSource.imageUrl),
           pageUrl: safeExternalUrl(visualSource.url),
           sourceTitle: visualSource.title,
           fact: String(visualSource.snippet || "").split(/(?<=[.!?])\s+/)[0].slice(0, 260),
