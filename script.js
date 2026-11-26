@@ -1434,6 +1434,21 @@ function renderMabelCard(artwork) {
     if (/\b(?:beard|facial hair)\b/i.test(visitorAppearance)) {
       softBlob(cx, cy + 22, 13, 8, hairColour, 0.42);
     }
+  } else if (subject === "mouse and cat") {
+    // Keep both requested animals distinct and visible in local fallback art.
+    softBlob(48, 82, 20, 24, palette[2], 0.92);
+    ellipse(37, 60, 8, 13, palette[1], 0.9, -18);
+    ellipse(58, 60, 8, 13, palette[1], 0.9, 18);
+    ellipse(43, 80, 1.8, 2.4, "#432a5e", 0.9, 0);
+    ellipse(53, 80, 1.8, 2.4, "#432a5e", 0.9, 0);
+    path("M 31 104 Q 48 116 65 104 M 64 104 Q 83 116 78 128", palette[1], 1.8, 0.78);
+    const cx = 111;
+    const cy = 83;
+    path("M 91 67 L 88 45 Q 100 51 105 57 Q 118 49 132 45 L 129 68 Q 139 82 130 103 Q 111 121 91 103 Q 82 84 91 67 Z", palette[1], 2, 0.84, palette[1]);
+    ellipse(cx - 10, cy - 2, 2, 2.8, "#432a5e", 0.9, 0);
+    ellipse(cx + 10, cy - 2, 2, 2.8, "#432a5e", 0.9, 0);
+    path("M 106 91 Q 111 96 116 91", "#432a5e", 1.2, 0.82);
+    path("M 91 94 Q 78 91 72 87 M 91 100 Q 78 102 73 104 M 130 94 Q 143 91 148 87 M 130 100 Q 143 102 148 104", palette[2], 0.8, 0.7);
   } else if (subject === "cat") {
     const cx = 78 + random() * 8;
     const cy = 82 + random() * 8;
