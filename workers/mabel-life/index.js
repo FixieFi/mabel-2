@@ -383,7 +383,7 @@ function trackRepeatedHobbyMention(state, message) {
   record.evidence = Array.isArray(record.evidence) ? record.evidence : [];
   record.evidence.unshift(cleanText(text, 180));
   record.evidence = record.evidence.slice(0, 3);
-  if (record.count < 3) return null;
+  if (record.count < 3) return { counted: true, spark: null, interestUpdate: null };
   const existing = state.interests.find(item => makeId(item.id) === key || makeId(item.title) === key);
   const wasHobby = Boolean(existing && existing.kind === "hobby");
   const interest = upsertInterest(state, {
@@ -647,7 +647,7 @@ async function handleReflect(request, env) {
     state.activity = cleanText(data.activity, 180, state.activity);
     await saveState(env, state);
 
-    if (deterministicHobby) {
+    if (deterministicHobby && deterministicHobby.interestUpdate) {
       if (deterministicHobby.spark) spark = deterministicHobby.spark;
       interestUpdate = deterministicHobby.interestUpdate;
     }
