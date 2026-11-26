@@ -19,6 +19,7 @@ const DEFAULT_STATE = {
   lifeLog: [],
   artExhibition: { dayOf: null, candidates: [], works: [] },
   artReferences: [],
+  artFeedback: [],
   drawingPractice: { count: 0, artworkIds: [], firstAt: null, lastAt: null },
   personality: {
     core_traits: ["gentle", "curious", "thoughtful", "quietly playful"],
@@ -176,6 +177,7 @@ async function loadState(env) {
   state.memories = Array.isArray(state.memories) ? state.memories.slice(0, MAX_MEMORIES) : [];
   state.knowledge = Array.isArray(state.knowledge) ? state.knowledge.slice(0, 40) : [];
   state.artReferences = Array.isArray(state.artReferences) ? state.artReferences.slice(0, 40) : [];
+  state.artFeedback = Array.isArray(state.artFeedback) ? state.artFeedback.filter(item => item && typeof item.subject === "string" && ["up", "down"].includes(item.vote)).slice(0, 200) : [];
   state.drawingPractice = state.drawingPractice && typeof state.drawingPractice === "object" ? state.drawingPractice : {};
   state.drawingPractice.count = Math.max(0, Number(state.drawingPractice.count) || 0);
   state.drawingPractice.artworkIds = Array.isArray(state.drawingPractice.artworkIds) ? state.drawingPractice.artworkIds.slice(0, 100) : [];
@@ -1041,6 +1043,31 @@ async function handleSharedWorldEvent(request, env) {
     await saveState(env, state);
     return jsonResponse({ ok: true, artReference: saved });
   }
+  if (kind === "art-feedback") {
+    const supplied = data.feedback && typeof data.feedback === "object" ? data.feedback : {};
+    const id = cleanText(supplied.id, 140);
+    const artworkId = cleanText(supplied.artworkId, 140);
+    const subject = cleanText(supplied.subject, 100);
+    const vote = supplied.vote === "up" || supplied.vote === "down" ? supplied.vote : "";
+    if (!id || !artworkId || !subject || !vote) {
+      return jsonResponse({ error: "A drawing, subject, and thumbs-up or thumbs-down rating are needed." }, 400);
+    }
+    state.artFeedback = Array.isArray(state.artFeedback) ? state.artFeedback : [];
+    const feedback = {
+      id,
+      artworkId,
+      subject,
+      vote,
+      referenceUsed: supplied.referenceUsed === true,
+      referenceTitle: cleanText(supplied.referenceTitle, 120),
+      at: cleanText(supplied.at, 40) || new Date().toISOString()
+    };
+    state.artFeedback = state.artFeedback.filter(item => item && item.id !== id);
+    state.artFeedback.unshift(feedback);
+    state.artFeedback = state.artFeedback.slice(0, 200);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, feedback });
+  }
   if (kind === "drawing-practice") {
     const artworkId = cleanText(data.artworkId, 120);
     const title = cleanText(data.title, 100, "A small drawing");
@@ -1241,6 +1268,7 @@ export default {
           lifeLog: state.lifeLog || [],
           artExhibition: { dayOf: state.artExhibition.dayOf, works: state.artExhibition.works },
           artReferences: state.artReferences,
+          artFeedback: state.artFeedback,
           drawingPractice: state.drawingPractice,
           baking: state.baking,
           coding: state.coding,
