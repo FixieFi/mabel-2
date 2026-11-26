@@ -964,10 +964,20 @@ async function handleSharedWorldEvent(request, env) {
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
   if (kind === "needs") {
-    if (!data.needs || typeof data.needs !== "object") return jsonResponse({ error: "A needs update is needed." }, 400);
-    for (const key of Object.keys(DEFAULT_STATE.needs)) {
-      if (typeof data.needs[key] === "number") state.needs[key] = clamp(data.needs[key]);
+    const eventId = cleanText(data.eventId, 140);
+    state.appliedNeedEvents = Array.isArray(state.appliedNeedEvents) ? state.appliedNeedEvents.slice(-500) : [];
+    if (eventId && state.appliedNeedEvents.includes(eventId)) {
+      return jsonResponse({ ok: true, duplicate: true, needs: state.needs });
     }
+    if (data.deltas && typeof data.deltas === "object") {
+      for (const key of Object.keys(DEFAULT_STATE.needs)) {
+        const delta = Number(data.deltas[key]);
+        if (Number.isFinite(delta)) state.needs[key] = clamp(Number(state.needs[key]) + delta);
+      }
+    } else {
+      return jsonResponse({ error: "Needs changes must be sent as per-action deltas." }, 400);
+    }
+    if (eventId) state.appliedNeedEvents.push(eventId);
     await saveState(env, state);
     return jsonResponse({ ok: true, needs: state.needs });
   }

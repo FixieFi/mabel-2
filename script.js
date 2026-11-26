@@ -317,7 +317,7 @@ let comfortPostboxQueue = [];
 const postboxSeenStorageKey = "mabel-viewed-postbox-item-v1";
 const researchShareCountStorageKey = "mabel-postbox-research-shares-v1";
 let mabelPostboxItems = [];
-let lastViewedPostboxId = "";
+let viewedPostboxIds = new Set();
 
 function loadMabelPostbox() {
   try {
@@ -338,35 +338,52 @@ function latestPostboxMail() {
 }
 
 function markPostboxNoticeSeen() {
-  const latest = latestPostboxMail();
-  if (latest && latest.id) {
-    lastViewedPostboxId = String(latest.id);
-    try { localStorage.setItem(postboxSeenStorageKey, lastViewedPostboxId); } catch (error) {}
-  }
+  const newIds = mabelPostboxItems.filter(function (entry) { return entry && entry.id; }).map(function (entry) { return String(entry.id); });
+  viewedPostboxIds = new Set(Array.from(viewedPostboxIds).concat(newIds).slice(-200));
+  try { localStorage.setItem(postboxSeenStorageKey, JSON.stringify(Array.from(viewedPostboxIds))); } catch (error) {}
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
 function refreshPostboxNotice() {
-  const latest = latestPostboxMail();
-  if (!postboxNoticeCard || !latest || !latest.id) {
-    if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
-    return;
-  }
-  const postboxPanel = document.getElementById("postbox");
-  if (postboxPanel && postboxPanel.classList.contains("active")) {
-    markPostboxNoticeSeen();
-    return;
-  }
-  if (String(latest.id) === lastViewedPostboxId) {
+  if (!postboxNoticeCard) return;
+  const unread = mabelPostboxItems.filter(function (entry) {
+    return entry && entry.id && !viewedPostboxIds.has(String(entry.id)) &&
+      (Boolean(entry.artwork) || (typeof entry.text === "string" && entry.text.trim().length > 0));
+  });
+  if (!unread.length) {
     postboxNoticeCard.classList.add("hidden");
     return;
   }
+  const latest = unread[0];
   const detail = latest.kind === "gift-reaction"
     ? "Mabel noticed your gift and left you a note."
     : latest.kind === "artwork"
       ? "Mabel left a little drawing just for you."
       : "Mabel left you a note in the postbox.";
-  if (postboxNoticeText) postboxNoticeText.textContent = detail;
+  if (postboxNoticeText) {
+    postboxNoticeText.textContent = unread.length > 1
+      ? "You’ve got mail — " + unread.length + " new notes. " + detail
+      : "You’ve got mail. " + detail;
+  }
   postboxNoticeCard.classList.remove("hidden");
+}
+function schedulePostboxArtworkGallery(entry) {
+  if (!entry || !entry.id || !entry.artwork || !entry.artwork.postboxFirst) return;
+  if (!entry.galleryReleaseAt) {
+    entry.galleryReleaseAt = new Date(Date.now() + 30 * 1000).toISOString();
+    saveMabelPostbox();
+  }
+  const remaining = Math.max(1000, Date.parse(entry.galleryReleaseAt) - Date.now());
+  window.setTimeout(function () {
+    const savedEntry = mabelPostboxItems.find(function (item) { return item && String(item.id) === String(entry.id); });
+    if (!savedEntry || !savedEntry.artwork || !savedEntry.artwork.postboxFirst) return;
+    const artwork = { ...savedEntry.artwork };
+    delete artwork.postboxFirst;
+    savedEntry.artwork = artwork;
+    delete savedEntry.galleryReleaseAt;
+    saveMabelPostbox();
+    updateMabelPostbox();
+    saveToMabelGallery(artwork);
+  }, remaining);
 }
 function addMabelPostboxItem(item) {
   if (!item || (!item.text && !item.artwork)) return;
@@ -374,7 +391,7 @@ function addMabelPostboxItem(item) {
   if (mabelPostboxItems.some(function (saved) {
     return saved && (String(saved.title || "") + "|" + String(saved.text || "") + "|" + String(saved.at || "")) === duplicateKey;
   })) return;
-  mabelPostboxItems.unshift({
+  const entry = {
     id: item.id || "postbox-" + Date.now(),
     at: item.at || now(),
     kind: item.kind || "note",
@@ -383,11 +400,13 @@ function addMabelPostboxItem(item) {
     relatedGiftId: item.relatedGiftId || "",
     sources: Array.isArray(item.sources) ? item.sources.slice(0, 3) : [],
     artwork: item.artwork || null
-  });
+  };
+  mabelPostboxItems.unshift(entry);
   mabelPostboxItems = mabelPostboxItems.slice(0, 30);
   saveMabelPostbox();
   updateMabelPostbox();
   refreshPostboxNotice();
+  schedulePostboxArtworkGallery(entry);
 }
 function loadComfortPostboxQueue() {
   try {
@@ -700,12 +719,27 @@ function registerSharedDrawing(artwork, context) {
   }).catch(function () {});
 }
 
+let sharedNeedsBaseline = null;
 function persistSharedNeeds() {
   if (!mabel || !mabel.needs) return;
+  const current = { ...mabel.needs };
+  if (!sharedNeedsBaseline) {
+    sharedNeedsBaseline = current;
+    return;
+  }
+  const deltas = {};
+  Object.keys(current).forEach(function (key) {
+    const before = Number(sharedNeedsBaseline[key]);
+    const after = Number(current[key]);
+    if (Number.isFinite(before) && Number.isFinite(after) && Math.abs(after - before) > 0.00001) deltas[key] = after - before;
+  });
+  if (!Object.keys(deltas).length) return;
+  sharedNeedsBaseline = current;
+  const eventId = "needs-" + currentVisitorSessionId() + "-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
   fetch(MABEL_BRAIN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind: "needs", needs: mabel.needs })
+    body: JSON.stringify({ kind: "needs", eventId: eventId, deltas: deltas })
   }).catch(function () {});
 }
 
@@ -1047,7 +1081,7 @@ function renderMabelCard(artwork) {
   node("rect", { x: 0, y: 0, width: 160, height: 160, fill: "#f4ead6", opacity: 0.24 });
 
   // Layered, irregular washes give each picture its own balance and weight.
-  const washCount = referenceStudy ? 1 : 3 + Math.floor(random() * 4);
+  const washCount = referenceStudy ? 2 + Math.floor(random() * 2) : 3 + Math.floor(random() * 4);
   for (let i = 0; i < washCount; i += 1) {
     softBlob(
       25 + random() * 110,
@@ -1060,7 +1094,7 @@ function renderMabelCard(artwork) {
   }
 
   // Loose brush marks keep the drawing from resolving into a repeated icon.
-  const markCount = referenceStudy ? 0 : 18 + Math.floor(random() * 27);
+  const markCount = referenceStudy ? 10 + Math.floor(random() * 9) : 18 + Math.floor(random() * 27);
   for (let i = 0; i < markCount; i += 1) {
     const x = -8 + random() * 176;
     const y = -8 + random() * 176;
@@ -1077,9 +1111,7 @@ function renderMabelCard(artwork) {
     );
   }
 
-  if (artwork.referenceRetry) {
-    // Keep the studied subject clear instead of layering an unrelated motif over it.
-  } else if (motif === "rain") {
+  if (motif === "rain") {
     const drift = -8 + random() * 16;
     for (let i = 0; i < 11 + Math.floor(random() * 13); i += 1) {
       const x = 12 + random() * 136;
@@ -1398,7 +1430,7 @@ function renderMabelCard(artwork) {
     });
   }
 
-  const grainCount = referenceStudy ? 5 : 45;
+  const grainCount = referenceStudy ? 22 : 45;
   for (let i = 0; i < grainCount; i += 1) {
     const x = referenceStudy ? 8 + (i * 29) % 144 : random() * 160;
     const y = referenceStudy ? 10 + (i * 47) % 140 : random() * 160;
@@ -2726,6 +2758,7 @@ async function refreshSharedMabelBrain() {
       }
       if (mabel && data.brain.needs && typeof data.brain.needs === "object") {
         mabel.needs = { ...mabel.needs, ...data.brain.needs };
+        sharedNeedsBaseline = { ...data.brain.needs };
         saveMabel();
         updateNeeds();
       }
@@ -4241,7 +4274,7 @@ async function requestMabelArtwork(context, targetElement) {
         requestedColors: requestedArtworkColors(context.message),
         selfPortrait: selfPortrait,
         referenceImageUrl: context.referenceImageUrl || (storedReference && storedReference.imageUrl) || (selfPortrait ? new URL("images/mabel.png", window.location.href).href : ""),
-        referenceRetry: context.referenceRetry === true,
+        referenceRetry: context.referenceRetry === true || Boolean(storedReference),
         useVisualReference: context.useVisualReference === true || Boolean(storedReference),
         referenceObservation: context.referenceObservation || (storedReference && storedReference.visualNotes) || "",
         referenceTitle: context.referenceTitle || (storedReference && storedReference.sourceTitle) || "",
@@ -4357,7 +4390,7 @@ async function requestMabelArtwork(context, targetElement) {
   }
   const card = renderMabelCard(artwork);
   if (context.comfortRequest) artwork.postboxFirst = true;
-  const sharedArtworkUpdate = context.comfortRequest ? Promise.resolve() : saveToMabelGallery(artwork);
+  const sharedArtworkUpdate = context.comfortRequest || context.deferGallery ? Promise.resolve() : saveToMabelGallery(artwork);
   if (card && targetElement) {
     targetElement.appendChild(document.createElement("br"));
     targetElement.appendChild(card);
@@ -4372,9 +4405,11 @@ async function requestMabelArtwork(context, targetElement) {
       source: "visitor",
       text: context.comfortRequest
         ? "Mabel made a thoughtful drawing for her visitor."
-        : (requestedArtworkDescriptionSubject(context.message)
-          ? "Mabel made an initial drawing of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
-          : "Mabel made a little drawing for her visitor."),
+        : (context.referenceRetry && requestedArtworkDescriptionSubject(context.message)
+          ? "Mabel finished a more detailed study of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
+          : (requestedArtworkDescriptionSubject(context.message)
+            ? "Mabel made an initial drawing of " + requestedArtworkDescriptionSubject(context.message) + " for her visitor."
+            : "Mabel made a little drawing for her visitor.")),
       why: "Mabel was thinking about " + String(creativeThought).replace(/[.?!]+$/, "") + " and wanted to explore it more creatively."
     });
   }
@@ -6492,6 +6527,12 @@ function chooseResearchPostcardSentence(research) {
 
 async function redrawResearchReference(focusInterest, reference, researchEntry) {
   if (!mabel || !focusInterest || !reference || !reference.imageUrl) return false;
+  if (researchEntry && researchEntry.redrawAttemptedAt) return false;
+  if (researchEntry) {
+    researchEntry.redrawAttemptedAt = now();
+    researchEntry.redrawDueAt = "";
+    saveResearchLog();
+  }
   mabel.now.doing = "painting in her art studio";
   mabel.now.thought = "I want to see whether this new detail helps me draw " + focusInterest.title + ".";
   mabel.now.updatedAt = now();
@@ -6514,7 +6555,8 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
     referenceTitle: reference.sourceTitle || "",
     referenceFact: reference.fact || "",
     referenceRetry: true,
-    referenceImageInstruction: "Study the actual image at the supplied reference URL. Use its visible shape and distinguishing details to guide a fresh drawing of " + focusInterest.title + " in Mabel’s handmade style; do not paste, trace, or embed the reference image.",
+    deferGallery: true,
+    referenceImageInstruction: "Use the actual reference image as a clear drawing guide for " + focusInterest.title + ". Make the main subject large and recognizable, with a confident silhouette, visible anatomy or parts, and several smaller identifying details. Keep Mabel’s expressive layered washes, lively brush marks, and hand-drawn texture around the subject. The reference should improve the subject, not make the whole picture sparse or minimalist. Never paste or trace the image.",
     inspiration: inspiration
   };
   const refinedArtwork = await requestMabelArtwork(artContext, null);
@@ -6537,6 +6579,7 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
         why: "A visitor’s gift inspired the first drawing; Mabel returned to the Library for a visual reference and practiced it again."
       });
     } else {
+      refinedArtwork.postboxFirst = true;
       addMabelPostboxItem({
         kind: "artwork",
         title: "Mabel brought you a new drawing of " + focusInterest.title,
@@ -6562,16 +6605,8 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
     why: "The Library reference is saved, so she can return to the art studio later."
   });
   if (researchEntry) {
-    researchEntry.redrawAttempts = Math.max(0, Number(researchEntry.redrawAttempts) || 0) + 1;
-    if (researchEntry.redrawAttempts >= 3) {
-      researchEntry.redrawFailedAt = now();
-    } else {
-      const retryDelay = 5 * 60 * 1000;
-      researchEntry.redrawDueAt = new Date(Date.now() + retryDelay).toISOString();
-      window.setTimeout(function () {
-        redrawResearchReference(focusInterest, reference, researchEntry);
-      }, retryDelay);
-    }
+    researchEntry.redrawFailedAt = now();
+    researchEntry.redrawFailure = "The single studio attempt did not return a usable drawing.";
     saveResearchLog();
   }
   saveMabel();
@@ -7289,17 +7324,36 @@ function startMabel() {
   nextAutonomousWanderAt = lastAutonomousWanderAt ? lastAutonomousWanderAt + (10 + Math.random() * 10) * 60 * 1000 : Date.now();
   researchLog = loadResearchLog();
   mabelPostboxItems = loadMabelPostbox();
+  mabelPostboxItems.forEach(schedulePostboxArtworkGallery);
   comfortPostboxQueue = loadComfortPostboxQueue();
   try {
-    // Leave existing mail unread until the visitor opens the Postbox.
-    lastViewedPostboxId = localStorage.getItem(postboxSeenStorageKey) || "";
-  } catch (error) { lastViewedPostboxId = ""; }
+    const savedSeen = localStorage.getItem(postboxSeenStorageKey) || "";
+    let parsedSeen = [];
+    try {
+      const value = JSON.parse(savedSeen);
+      if (Array.isArray(value)) parsedSeen = value;
+      else if (typeof value === "string" && value) {
+        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === value; });
+        parsedSeen = seenIndex >= 0
+          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
+          : [value];
+      }
+    } catch (error) {
+      if (savedSeen) {
+        const seenIndex = mabelPostboxItems.findIndex(function (entry) { return String(entry && entry.id || "") === savedSeen; });
+        parsedSeen = seenIndex >= 0
+          ? mabelPostboxItems.slice(0, seenIndex + 1).map(function (entry) { return String(entry.id); })
+          : [savedSeen];
+      }
+    }
+    viewedPostboxIds = new Set(parsedSeen.map(String).slice(-200));
+  } catch (error) { viewedPostboxIds = new Set(); }
   boardReadKeys = loadBoardReadKeys();
   sparks = loadSparks().filter(function (spark) { return isGroundedResearchTrigger(spark); });
   researchIdeas = loadResearchIdeas();
   const unfinishedReferenceRedraw = researchLog.find(function (entry) {
     return entry && entry.requestType === "art-reference" && entry.artReference && entry.artReference.imageUrl &&
-      !entry.redrawDeliveredAt && !entry.redrawFailedAt && (Number(entry.redrawAttempts) || 0) < 3;
+      !entry.redrawDeliveredAt && !entry.redrawFailedAt && !entry.redrawAttemptedAt;
   });
   if (unfinishedReferenceRedraw) {
     const referenceIdea = researchIdeas.find(function (idea) {
@@ -7488,7 +7542,12 @@ function startMabel() {
       updateMabelPostbox();
       refreshPostboxNotice();
     } else if (event.key === postboxSeenStorageKey) {
-      lastViewedPostboxId = event.newValue || "";
+      try {
+        const parsed = JSON.parse(event.newValue || "[]");
+        viewedPostboxIds = new Set(Array.isArray(parsed) ? parsed.map(String).slice(-200) : []);
+      } catch (error) {
+        viewedPostboxIds = new Set(event.newValue ? [String(event.newValue)] : []);
+      }
       refreshPostboxNotice();
     } else if (event.key === visitorGiftSeenStorageKey && event.newValue) {
       try {
