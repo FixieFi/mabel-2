@@ -2748,10 +2748,6 @@ function updateActivityLog() {
 
   const activityEntries = mabel.feed.filter(function (entry) {
     return !["diary", "journal", "reflection"].includes(entry.kind);
-  }).sort(function (a, b) {
-    const aAt = Date.parse(a && a.at || "");
-    const bAt = Date.parse(b && b.at || "");
-    return (Number.isFinite(bAt) ? bAt : 0) - (Number.isFinite(aAt) ? aAt : 0);
   });
 
   if (!activityEntries.length) {
@@ -3995,7 +3991,7 @@ function queueArtworkReferenceResearch(message, options) {
   addFeedEntry({
     kind: "did",
     source: "visitor",
-    text: "Mabel practised an initial drawing of " + subject + " and set it aside to study a visual reference at the Library.",
+    text: "Mabel set her first sketch of " + subject + " aside to study a visual reference at the Library.",
     why: "She wanted to return to the subject and explore it more creatively."
   });
   if (lead.requestType === "art-reference") lead.lastResearchedAt = "";
@@ -4436,6 +4432,19 @@ async function handleVisitorMessage() {
 
   const explicitResearchRequest = parseExplicitResearchRequest(message);
   const asksAboutBoard = /\b(?:notice\s*board|noticeboard|visitor(?:s)?[’']?\s+board|board\s+note|notes?\s+on\s+the\s+board|\bboard\b)\b/i.test(message);
+  const visitorMessageAt = now();
+  const activityTopic = message.replace(/\s+/g, " ").slice(0, 100);
+  const drawingSubject = isArtworkRequest(message) ? requestedArtworkDescriptionSubject(message) : "";
+  addFeedEntry({
+    at: visitorMessageAt,
+    kind: "did",
+    source: "visitor",
+    text: isArtworkRequest(message)
+      ? "A visitor asked Mabel to draw " + (drawingSubject || "a little picture") + "."
+      : "Mabel talked with a visitor about “" + activityTopic + (message.length > 100 ? "…”." : "”.")
+  });
+  saveMabel();
+  updatePage();
   messagePending = true;
   createChatExchange(message);
   if (messageElement) messageElement.disabled = true;
@@ -4551,14 +4560,6 @@ async function handleVisitorMessage() {
     growVisitorBond(1.5, "a thoughtful chat");
 
     replyElement.textContent = parsedReply.text;
-    const activityTopic = message.replace(/\s+/g, " ").slice(0, 100);
-    addFeedEntry({
-      kind: "did",
-      source: "visitor",
-      text: "Mabel talked with a visitor about “" + activityTopic + (message.length > 100 ? "…”." : "”."),
-      why: "A conversation in this browser."
-    });
-
     if (data.spark) {
       recordSpark({ ...data.spark, grounded: true, source: "conversation", evidenceText: message + " " + parsedReply.text });
     } else if (inlineSpark) {
@@ -6586,10 +6587,14 @@ async function handleWander(options) {
         const fallbackRelated = fallbackSources.filter(function (source) {
           return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
         });
-        if (fallbackRelated.length) {
+        const fallbackVisuals = focusInterest.requestType === "art-reference"
+          ? fallbackSources.filter(function (source) { return safeWikimediaImageUrl(source.imageUrl); })
+          : [];
+        const usableFallbackSources = fallbackRelated.length ? fallbackRelated : fallbackVisuals;
+        if (usableFallbackSources.length) {
           data = encyclopediaResult;
           rawSources = fallbackSources;
-          relatedSources = fallbackRelated;
+          relatedSources = usableFallbackSources;
           researchMethod = "in the public encyclopedia";
         }
       }
@@ -6612,14 +6617,17 @@ async function handleWander(options) {
     if (focusInterest.requestType === "art-reference" && !relatedSources.some(function (source) { return source.imageUrl; })) {
       const commonsResult = await fetchWikimediaCommonsReference(searchTerm).catch(function () { return null; });
       const commonsSources = commonsResult && Array.isArray(commonsResult.sources) ? commonsResult.sources : [];
-      const commonsRelated = commonsSources.filter(function (source) {
-        return safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url) &&
-          researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
+      const commonsVisuals = commonsSources.filter(function (source) {
+        return safeWikimediaImageUrl(source.imageUrl) && safeExternalUrl(source.url);
       });
-      if (commonsRelated.length) {
+      const commonsRelated = commonsVisuals.filter(function (source) {
+        return researchMatchesFocus(source.title + " " + source.snippet, { ...focusInterest, searchTerm: searchTerm });
+      });
+      const usableCommonsSources = commonsRelated.length ? commonsRelated : commonsVisuals;
+      if (usableCommonsSources.length) {
         data = commonsResult;
         rawSources = commonsSources;
-        relatedSources = commonsRelated;
+        relatedSources = usableCommonsSources;
         researchMethod = "following links from a Library search";
       }
     }
