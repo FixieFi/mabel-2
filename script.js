@@ -666,18 +666,34 @@ function registerSharedDrawing(artwork, context) {
   }).then(async function (response) {
     if (!response.ok) return;
     const result = await response.json();
+    const drawingSpark = {
+      id: "drawing-hobby",
+      title: "Drawing",
+      kind: "hobby",
+      question: "What could Mabel express through drawing, and how might she keep learning to draw?",
+      reason: "After returning to making pictures, Mabel wants to keep practicing drawing.",
+      originText: "Mabel has made several different drawings across her days and visitors.",
+      evidenceText: "Mabel has made several drawings across separate moments.",
+      source: "creative practice",
+      grounded: true
+    };
     if (result.newlyHobby) {
-      recordSpark({
-        id: "drawing-hobby",
-        title: "Drawing",
-        kind: "hobby",
-        question: "What could Mabel express through drawing, and how might she keep learning to draw?",
-        reason: "After returning to making pictures, Mabel wants to keep practicing drawing.",
-        originText: "Mabel has made several different drawings across her days and visitors.",
-        evidenceText: "Mabel has made several drawings across separate moments.",
-        source: "creative practice",
-        grounded: true
-      });
+      recordSpark(drawingSpark);
+    } else if (result.levelUp) {
+      recordSpark(drawingSpark);
+      const spark = sparks.find(function (item) { return item && item.id === "drawing-hobby"; });
+      const interest = mabel.interests.find(function (item) { return item && item.id === "drawing-hobby"; });
+      if (spark) {
+        spark.notificationAt = now();
+        spark.notificationType = "level-up";
+        spark.level = Number(result.interest && result.interest.level) || Number(spark.level) || 2;
+      }
+      if (interest) {
+        interest.level = Number(result.interest && result.interest.level) || Math.max(2, Number(interest.level) || 1);
+      }
+      saveSparks();
+      saveMabel();
+      updatePage();
     } else {
       refreshSharedMabelBrain();
     }
@@ -1749,7 +1765,12 @@ function addFeedEntry(entry) {
     const latestActionAge = latestAction ? Date.now() - Date.parse(latestAction.at || "") : Infinity;
     if (!entry.force && latestAction && normalizeAction(latestAction.text) === normalizeAction(entry.text) && latestActionAge >= 0 && latestActionAge < 5 * 60 * 1000) return latestAction;
   }
-  const savedEntry = { at: now(), ...entry, ok: true };
+  const suppliedTimestamp = Date.parse(entry && entry.at);
+  const savedEntry = {
+    ...entry,
+    at: Number.isFinite(suppliedTimestamp) ? new Date(suppliedTimestamp).toISOString() : now(),
+    ok: true
+  };
   mabel.feed.unshift(savedEntry);
   if (mabel.feed.length > 80) mabel.feed.length = 80;
   return savedEntry;
@@ -2715,12 +2736,22 @@ function updateDiary() {
   });
 }
 
+function formatActivityTime(value) {
+  const timestamp = Date.parse(value || "");
+  if (!Number.isFinite(timestamp)) return "--:--";
+  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(timestamp));
+}
+
 function updateActivityLog() {
   if (!activityLogElement) return;
   activityLogElement.replaceChildren();
 
   const activityEntries = mabel.feed.filter(function (entry) {
     return !["diary", "journal", "reflection"].includes(entry.kind);
+  }).sort(function (a, b) {
+    const aAt = Date.parse(a && a.at || "");
+    const bAt = Date.parse(b && b.at || "");
+    return (Number.isFinite(bAt) ? bAt : 0) - (Number.isFinite(aAt) ? aAt : 0);
   });
 
   if (!activityEntries.length) {
@@ -2732,7 +2763,7 @@ function updateActivityLog() {
 
   activityEntries.slice(0, 20).reverse().forEach(function (entry) {
     const item = document.createElement("li");
-    const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const time = formatActivityTime(entry.at);
     item.textContent = time + " — " + entry.text;
     if (entry.why) {
       const reason = document.createElement("span");
@@ -2824,6 +2855,12 @@ function updateResearchLog() {
     const resourceMethod = libraryResourceMethod(firstSource, entry.researchMethod);
     const sentence = document.createElement("p");
     sentence.className = "research-one-sentence";
+    if (entry.failed) {
+      sentence.textContent = "Mabel searched for “" + searchTerm + "” at the Library, but the search did not return a usable result. She’ll try again later.";
+      item.appendChild(sentence);
+      list.appendChild(item);
+      return;
+    }
     if (entry.related === false) {
       sentence.textContent = "Mabel searched for “" + searchTerm + "” using " + resourceMethod + ", but couldn’t verify a useful page about it this time.";
       item.appendChild(sentence);
@@ -5598,7 +5635,7 @@ function currentSparkNoticeKey() {
 }
 
 function currentAutonomousArtwork() {
-  return gallery.find(function (artwork) { return artwork && artwork.title; }) || null;
+  return gallery.find(function (artwork) { return artwork && artwork.title && artwork.source === "autonomous"; }) || null;
 }
 
 function artworkNoticeKey(artwork) {
@@ -6436,6 +6473,7 @@ async function handleWander(options) {
       ? String(researchKeywordFromFinding(focusInterest.title) || focusInterest.searchTerm || focusInterest.title).trim()
       : String(focusInterest.searchTerm || deriveResearchKeyword(focusInterest) || focusInterest.title).trim();
   const displayTitle = searchTerm || focusInterest.title;
+  const researchStartedAt = now();
 
   if (wanderStatus) wanderStatus.textContent = "Mabel is following a question that caught her attention.";
   const libraryMethods = [
@@ -6804,8 +6842,34 @@ async function handleWander(options) {
     }
     return research;
   } catch (error) {
+    const failedAt = now();
+    const alreadyLogged = researchLog.some(function (entry) {
+      return entry && entry.requestType === (focusInterest.requestType || "") &&
+        normalizeInterestTitle(entry.focusQuestionTitle || entry.focusTitle) === normalizeInterestTitle(focusInterest.title) &&
+        Date.parse(entry.at || "") >= Date.parse(researchStartedAt);
+    });
+    if (!alreadyLogged) {
+      const failure = String(error && error.message || "The Library search could not be reached.").slice(0, 220);
+      researchLog.unshift({
+        kind: "research", at: failedAt, requestType: focusInterest.requestType || "",
+        focusTitle: focusInterest.title, focusQuestionTitle: focusInterest.title,
+        searchTerm: searchTerm || focusInterest.title, searchQuestion: searchTerm || focusInterest.title,
+        title: focusInterest.title, sources: [], researchSummary: "", related: false,
+        failed: true, failure: failure, researchMethod: researchMethod,
+        sourceOriginText: focusInterest.originText || ""
+      });
+      researchLog = researchLog.slice(0, 30);
+      addFeedEntry({
+        at: failedAt, kind: "did", force: true, source: "library",
+        text: "Mabel’s Library search for “" + String(focusInterest.title).slice(0, 80) + "” did not return a usable result.",
+        why: failure
+      });
+      saveResearchLog();
+      saveMabel();
+      updatePage();
+    }
     if (wanderStatus) {
-      wanderStatus.textContent = "The Library connection is quiet just now. Mabel will try another time.";
+      wanderStatus.textContent = "The Library connection is quiet just now. Mabel will try again later.";
     }
     return null;
   }
