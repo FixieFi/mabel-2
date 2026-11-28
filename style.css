@@ -1687,44 +1687,79 @@ button#explore.explore-button:disabled {
 }
 
 
-/* A gentle in-page path through Mabel’s home */
+/* Small, switchable rooms inside Mabel’s home */
 .home-intro { max-width: 48rem; }
-.home-room-nav {
+.home-room-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin: 18px 0 22px;
 }
-.home-room-link {
+.home-room-choice {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 48px 1fr 18px;
   align-items: center;
   gap: 12px;
-  min-height: 58px;
-  padding: 12px 16px;
-  color: #526f50;
-  text-decoration: none;
+  min-height: 74px;
+  padding: 12px 15px;
+  text-align: left;
+  color: #536b4c;
+  background:
+    radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.85), transparent 55%),
+    linear-gradient(145deg, #fbf5e9, #e8efd9);
+  border: 1px solid rgba(111, 137, 91, 0.33);
+  border-radius: 20px 16px 21px 15px;
+  box-shadow: 0 4px 12px rgba(67, 65, 44, 0.08), inset 0 1px rgba(255,255,255,0.7);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.kitchen-room-choice {
+  color: #785d45;
+  background:
+    radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.88), transparent 55%),
+    linear-gradient(145deg, #fff5e7, #f3e2c9);
+  border-color: rgba(177, 135, 87, 0.32);
+}
+.home-room-choice:hover, .home-room-choice:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 17px rgba(67, 65, 44, 0.13);
+}
+.home-room-choice[aria-pressed="true"] {
+  border-color: rgba(107, 74, 143, 0.56);
+  box-shadow: 0 0 0 2px rgba(167, 135, 188, 0.2), 0 5px 14px rgba(67, 65, 44, 0.1);
+}
+.home-room-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  background: rgba(255, 251, 239, 0.8);
+  border: 1px dashed rgba(127, 155, 109, 0.38);
+  border-radius: 15px;
+  font-size: 1.45rem;
+}
+.kitchen-room-choice .home-room-icon { border-color: rgba(180, 145, 76, 0.42); }
+.home-room-label { display: grid; gap: 3px; }
+.home-room-label strong {
   font-family: "Fraunces", Georgia, serif;
   font-size: 1.08rem;
-  background: linear-gradient(135deg, rgba(255, 248, 238, 0.96), rgba(229, 240, 218, 0.9));
-  border: 1px solid rgba(127, 155, 109, 0.38);
-  border-radius: 18px;
-  box-shadow: 0 4px 12px rgba(67, 42, 94, 0.08);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.home-room-link-kitchen {
-  color: #765942;
-  background: linear-gradient(135deg, rgba(255, 248, 238, 0.96), rgba(244, 229, 205, 0.9));
-  border-color: rgba(180, 145, 76, 0.36);
+.home-room-label small {
+  color: #716d63;
+  font-size: 0.82rem;
+  line-height: 1.3;
 }
-.home-room-link:hover, .home-room-link:focus-visible {
-  transform: translateY(-2px);
-  box-shadow: 0 7px 16px rgba(67, 42, 94, 0.13);
+.home-room-chevron { color: #ad9772; font-size: 0.95rem; }
+.home-room-view[hidden] { display: none !important; }
+.home-room-view {
+  animation: home-room-arrive 0.22s ease-out;
 }
-.home-room-link > span:first-child { font-size: 1.35rem; }
-.home-room-link-arrow { justify-self: end; opacity: 0.72; }
-.home-room-section {
-  scroll-margin-top: 18px;
+@keyframes home-room-arrive {
+  from { opacity: 0.55; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.gift-nook-section {
   margin: 20px 0 28px;
   padding: 20px;
   background: rgba(255, 248, 238, 0.64);
@@ -1743,10 +1778,13 @@ button#explore.explore-button:disabled {
   margin-left: -2px;
 }
 .kitchen-room-section {
+  margin: 20px 0 28px;
+  padding: 20px;
   background:
     radial-gradient(circle at 90% 5%, rgba(255, 221, 168, 0.28), transparent 34%),
     rgba(255, 248, 238, 0.78);
-  border-color: rgba(180, 145, 76, 0.3);
+  border: 1px solid rgba(180, 145, 76, 0.3);
+  border-radius: 22px;
 }
 .kitchen-scene {
   display: grid;
@@ -1806,18 +1844,9 @@ button#explore.explore-button:disabled {
   margin-top: 14px;
 }
 .kitchen-baking-log { max-height: 340px; overflow-y: auto; }
-.home-room-return {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  color: #526f50;
-  font-family: "Fraunces", Georgia, serif;
-  text-decoration-color: rgba(82, 111, 80, 0.42);
-}
 @media (max-width: 560px) {
-  .home-room-nav { grid-template-columns: 1fr; }
-  .home-room-section { padding: 14px; }
+  .home-room-switch { grid-template-columns: 1fr; }
+  .gift-nook-section, .kitchen-room-section { padding: 14px; }
   .kitchen-scene { grid-template-columns: 1fr; }
   .kitchen-shelves { grid-template-columns: 1fr; }
 }

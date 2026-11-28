@@ -134,13 +134,21 @@
 
 <div id="hollow" class="tab-panel">
   <h2>Mabel’s home</h2>
-  <p class="day-intro home-intro">A little place for Mabel’s gifts and things, with her kitchen just around the corner.</p>
-  <nav class="home-room-nav" aria-label="Corners of Mabel’s home">
-    <a class="home-room-link home-room-link-gifts" href="#home-room-home"><span aria-hidden="true">♡</span><span>Gift nook</span><span class="home-room-link-arrow" aria-hidden="true">↓</span></a>
-    <a class="home-room-link home-room-link-kitchen" href="#home-room-kitchen"><span aria-hidden="true">🥣</span><span>Visit the kitchen</span><span class="home-room-link-arrow" aria-hidden="true">↓</span></a>
-  </nav>
-  <section id="home-room-home" class="home-room-section gift-nook-section">
-    <h3 class="home-room-heading">A little nook for Mabel</h3>
+  <p class="day-intro home-intro">A little home with a nook for gifts and a kitchen of her own.</p>
+  <div id="home-room-switch" class="home-room-switch" role="group" aria-label="Rooms in Mabel’s home">
+    <button class="home-room-choice gift-room-choice" type="button" data-home-view="gifts" aria-controls="home-view-gifts" aria-pressed="true">
+      <span class="home-room-icon" aria-hidden="true">🪺</span>
+      <span class="home-room-label"><strong>Her gift nook</strong><small>Leave something or see what she carries</small></span>
+      <span class="home-room-chevron" aria-hidden="true">✿</span>
+    </button>
+    <button class="home-room-choice kitchen-room-choice" type="button" data-home-view="kitchen" aria-controls="home-view-kitchen" aria-pressed="false">
+      <span class="home-room-icon" aria-hidden="true">🥣</span>
+      <span class="home-room-label"><strong>Mabel’s kitchen</strong><small>Her pantry and little baking adventures</small></span>
+      <span class="home-room-chevron" aria-hidden="true">✿</span>
+    </button>
+  </div>
+  <section id="home-view-gifts" class="home-room-view gift-nook-section" tabindex="-1">
+    <h3 class="home-room-heading">Leave Mabel a little something</h3>
   <div class="home-nest-art" aria-hidden="true">
     <svg viewBox="0 0 96 64" role="img" shape-rendering="crispEdges" aria-label="Pixel blackberry">
       <rect x="44" y="8" width="8" height="8" fill="#6f8f5e"/><rect x="36" y="12" width="8" height="8" fill="#85a76c"/><rect x="52" y="12" width="8" height="8" fill="#85a76c"/><rect x="44" y="16" width="8" height="8" fill="#71945e"/>
@@ -172,7 +180,7 @@
   <div id="hollow-speech" class="hollow-speech hidden" aria-live="polite">
     <p id="hollow-speech-text"></p>
   </div>
-  <p id="hollow-status">Mabel will come across anything you leave here during one of her quiet moments.</p>
+  <p id="hollow-status">Mabel will find what you leave during one of her quiet moments.</p>
   <div class="home-inventory">
     <h3>Mabel’s bindle</h3>
     <p class="bindle-intro">Things Mabel is carrying for now. She may eat, drink, keep, or move on from them as she needs.</p>
@@ -190,7 +198,7 @@
     </div>
   </div>
   </section>
-  <section id="home-room-kitchen" class="home-room-section kitchen-room-section">
+  <section id="home-view-kitchen" class="home-room-view kitchen-room-section" tabindex="-1" hidden>
     <div class="kitchen-scene">
       <div class="kitchen-scene-mark" aria-hidden="true">🥣　🍓　🍯</div>
       <div>
@@ -215,7 +223,6 @@
         <ul id="baking-log" class="brain-trait-list kitchen-baking-log"></ul>
       </section>
     </div>
-    <a class="home-room-return" href="#home-room-home"><span aria-hidden="true">↑</span> Back to the gift nook</a>
   </section>
 </div>
 

@@ -7721,6 +7721,22 @@ function switchTab(tabName) {
 }
 
 
+document.addEventListener("click", function (event) {
+  const button = event.target.closest("[data-home-view]");
+  const home = document.getElementById("hollow");
+  if (!button || !home || !home.contains(button)) return;
+  const target = document.getElementById("home-view-" + button.dataset.homeView);
+  if (!target) return;
+  home.querySelectorAll(".home-room-choice").forEach(function (choice) {
+    choice.setAttribute("aria-pressed", choice === button ? "true" : "false");
+  });
+  home.querySelectorAll(".home-room-view").forEach(function (view) {
+    view.hidden = view !== target;
+  });
+  if (button.dataset.homeView === "kitchen") refreshSharedMabelBrain();
+  target.focus({ preventScroll: true });
+});
+
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
   mabel.now = {
