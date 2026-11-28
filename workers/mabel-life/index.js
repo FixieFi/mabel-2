@@ -170,7 +170,7 @@ function cleanExhibitionArtwork(raw) {
       ? "A drawing of " + cleanText(raw.subject, 60, title) + ", nominated by a visitor."
       : "A little drawing Mabel chose for today’s exhibition.",
     exhibitionReason: cleanText(raw.exhibitionReason, 220, source === "visitor-nominated"
-      ? "A visitor nominated this study after Mabel returned to the subject with a visual reference."
+      ? "A visitor nominated this drawing for today’s exhibition."
       : cleanText(raw.inspirationTitle, 100)
         ? "Mabel chose this because a thought about " + cleanText(raw.inspirationTitle, 100) + " stayed with her."
         : "She was especially pleased with the colours and little details in this one."),
@@ -200,9 +200,11 @@ function refreshArtExhibitionWorks(exhibition) {
       ? (item.at || selectedAt)
       : selectedAt;
     if (!item.exhibitionReason) {
-      item.exhibitionReason = item.inspirationTitle
-        ? "Mabel chose this because a thought about " + item.inspirationTitle + " stayed with her."
-        : "She was especially pleased with the colours and little details in this one.";
+      item.exhibitionReason = item.source === "visitor-nominated"
+        ? "A visitor nominated this drawing for today’s exhibition."
+        : item.inspirationTitle
+          ? "Mabel chose this because a thought about " + item.inspirationTitle + " stayed with her."
+          : "She was especially pleased with the colours and little details in this one.";
     }
   });
   exhibition.works = selected.map(({ score, votedBy, ...item }) => item);
