@@ -144,7 +144,8 @@ let lastReflectionDate = "";
 let bindle = {
   food: [],
   water: [],
-  treasures: []
+  treasures: [],
+  lastTreasureDecisionAt: null
 };
 
 let gallery = [];
@@ -1160,8 +1161,12 @@ function trimBindleItems(items, limit) {
         : null;
       const receivedAt = Date.parse(gift && (gift.noticedAt || gift.at) || item.at || item.addedAt || "");
       const isVisitorGift = Boolean(gift || item.giftId || item.source === "visitor");
-      const protectedGift = isVisitorGift && (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 30 * 60 * 1000);
-      if (!protectedGift) { leavingIndex = index; break; }
+      const age = Number.isFinite(receivedAt) ? Date.now() - receivedAt : 0;
+      const lastDecision = Date.parse(bindle.lastTreasureDecisionAt || "");
+      const decisionCooling = items === bindle.treasures && Number.isFinite(lastDecision) && Date.now() - lastDecision < 6 * 60 * 60 * 1000;
+      const protectedItem = (isVisitorGift && age < 2 * 60 * 60 * 1000) ||
+        (items === bindle.treasures && (age < 2 * 60 * 60 * 1000 || decisionCooling));
+      if (!protectedItem) { leavingIndex = index; break; }
     }
     if (leavingIndex < 0) break;
     const leaving = items.splice(leavingIndex, 1)[0];
@@ -1170,6 +1175,7 @@ function trimBindleItems(items, limit) {
     const reason = isFood || isWater ? "" : bindleItemResonance(leaving);
     if (reason) moveBindleItemToTreasureBox(leaving, reason);
     else {
+      if (!isFood && !isWater) bindle.lastTreasureDecisionAt = now();
       const action = isFood ? "eaten" : isWater ? "drank" : "discarded";
       recordBindleDeparture(leaving, action);
       if (action === "eaten") mabel.needs.food = clampNeed(Number(mabel.needs.food) + 0.12);
@@ -1186,6 +1192,8 @@ function settleMatureBindleItems() {
     { items: bindle.treasures || [], need: "" }
   ];
   let changed = false;
+  let nonFoodResolved = false;
+  const lastTreasureDecision = Date.parse(bindle.lastTreasureDecisionAt || "");
   groups.forEach(function (group) {
     for (let index = group.items.length - 1; index >= 0; index -= 1) {
       const item = group.items[index];
@@ -1194,7 +1202,13 @@ function settleMatureBindleItems() {
         ? mabel.world.objects.find(function (object) { return object && object.id === item.giftId; })
         : null;
       const receivedAt = Date.parse(gift && (gift.noticedAt || gift.at) || item.at || item.addedAt || "");
-      if (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 30 * 60 * 1000) continue;
+      const age = Number.isFinite(receivedAt) ? Date.now() - receivedAt : 0;
+      if (!Number.isFinite(receivedAt)) continue;
+      if (group.need && age < 30 * 60 * 1000) continue;
+      if (!group.need) {
+        if (nonFoodResolved || age < 2 * 60 * 60 * 1000) continue;
+        if (Number.isFinite(lastTreasureDecision) && Date.now() - lastTreasureDecision < 6 * 60 * 60 * 1000) continue;
+      }
       if (group.need === "food" && Number(mabel.needs.food) > 0.65) continue;
       if (group.need === "water" && Number(mabel.needs.water) > 0.65) continue;
       const reason = group.need ? "" : bindleItemResonance(item);
@@ -1205,6 +1219,10 @@ function settleMatureBindleItems() {
         recordBindleDeparture(item, action);
         if (action === "eaten") mabel.needs.food = clampNeed(Number(mabel.needs.food) + 0.12);
         if (action === "drank") mabel.needs.water = clampNeed(Number(mabel.needs.water) + 0.18);
+      }
+      if (!group.need) {
+        bindle.lastTreasureDecisionAt = now();
+        nonFoodResolved = true;
       }
       changed = true;
     }
@@ -2111,12 +2129,12 @@ function loadBindle() {
     if (saved) {
       try { localStorage.setItem(bindleStorageKey, saved); } catch (ignored) {}
       const loaded = JSON.parse(saved);
-      return { food: [], water: [], treasures: [], treasureBox: [], history: [], ...loaded };
+      return { food: [], water: [], treasures: [], treasureBox: [], history: [], lastTreasureDecisionAt: null, ...loaded };
     }
   } catch (error) {
     // Fall through to an empty bindle.
   }
-  return { food: [], water: [], treasures: [], treasureBox: [], history: [] };
+  return { food: [], water: [], treasures: [], treasureBox: [], history: [], lastTreasureDecisionAt: null };
 }
 
 function loadLastAutonomousMoment() {
@@ -2459,7 +2477,7 @@ function applyExplorationFinds(findings) {
     } else {
       const findId = "wander-find-" + Date.now() + "-" + Math.floor(Math.random() * 100000);
       bindle.treasures.unshift({ id: findId, name: name, note: note, source: "wandering" });
-      trimBindleItems(bindle.treasures, 12);
+      trimBindleItems(bindle.treasures, 20);
       mabel.world.objects.unshift({ id: findId, name: name, at: now(), source: "wandering", visitSessionId: currentVisitorSessionId(), note: note, reaction: "" });
       mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
       mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
@@ -5469,7 +5487,7 @@ async function noticeNextVisitorGift() {
       gift.status = "saved for later";
     } else {
       bindle.treasures.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
-      trimBindleItems(bindle.treasures, 12);
+      trimBindleItems(bindle.treasures, 20);
       gift.status = "packed in Mabel’s bindle";
     }
     addFeedEntry({
