@@ -1173,9 +1173,9 @@ function trimBindleItems(items, limit) {
     const isFood = items === bindle.food;
     const isWater = items === bindle.water;
     const reason = isFood || isWater ? "" : bindleItemResonance(leaving);
+    if (!isFood && !isWater) bindle.lastTreasureDecisionAt = now();
     if (reason) moveBindleItemToTreasureBox(leaving, reason);
     else {
-      if (!isFood && !isWater) bindle.lastTreasureDecisionAt = now();
       const action = isFood ? "eaten" : isWater ? "drank" : "discarded";
       recordBindleDeparture(leaving, action);
       if (action === "eaten") mabel.needs.food = clampNeed(Number(mabel.needs.food) + 0.12);
