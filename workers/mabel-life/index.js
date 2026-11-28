@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   interests: [],
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
   baking: { skillLevel: 0, pantry: [], treats: [], lastBakedAt: null },
+  sharedBindle: { items: [], history: [] },
   coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
   wishes: [],
   readingBooks: [],
@@ -83,6 +84,26 @@ function extractJson(raw) {
 
 function cleanText(value, limit, fallback = "") {
   return typeof value === "string" ? value.trim().slice(0, limit) || fallback : fallback;
+}
+
+function cleanVisitorNumber(value) {
+  const number = String(value || "").replace(/\D/g, "").slice(0, 12);
+  return number || "";
+}
+
+function privateMailboxKey(visitorId) {
+  return "mabel-private-mailbox-v1:" + makeId(visitorId).slice(0, 100);
+}
+
+async function addPrivateMailboxNote(env, visitorId, note) {
+  if (!visitorId || !note || !note.id) return;
+  const key = privateMailboxKey(visitorId);
+  let notes = [];
+  try { notes = JSON.parse(await env.MABEL_STATE.get(key) || "[]"); } catch { notes = []; }
+  if (!Array.isArray(notes)) notes = [];
+  if (notes.some(item => item && item.id === note.id)) return;
+  notes.unshift(note);
+  await env.MABEL_STATE.put(key, JSON.stringify(notes.slice(0, 40)));
 }
 
 function makeId(value) {
@@ -244,6 +265,13 @@ async function loadState(env) {
     : [];
   state.baking.treats = Array.isArray(state.baking.treats) ? state.baking.treats.filter(item => item && typeof item.title === "string").slice(0, 20) : [];
   state.baking.lastBakedAt = cleanText(state.baking.lastBakedAt, 40) || null;
+  state.sharedBindle = state.sharedBindle && typeof state.sharedBindle === "object" ? state.sharedBindle : structuredClone(DEFAULT_STATE.sharedBindle);
+  state.sharedBindle.items = Array.isArray(state.sharedBindle.items)
+    ? state.sharedBindle.items.filter(item => item && typeof item.id === "string" && typeof item.name === "string").slice(0, 60)
+    : [];
+  state.sharedBindle.history = Array.isArray(state.sharedBindle.history)
+    ? state.sharedBindle.history.filter(item => item && typeof item.id === "string" && typeof item.name === "string").slice(0, 60)
+    : [];
   state.coding = state.coding && typeof state.coding === "object" ? state.coding : structuredClone(DEFAULT_STATE.coding);
   state.coding.skillLevel = Math.max(0, Math.min(5, Number(state.coding.skillLevel) || 0));
   state.coding.projects = Array.isArray(state.coding.projects) ? state.coding.projects.filter(item => item && typeof item.title === "string" && typeof item.code === "string").slice(0, 12) : [];
@@ -526,7 +554,7 @@ function maybeBakeTreat(state) {
   const hobby = state.interests.find(item => item && item.kind === "hobby" && /\bbak(e|ing)\b/i.test(String(item.title || "")));
   // Food is a fullness score: low food means she is hungry, which can motivate baking.
   // She only waits when already quite full, or when water/rest are too low to bake safely.
-  if (!hobby || state.needs.food > 0.78 ||
+  if (!hobby || state.needs.food > 0.94 ||
       state.needs.water < 0.3 || state.needs.rest < 0.3) return false;
   const last = Date.parse(state.baking.lastBakedAt || "");
   if (Number.isFinite(last) && Date.now() - last < 2 * 60 * 60 * 1000) return false;
@@ -558,6 +586,18 @@ function maybeBakeTreat(state) {
   const at = new Date().toISOString();
   const ingredientNames = selected.supplies.map(item => item.name);
   const ids = new Set(selected.supplies.map(item => item.id));
+  state.sharedBindle.items = Array.isArray(state.sharedBindle.items) ? state.sharedBindle.items : [];
+  state.sharedBindle.history = Array.isArray(state.sharedBindle.history) ? state.sharedBindle.history : [];
+  selected.supplies.forEach(supply => {
+    const sourceId = supply.sourceEventId || String(supply.id || "").replace(/-pantry$/, "");
+    const gift = state.sharedBindle.items.find(item => item.id === sourceId);
+    if (!gift) return;
+    gift.status = "eaten";
+    gift.removedAt = at;
+    state.sharedBindle.history.unshift({ ...gift, action: "eaten", at });
+  });
+  state.sharedBindle.history = state.sharedBindle.history.slice(0, 60);
+  state.sharedBindle.items = state.sharedBindle.items.filter(item => item.status !== "eaten");
   state.baking.pantry = state.baking.pantry.filter(item => !ids.has(item.id));
   state.baking.skillLevel = Math.min(5, (Number(state.baking.skillLevel) || 0) + 1);
   state.baking.lastBakedAt = at;
@@ -657,16 +697,23 @@ function addMabelWish(state, supplied) {
 async function getEveningReading(state, env) {
   const hour = new Date().getUTCHours();
   const today = new Date().toISOString().slice(0, 10);
-  if (hour < 18 || state.lastReadingDate === today) return null;
-  const booksByAge = state.readingBooks.slice().sort((a, b) => Date.parse(a.addedAt || 0) - Date.parse(b.addedAt || 0));
+  const booksByAge = state.readingBooks.slice().sort((a, b) => {
+    const firstA = Number(a.progress) === 0 && a.status === "waiting" ? 1 : 0;
+    const firstB = Number(b.progress) === 0 && b.status === "waiting" ? 1 : 0;
+    return firstB - firstA || Date.parse(a.addedAt || 0) - Date.parse(b.addedAt || 0);
+  });
   for (const book of booksByAge) {
     if (book.status === "finished" || Number(book.progress) >= Number(book.totalLength)) continue;
+    const firstReading = Number(book.progress) === 0 && book.status === "waiting";
+    if (!firstReading && (hour < 18 || state.lastReadingDate === today)) return null;
     const fullText = await env.MABEL_STATE.get("mabel-book-text:" + book.id);
     if (!fullText) continue;
     const start = Math.max(0, Number(book.progress) || 0);
     const passage = fullText.slice(start, start + 1800);
     if (!passage) continue;
-    return { book, passage, start, end: Math.min(fullText.length, start + passage.length), today };
+    let provider = null;
+    try { provider = JSON.parse(await env.MABEL_STATE.get("mabel-book-provider:" + book.id) || "null"); } catch { provider = null; }
+    return { book, passage, start, end: Math.min(fullText.length, start + passage.length), today, provider };
   }
   return null;
 }
@@ -845,6 +892,19 @@ async function handleReflect(request, env) {
       }
     }
 
+    // Keep grounded curiosities in Mabel's shared life as well as the local
+    // visitor view, so another browser can see what caught her attention.
+    if (spark && !state.interests.some(item => item.id === makeId(spark.id || spark.title) || makeId(item.title) === makeId(spark.title))) {
+      const savedSpark = upsertInterest(state, {
+        id: spark.id,
+        title: spark.title,
+        question: spark.question,
+        kind: spark.kind === "hobby" ? "hobby" : "wonder",
+        evidence: spark.reason || "This question caught Mabel's attention during a conversation."
+      }, 0);
+      if (savedSpark) state.currentThread = savedSpark.id;
+    }
+
     const desire = result?.desire && typeof result.desire === "object"
       ? {
           text: cleanText(result.desire.text, 220),
@@ -974,12 +1034,13 @@ async function runMabelLife(env, startingState) {
   const state = startingState || await loadState(env);
   const latestLifeLogId = state.lifeLog && state.lifeLog[0] && state.lifeLog[0].id;
   advanceLifeNeeds(state);
-  if (practiceWithAvailableObject(state)) {
+  const reading = await getEveningReading(state, env).catch(() => null);
+  if (!reading && practiceWithAvailableObject(state)) {
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
     return state;
   }
-  if (maybeBakeTreat(state)) {
+  if (!reading && maybeBakeTreat(state)) {
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
     return state;
@@ -1003,8 +1064,6 @@ async function runMabelLife(env, startingState) {
   const codingDue = Boolean((codingHobby || (returningInterest && Math.random() < 0.18)) &&
     (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
   if (codingDue) state.coding.lastAttemptAt = new Date().toISOString();
-  const reading = await getEveningReading(state, env).catch(() => null);
-
   const system = [
     "You are Mabel, a small mouse who lives in Hawthorn Hollow.",
     "Keep the gentle, observant character she began with, but let her tastes, habits, questions, and goals grow from what she experiences.",
@@ -1018,7 +1077,7 @@ async function runMabelLife(env, startingState) {
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
     "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
     "When codingDue is true, Mabel may write a tiny code experiment inspired by one of her own recurring interests, even if coding is not yet a hobby. Prefer a MabelScript visual experiment: return codeProject {title,language:'MabelScript',program,note}, where program is an array of no more than 24 objects using only circle {op,x,y,radius,color}, rect {op,x,y,width,height,color}, line {op,x,y,endX,endY,color}, or text {op,x,y,text,color}. Use coordinates on a 240 by 160 canvas, hex colours, and make the image relate to her interest. This tiny instruction set is interpreted by the site with bounded drawing commands; it has no access to the network, visitor data, files, or website controls. Do not write JavaScript or Python for execution. Return null unless she has a small, complete idea.",
-    "If a book passage is supplied, Mabel is spending a quiet evening reading those pages. Write one short original readingNote about a specific idea she took from the passage; do not invent claims beyond it and do not quote more than a short phrase. If she has returned to a specific question or subject and truly wishes to keep learning, she may also create one grounded wish with type book, learn, or world. Do not create a wish every cycle or repeat one already on her wish list.",
+    "If a book passage is supplied, Mabel is reading those pages, often soon after a visitor gives her the book. Write one short original readingNote about a specific idea she took from the passage; do not invent claims beyond it and do not quote more than a short phrase. If she has returned to a specific question or subject and truly wishes to keep learning, she may also create one grounded wish with type book, learn, or world. Do not create a wish every cycle or repeat one already on her wish list.",
     "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject,wish,readingNote}. Do not set needs; those change only through elapsed time and concrete actions.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
@@ -1097,11 +1156,21 @@ async function runMabelLife(env, startingState) {
         reading.book.notes = reading.book.notes.slice(0, 12);
         state.knowledge.unshift({ id: "book-note-" + reading.book.id + "-" + reading.book.readCount, title: reading.book.title, text: note, at, kind: "book" });
         state.knowledge = state.knowledge.slice(0, 40);
+        if (reading.provider && reading.provider.visitorId) {
+          await addPrivateMailboxNote(env, reading.provider.visitorId, {
+            id: "book-note-" + reading.book.id + "-" + reading.book.readCount,
+            kind: "book-reading",
+            title: "Mabel read “" + reading.book.title + "”",
+            text: note,
+            at,
+            visitorNumber: cleanVisitorNumber(reading.provider.visitorNumber)
+          });
+        }
       }
       state.lastReadingDate = reading.today;
-      state.activity = "reading " + reading.book.title + " at the library in the quiet evening";
-      state.thought = note || "I read a few more pages of " + reading.book.title + " tonight.";
-      recordLifeAction(state, "Mabel read more of “" + reading.book.title + "” at the library.", note || "She chose to spend her quiet evening with a book.", at);
+      state.activity = "reading " + reading.book.title + " at the Library";
+      state.thought = note || "I read a few more pages of " + reading.book.title + ".";
+      recordLifeAction(state, "Mabel read a few pages of “" + reading.book.title + "” at the Library.", note || "She chose to spend a quiet moment with the book.", at);
       remember(state, "Mabel read “" + reading.book.title + "” and kept this thought: " + (note || "she wants to continue tomorrow."), "reading");
     }
 
@@ -1246,13 +1315,19 @@ async function handleSharedWorldEvent(request, env) {
     if (state.readingBooks.filter(book => book.status !== "finished").length >= 8) return jsonResponse({ error: "Mabel already has eight books waiting to read. She’ll need to finish one first." }, 409);
     if (state.readingBooks.length >= 32) return jsonResponse({ error: "Mabel has reached the end of her reading shelf for now." }, 409);
     const id = "book-" + makeId(title) + "-" + crypto.randomUUID().slice(0, 8);
-    const book = { id, title, status: "waiting", progress: 0, totalLength: text.length, notes: [], addedAt: new Date().toISOString(), readCount: 0 };
+    const visitorId = cleanText(data.visitorId, 100);
+    const visitorNumber = cleanVisitorNumber(data.visitorNumber);
+    const book = { id, title, status: "waiting", progress: 0, totalLength: text.length, notes: [], addedAt: new Date().toISOString(), readCount: 0, visitorNumber };
     await env.MABEL_STATE.put("mabel-book-text:" + id, text);
+    if (visitorId && visitorNumber) await env.MABEL_STATE.put("mabel-book-provider:" + id, JSON.stringify({ visitorId, visitorNumber }));
     state.readingBooks.unshift(book);
     const wish = state.wishes.find(item => makeId(item.title) === makeId(title) && item.type === "book");
     if (wish) { wish.status = "supplied"; wish.bookId = id; }
     else addMabelWish(state, { type: "book", title, reason: "A visitor added this book to Mabel’s reading shelf." });
     recordLifeAction(state, "A visitor left “" + title + "” on the library shelf for Mabel.", "She can choose a few pages to read during quiet evenings.");
+    // Let the next visible shared-life cycle happen promptly, even if today's
+    // ordinary witnessed update already ran before this book arrived.
+    state.lastWitnessedDay = null;
     await saveState(env, state);
     return jsonResponse({ ok: true, book });
   }
@@ -1500,6 +1575,47 @@ async function handleSharedWorldEvent(request, env) {
     }, 0.08);
     if (!saved) return jsonResponse({ error: "Mabel could not keep that hobby yet." }, 400);
     state.currentThread = saved.id;
+  } else if (kind === "shared-gift") {
+    const gifts = Array.isArray(data.gifts) ? data.gifts.slice(0, 30) : [data];
+    let added = 0;
+    for (const supplied of gifts) {
+      const eventId = cleanText(supplied.eventId || supplied.id, 140);
+      const itemName = cleanText(supplied.item || supplied.name, 100);
+      const suppliedKind = supplied.itemKind || supplied.kind;
+      let itemKind = ["food", "water", "object"].includes(suppliedKind) ? suppliedKind : "object";
+      const visitorNumber = cleanVisitorNumber(supplied.visitorNumber || data.visitorNumber);
+      if (!eventId || !itemName || !visitorNumber || state.sharedBindle.items.some(item => item.id === eventId)) continue;
+      const ingredient = bakingIngredientType(itemName);
+      if (ingredient) itemKind = "food";
+      const noticedAt = cleanText(supplied.noticedAt, 40) || null;
+      const gift = {
+        id: eventId, name: itemName, kind: itemKind, source: "visitor", visitorNumber,
+        status: noticedAt ? "noticed" : "waiting", at: cleanText(supplied.at, 40, new Date().toISOString()),
+        noticedAt, note: cleanText(supplied.bindleNote || supplied.note || supplied.reaction, 240)
+      };
+      state.sharedBindle.items.unshift(gift);
+      added += 1;
+      if (ingredient && !state.baking.pantry.some(item => makeId(item.name) === makeId(itemName))) {
+        state.baking.pantry.unshift({ id: eventId + "-pantry", sourceEventId: eventId, name: itemName, ingredient, visitorNumber, at: gift.at });
+      }
+    }
+    state.sharedBindle.items = state.sharedBindle.items.slice(0, 60);
+    state.baking.pantry = state.baking.pantry.slice(0, 30);
+    if (!added) return jsonResponse({ ok: true, duplicate: true });
+    await saveState(env, state);
+    return jsonResponse({ ok: true, added });
+  } else if (kind === "shared-gift-noticed") {
+    const eventId = cleanText(data.eventId, 140);
+    const gift = state.sharedBindle.items.find(item => item.id === eventId);
+    if (!gift) return jsonResponse({ error: "That shared gift is not on Mabel’s shelf." }, 404);
+    if (!gift.noticedAt) {
+      gift.noticedAt = new Date().toISOString();
+      gift.status = "noticed";
+      gift.note = cleanText(data.note, 240);
+      recordLifeAction(state, "Mabel noticed the " + gift.name + " left by Visitor " + gift.visitorNumber + ".", gift.note || "A visitor left it for her.", gift.noticedAt);
+      await saveState(env, state);
+    }
+    return jsonResponse({ ok: true, gift });
   } else if (kind === "pantry-gift") {
     const eventId = cleanText(data.eventId, 140);
     const itemName = cleanText(data.item, 100);
@@ -1652,6 +1768,7 @@ export default {
           artFeedback: state.artFeedback,
           drawingPractice: state.drawingPractice,
           baking: state.baking,
+          sharedBindle: state.sharedBindle,
           coding: state.coding,
           wishes: state.wishes,
           readingBooks: state.readingBooks,
@@ -1661,8 +1778,16 @@ export default {
         }
       });
     }
+    if (url.pathname === "/mailbox" && request.method === "GET") {
+      const visitorId = cleanText(url.searchParams.get("visitorId"), 100);
+      if (!visitorId) return jsonResponse({ error: "A visitor identity is needed." }, 400);
+      let notes = [];
+      try { notes = JSON.parse(await env.MABEL_STATE.get(privateMailboxKey(visitorId)) || "[]"); } catch { notes = []; }
+      return jsonResponse({ notes: Array.isArray(notes) ? notes.slice(0, 40) : [] });
+    }
     if (url.pathname === "/mabel-state" && request.method === "GET") {
-      return jsonResponse({ state: await loadState(env) });
+      const state = await loadState(env);
+      return jsonResponse({ state: { ...state, readingBooks: state.readingBooks.map(({ visitorId, ...book }) => book) } });
     }
     if (url.pathname === "/reflect" && request.method === "POST") {
       return handleReflect(request, env);
