@@ -1686,6 +1686,22 @@ button#explore.explore-button:disabled {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
+.reading-shelf-card{margin:1.25rem 0;padding:1.1rem;border:1px solid rgba(113,82,139,.2);border-radius:18px;background:rgba(255,252,246,.8)}
+.book-upload-form{display:grid;gap:.7rem;max-width:34rem;margin-top:1rem}
+.book-upload-form label,.mabel-wish strong{color:#5b466d;font-weight:700}
+.book-upload-form input[type=text],.book-upload-form input[type=file]{max-width:100%;padding:.6rem;border:1px solid #d8c9d3;border-radius:12px;background:#fffdf8;color:#453c49}
+.book-upload-form button,.run-mabel-program{justify-self:start;border:1px solid #c6abc9;border-radius:999px;padding:.55rem .9rem;background:#f4e8f2;color:#584164;cursor:pointer}
+.book-upload-form button:disabled{opacity:.65;cursor:wait}
+#book-upload-status,.reading-book-status{color:#756b78;font-size:.92rem}
+.reading-book-item{display:grid;gap:.45rem;padding:.8rem 0;border-bottom:1px solid rgba(113,82,139,.12)}
+.reading-book-item progress{width:min(100%,22rem);height:.65rem;accent-color:#8a6d9c}
+.reading-book-note{margin:.2rem 0;color:#55465d}
+.mabel-wish{padding:.55rem .7rem;margin:.35rem 0;border-left:3px solid #a98bb7;background:rgba(247,239,248,.65);border-radius:0 12px 12px 0}
+.mabel-wish p{margin:.35rem 0;color:#716977}
+.run-mabel-program{margin-top:.5rem}
+.mabel-program-canvas{display:block;width:min(100%,360px);height:auto;margin-top:.75rem;border:1px solid #ddced5;border-radius:14px;background:#fffaf0;image-rendering:pixelated}
+.coding-project-inspiration{color:#80688a;font-size:.9rem}
+
 
 /* Small, switchable rooms inside Mabel’s home */
 .home-intro { max-width: 48rem; }
@@ -1850,3 +1866,4 @@ button#explore.explore-button:disabled {
   .kitchen-scene { grid-template-columns: 1fr; }
   .kitchen-shelves { grid-template-columns: 1fr; }
 }
+
