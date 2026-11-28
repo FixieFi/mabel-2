@@ -184,12 +184,7 @@ function loadMabel() {
     const saved = localStorage.getItem(mabelStorageKey);
 
     if (saved) {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed.map(function (spark) {
-        if (!spark || typeof spark !== "object") return spark;
-        const title = cleanSparkTitle(spark.title);
-        return title ? { ...spark, title } : spark;
-      }) : [];
+      return JSON.parse(saved);
     }
   } catch (error) {
     // Fall through to default Mabel.
@@ -5658,20 +5653,6 @@ function separateSparkMarker(value) {
       sparkReason = "A small wish formed in Mabel’s own reflection.";
     }
   }
-function cleanSparkTitle(value) {
-  return String(value || "").split("|")[0]
-    .replace(/\b(?:small question about (?:this |the )?hobby|why this caught (?:our|my|her) attention)\b[\s\S]*$/i, "")
-    .replace(/^\s*(?:a new curiosity caught mabel[’']s attention|a new hobby is taking root|mabel is curious about)\s*:\s*/i, "")
-    .replace(/^[*_~]+|[*_~]+$/g, "")
-    .replace(/[\s:;|—-]+$/, "")
-    .trim().slice(0, 90);
-}
-
-function cleanSparkField(value) {
-  const text = String(value || "").trim();
-  if (!text || /^(?:small question about (?:this |the )?hobby|why this caught (?:our|my|her) attention|hobby)$/i.test(text)) return "";
-  return text.slice(0, 220);
-}
   return { text: text, sparkTitle: sparkTitle, sparkQuestion: sparkQuestion, sparkReason: sparkReason, sparkKind: sparkKind, desireText: desireText };
 }
 
