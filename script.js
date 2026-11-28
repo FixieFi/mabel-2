@@ -2674,7 +2674,10 @@ function updateWishes() {
   if (!wishesElement) return;
   wishesElement.innerHTML = "";
 
-  const activeWishes = mabel.interests
+  const sharedWishes = sharedMabelBrain && Array.isArray(sharedMabelBrain.wishes)
+    ? sharedMabelBrain.wishes.filter(function (wish) { return wish && wish.status !== "fulfilled"; }).slice(0, 8)
+    : [];
+  const activeWishes = sharedWishes.length ? sharedWishes : mabel.interests
     .filter(function (interest) { return interest.stage !== "dormant"; })
     .slice(0, 4);
 
@@ -2687,6 +2690,21 @@ function updateWishes() {
 
   activeWishes.forEach(function (interest) {
     const item = document.createElement("li");
+    if (interest.type) {
+      item.className = "mabel-wish";
+      const title = document.createElement("strong");
+      title.textContent = interest.type === "book" && interest.status === "supplied" ? "On Mabel’s shelf: “" + interest.title + "”" :
+        interest.type === "book" ? "Mabel wishes to read “" + interest.title + "”" :
+        interest.type === "world" ? "Mabel wishes to have “" + interest.title + "” in her world" :
+          "Mabel wishes to learn about “" + interest.title + "”";
+      item.appendChild(title);
+      if (interest.reason) {
+        const reason = document.createElement("p");
+        reason.textContent = interest.reason;
+        item.appendChild(reason);
+      }
+      return wishesElement.appendChild(item);
+    }
     const question = String(interest.question || "").trim().replace(/[?.!]+$/, "");
     const lowerQuestion = question.charAt(0).toLowerCase() + question.slice(1);
     if (/^(what|who|where|when|why|how|whether|if)\b/i.test(question)) {
@@ -2696,6 +2714,125 @@ function updateWishes() {
     }
     wishesElement.appendChild(item);
   });
+}
+
+function updateReadingShelf() {
+  const list = document.getElementById("reading-shelf");
+  if (!list) return;
+  list.replaceChildren();
+  const books = sharedMabelBrain && Array.isArray(sharedMabelBrain.readingBooks) ? sharedMabelBrain.readingBooks : [];
+  if (!books.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "Mabel hasn’t been given a book to read yet.";
+    list.appendChild(empty);
+    return;
+  }
+  books.forEach(function (book) {
+    const row = document.createElement("li");
+    row.className = "reading-book-item";
+    const title = document.createElement("strong");
+    title.textContent = book.title;
+    row.appendChild(title);
+    const progress = document.createElement("progress");
+    progress.max = Math.max(1, Number(book.totalLength) || 1);
+    progress.value = Math.min(progress.max, Number(book.progress) || 0);
+    progress.setAttribute("aria-label", "Mabel’s reading progress for " + book.title);
+    row.appendChild(progress);
+    const status = document.createElement("span");
+    status.className = "reading-book-status";
+    status.textContent = book.status === "finished" ? "Finished reading" :
+      (Number(book.progress) > 0 ? "Mabel has been reading this in the evenings" : "Waiting for a quiet evening");
+    row.appendChild(status);
+    const notes = Array.isArray(book.notes) ? book.notes : [];
+    if (notes[0] && notes[0].text) {
+      const note = document.createElement("p");
+      note.className = "reading-book-note";
+      note.textContent = notes[0].text;
+      row.appendChild(note);
+    }
+    list.appendChild(row);
+  });
+}
+
+function updatePracticeProps() {
+  const list = document.getElementById("practice-props");
+  if (!list) return;
+  list.replaceChildren();
+  const props = sharedMabelBrain && Array.isArray(sharedMabelBrain.practiceProps) ? sharedMabelBrain.practiceProps : [];
+  if (!props.length) {
+    const empty = document.createElement("li");
+    empty.className = "brain-trait-empty";
+    empty.textContent = "Nothing is waiting to be practised just now.";
+    list.appendChild(empty);
+    return;
+  }
+  props.slice(0, 10).forEach(function (prop) {
+    const row = document.createElement("li");
+    const label = document.createElement("strong");
+    label.textContent = prop.skill + " · " + prop.name;
+    row.appendChild(label);
+    const detail = document.createElement("p");
+    const count = Number(prop.practiceCount) || 0;
+    detail.textContent = count ? "Mabel has practised with this " + count + " " + (count === 1 ? "time" : "times") + "." : "Mabel may try this when she has a quiet, energetic moment.";
+    row.appendChild(detail);
+    list.appendChild(row);
+  });
+}
+
+async function extractPdfText(file) {
+  const pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+  if (pdf.numPages > 500) throw new Error("This PDF is over 500 pages; Mabel’s little shelf can’t take a book that large yet.");
+  const pages = [];
+  let characterCount = 0;
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = content.items.map(function (item) { return item && item.str || ""; }).join(" ").replace(/\s+/g, " ").trim();
+    characterCount += text.length;
+    if (characterCount > 800000) throw new Error("That book contains more than 800,000 characters of text. Please use a shorter edition so Mabel can keep it on her shelf.");
+    if (text) pages.push(text);
+  }
+  const result = pages.join("\n\n").trim();
+  if (result.length < 500) throw new Error("Mabel couldn’t find selectable text in that PDF. It may be a scanned book; please use a text-based PDF.");
+  return result;
+}
+
+async function handleBookUpload(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = document.getElementById("book-upload-status");
+  const titleInput = document.getElementById("book-title-input");
+  const fileInput = document.getElementById("book-pdf-input");
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if (!file || !MABEL_BRAIN_URL) return;
+  if (file.size > 30 * 1024 * 1024) {
+    if (status) status.textContent = "That PDF is over 30 MB. Mabel’s shelf can take a smaller copy.";
+    return;
+  }
+  const title = String(titleInput && titleInput.value || file.name.replace(/\.pdf$/i, "")).trim();
+  if (status) status.textContent = "Mabel is carefully opening the book and preparing its pages…";
+  const submit = form.querySelector("button[type=submit]");
+  if (submit) submit.disabled = true;
+  try {
+    const text = await extractPdfText(file);
+    const response = await fetch(MABEL_BRAIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "book-supply", title, text })
+    });
+    const result = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(result.error || "Mabel couldn’t put that book on the shelf just now.");
+    if (status) status.textContent = result.alreadyAdded ? "That book is already waiting on Mabel’s shelf." : "“" + title + "” is on Mabel’s shared library shelf. She’ll choose a little to read in the evening.";
+    form.reset();
+    await refreshSharedMabelBrain();
+  } catch (error) {
+    if (status) status.textContent = error && error.message ? error.message : "Mabel couldn’t read that PDF. Please try another text-based copy.";
+  } finally {
+    if (submit) submit.disabled = false;
+  }
 }
 
 function sharedMabelInterestList() {
@@ -3043,7 +3180,7 @@ function updateCoding() {
   const skill = Math.max(0, Number(coding.skillLevel) || 0);
   if (level) level.textContent = skill
     ? "Coding practice · Level " + skill + " — Mabel is learning through small experiments."
-    : "If coding becomes one of Mabel’s hobbies, she may start a tiny programming experiment.";
+    : "When a subject keeps catching her attention, Mabel may try a tiny program inspired by it.";
   if (!list) return;
   list.replaceChildren();
   const projects = Array.isArray(coding.projects) ? coding.projects.slice(0, 6) : [];
@@ -3071,12 +3208,70 @@ function updateCoding() {
     note.className = "interest-reason";
     note.textContent = project.note || "";
     item.appendChild(note);
+    if (project.inspiredBy) {
+      const inspiration = document.createElement("p");
+      inspiration.className = "coding-project-inspiration";
+      inspiration.textContent = "Inspired by her interest in " + project.inspiredBy + ".";
+      item.appendChild(inspiration);
+    }
     const code = document.createElement("pre");
     code.className = "coding-project-code";
     const codeText = document.createElement("code");
     codeText.textContent = String(project.code || "").slice(0, 1800);
     code.appendChild(codeText);
     item.appendChild(code);
+    if (project.language === "MabelScript") {
+      const run = document.createElement("button");
+      run.type = "button";
+      run.className = "run-mabel-program";
+      run.textContent = "Run in Mabel’s little lab";
+      const canvas = document.createElement("canvas");
+      canvas.className = "mabel-program-canvas";
+      canvas.width = 240;
+      canvas.height = 160;
+      canvas.hidden = true;
+      canvas.setAttribute("aria-label", "A tiny picture made by Mabel’s code experiment: " + (project.title || ""));
+      run.addEventListener("click", function () {
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        canvas.hidden = false;
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = "#fffaf0";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        let program;
+        try { program = JSON.parse(project.code || "{}"); } catch (error) { return; }
+        const commands = Array.isArray(program.commands) ? program.commands.slice(0, 32) : [];
+        commands.forEach(function (command) {
+          if (!command || !["circle", "rect", "line", "text"].includes(command.op)) return;
+          const validPosition = function (value) { return Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 240; };
+          if (!validPosition(command.x) || !validPosition(command.y)) return;
+          context.fillStyle = /^#[0-9a-f]{6}$/i.test(command.color || "") ? command.color : "#826a91";
+          context.strokeStyle = context.fillStyle;
+          if (command.op === "circle") {
+            if (!Number.isFinite(Number(command.radius)) || Number(command.radius) <= 0 || Number(command.radius) > 50) return;
+            context.beginPath();
+            context.arc(command.x, command.y, Math.min(50, command.radius), 0, Math.PI * 2);
+            context.fill();
+          } else if (command.op === "rect") {
+            if (!Number.isFinite(Number(command.width)) || !Number.isFinite(Number(command.height)) || command.width <= 0 || command.height <= 0) return;
+            context.fillRect(command.x, command.y, Math.min(100, command.width), Math.min(100, command.height));
+          } else if (command.op === "line") {
+            if (!validPosition(command.endX) || !validPosition(command.endY)) return;
+            context.beginPath();
+            context.moveTo(command.x, command.y);
+            context.lineTo(command.endX, command.endY);
+            context.lineWidth = 2;
+            context.stroke();
+          } else {
+            context.font = "12px Georgia, serif";
+            context.fillText(String(command.text || "").slice(0, 60), command.x, command.y, 180);
+          }
+        });
+        run.textContent = "Run that little program again";
+      });
+      item.appendChild(run);
+      item.appendChild(canvas);
+    }
     list.appendChild(item);
   });
 }
@@ -3175,6 +3370,9 @@ async function refreshSharedMabelBrain() {
         updateNeeds();
       }
       updateBrain();
+      updateWishes();
+      updateReadingShelf();
+      updatePracticeProps();
       updateInterests();
       updateMindTopics();
       updateCrafting();
@@ -4213,6 +4411,8 @@ function updatePage() {
   updateActivityLog();
   updateNeeds();
   updateWishes();
+  updateReadingShelf();
+  updatePracticeProps();
   updateInterests();
   updateMindTopics();
   updateChanges();
@@ -5451,6 +5651,13 @@ async function noticeNextVisitorGift() {
     gift.reaction = parsedGiftReply.text;
     gift.bindleNote = makeGiftKeepsakeNote(gift);
     gift.status = "noticed";
+    if (gift.kind !== "food" && gift.kind !== "water" && MABEL_BRAIN_URL) {
+      fetch(MABEL_BRAIN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "practice-object", eventId: gift.id, item: gift.name })
+      }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
+    }
     if (parsedGiftReply.text) showHollowSpeech(parsedGiftReply.text);
     if (data.mood) mabel.now.mood = data.mood;
     if (data.memory) mabel.memories.unshift({ at: now(), kind: "discovery", text: data.memory });
@@ -7359,6 +7566,20 @@ async function handleWander(options) {
       }, 5 * 60 * 1000 + Math.random() * 5 * 60 * 1000);
     }
     saveResearchLog();
+    if (relevant && focusInterest.requestType !== "art-reference" && MABEL_BRAIN_URL) {
+      fetch(MABEL_BRAIN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "research-note",
+          eventId: (research.researchId || focusInterest.id) + "-" + String(research.at || "").replace(/[^0-9]/g, ""),
+          topic: focusInterest.title,
+          query: research.searchQuestion,
+          summary: research.researchSummary,
+          sourceTitle: research.sourceTitle
+        })
+      }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
+    }
     // Research results live in the Library. The Postbox is reserved for personal notes.
 
     const researchedIdea = researchIdeas.find(function (item) {
@@ -8019,6 +8240,14 @@ function startMabel() {
 
   const introducedObjectForm = document.getElementById("introduce-object-form");
   if (introducedObjectForm) introducedObjectForm.addEventListener("submit", handleIntroducedObject);
+  const bookUploadForm = document.getElementById("book-upload-form");
+  if (bookUploadForm) bookUploadForm.addEventListener("submit", handleBookUpload);
+  const bookFileInput = document.getElementById("book-pdf-input");
+  if (bookFileInput) bookFileInput.addEventListener("change", function () {
+    const titleInput = document.getElementById("book-title-input");
+    const file = bookFileInput.files && bookFileInput.files[0];
+    if (titleInput && file && !titleInput.value.trim()) titleInput.value = file.name.replace(/\.pdf$/i, "");
+  });
   document.querySelectorAll("[data-gift-kind]").forEach(function (button) {
     button.addEventListener("click", chooseGift);
   });
@@ -8101,3 +8330,4 @@ function startMabel() {
 }
 
 startMabel();
+
