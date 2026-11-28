@@ -134,8 +134,12 @@
 
 <div id="hollow" class="tab-panel">
   <h2>Mabel’s home</h2>
-  <p class="day-intro">Leave Mabel a small gift. She’ll find it in her own time.</p>
-
+  <p class="day-intro">A quiet little place to leave Mabel something, or visit the kitchen where she tries new treats.</p>
+  <div class="home-room-tabs" role="tablist" aria-label="Rooms in Mabel’s home">
+    <button id="home-room-tab-home" class="home-room-button active" type="button" role="tab" aria-selected="true" aria-controls="home-room-home" data-home-room="home">Home &amp; bindle</button>
+    <button id="home-room-tab-kitchen" class="home-room-button" type="button" role="tab" aria-selected="false" aria-controls="home-room-kitchen" data-home-room="kitchen">Mabel’s kitchen</button>
+  </div>
+  <div id="home-room-home" class="home-room-panel" role="tabpanel" aria-labelledby="home-room-tab-home">
   <div class="home-nest-art" aria-hidden="true">
     <svg viewBox="0 0 96 64" role="img" shape-rendering="crispEdges" aria-label="Pixel blackberry">
       <rect x="44" y="8" width="8" height="8" fill="#6f8f5e"/><rect x="36" y="12" width="8" height="8" fill="#85a76c"/><rect x="52" y="12" width="8" height="8" fill="#85a76c"/><rect x="44" y="16" width="8" height="8" fill="#71945e"/>
@@ -184,6 +188,33 @@
       <p class="bindle-empty">Nothing has left Mabel’s bindle yet.</p>
     </div>
   </div>
+  </div>
+  <section id="home-room-kitchen" class="home-room-panel" role="tabpanel" aria-labelledby="home-room-tab-kitchen" hidden>
+    <div class="kitchen-scene">
+      <div class="kitchen-scene-mark" aria-hidden="true">🥣　🍓　🍯</div>
+      <div>
+        <h3>Mabel’s little kitchen</h3>
+        <p>A warm nook for the treats she dreams up from ingredients she has gathered. When she bakes, she eats the treat herself and gets a little less hungry.</p>
+      </div>
+    </div>
+    <p id="baking-level" class="kitchen-note">Mabel’s baking hobby is just beginning; she’ll try a treat when she has suitable ingredients.</p>
+    <div class="kitchen-serving-card">
+      <span class="kitchen-card-label">Fresh from the oven</span>
+      <div id="latest-bake" class="kitchen-latest-bake"><p class="bindle-empty">Mabel has not baked a little treat yet.</p></div>
+    </div>
+    <div class="kitchen-shelves">
+      <section class="kitchen-shelf">
+        <h3>In Mabel’s pantry</h3>
+        <p>Ingredients she has saved for another little recipe.</p>
+        <ul id="baking-pantry" class="brain-trait-list"></ul>
+      </section>
+      <section class="kitchen-shelf">
+        <h3>Things she has baked</h3>
+        <p>A small record of Mabel’s kitchen experiments.</p>
+        <ul id="baking-log" class="brain-trait-list kitchen-baking-log"></ul>
+      </section>
+    </div>
+  </section>
 </div>
 
       <section id="about-you" class="tab-panel">
@@ -279,14 +310,6 @@
         <h3>Hobbies</h3>
         <p class="day-intro">A hobby appears only when Mabel repeatedly returns to a specific, recognizable activity. New hobbies begin at the very start and grow through time and practice.</p>
         <ul id="interests"></ul>
-
-        <h3>Mabel’s baking</h3>
-        <p class="day-intro">Her baking hobby grows through little treats she tries with ingredients she has gathered.</p>
-        <p id="baking-level" class="day-intro">Mabel’s baking hobby is just beginning.</p>
-        <h4>Ingredients she has saved</h4>
-        <ul id="baking-pantry" class="brain-trait-list"></ul>
-        <h4>Things she has baked</h4>
-        <ul id="baking-log" class="brain-trait-list"></ul>
 
         <h3>Mabel’s coding notebook</h3>
         <p class="day-intro">If coding becomes one of her hobbies, Mabel may write little programs inspired by the things she’s learning.</p>

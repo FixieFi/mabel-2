@@ -144,7 +144,8 @@ let lastReflectionDate = "";
 let bindle = {
   food: [],
   water: [],
-  treasures: []
+  treasures: [],
+  lastTreasureDecisionAt: null
 };
 
 let gallery = [];
@@ -1099,7 +1100,11 @@ function recordBindleDeparture(item, action, at) {
 }
 
 function bindleItemResonance(item) {
-  const text = String((item && item.name || "") + " " + (item && item.note || "")).toLowerCase();
+  if (!item || item.edible === true || item.kind === "food" || item.kind === "water") return "";
+  const text = String((item.name || "") + " " + (item.note || "")).toLowerCase();
+  if (/\b(oats?|flour|sugar|honey|berries|blackberries|blueberries|raspberries|strawberries|nuts?|hazelnuts?|walnuts?|almonds?|seeds?|mushrooms?|apple|apples|bread|crumbs?|muffin|cake|biscuit|cookie|focaccia|bagel|pizza crust|water|tea)\b/.test(text)) return "";
+  const keptAt = Date.parse((bindle.treasureBox || [])[0]?.keptAt || "");
+  if (Number.isFinite(keptAt) && Date.now() - keptAt < 24 * 60 * 60 * 1000) return "";
   const words = text.match(/[a-z]{4,}/g) || [];
   const meaningful = Array.from(new Set(words.filter(function (word) {
     return !/^(mabel|little|small|tiny|found|piece|thing|things|looked|seemed|wondered|might|could|would|with|from|that|this|their|there|what|when|where|once|again|visitor|gift|really|very|about|under|over|after|before|while|some|more|than|just|like)$/.test(word);
@@ -1111,7 +1116,7 @@ function bindleItemResonance(item) {
   for (const interest of interests) {
     if (!interest || !(interest.kind === "hobby" || interest.stage === "pursuing" || interest.stage === "growing")) continue;
     const interestWords = String(interest.title || "").toLowerCase().match(/[a-z]{4,}/g) || [];
-    if (interestWords.some(function (word) { return meaningful.includes(word); })) {
+    if (interestWords.some(function (word) { return meaningful.includes(word); }) && Math.random() < 0.18) {
       return "It connects with Mabel’s growing interest in " + interest.title + ".";
     }
   }
@@ -1122,14 +1127,12 @@ function bindleItemResonance(item) {
     .concat((mabel.feed || []).slice(0, 12).map(function (entry) { return (entry.text || "") + " " + (entry.why || ""); }))
     .concat((mabel.knowledge || []).slice(0, 12).map(function (entry) { return (entry.item || "") + " " + (entry.fact || ""); }))
     .join(" ").toLowerCase();
-  if (meaningful.some(function (word) { return savedTexts.includes(word); })) {
+  if (meaningful.some(function (word) { return savedTexts.includes(word); }) && Math.random() < 0.12) {
     return "It reminds Mabel of something she and a visitor talked about.";
   }
-  if (item && Number(item.pleasure) >= 0.65) return "It made Mabel unexpectedly happy, so she kept it close.";
-  if (Math.random() < 0.24) return "After carrying it for a while, Mabel found she had grown a little attached to it.";
+  if (item.pleasure >= 0.9 && Math.random() < 0.1) return "It made Mabel unexpectedly happy, so she kept it close.";
   return "";
 }
-
 function moveBindleItemToTreasureBox(item, reason) {
   bindle.treasureBox = Array.isArray(bindle.treasureBox) ? bindle.treasureBox : [];
   const keptItem = { ...item, source: inferBindleItemSource(item), keptReason: reason, keptAt: now() };
@@ -1158,14 +1161,26 @@ function trimBindleItems(items, limit) {
         : null;
       const receivedAt = Date.parse(gift && (gift.noticedAt || gift.at) || item.at || item.addedAt || "");
       const isVisitorGift = Boolean(gift || item.giftId || item.source === "visitor");
-      const protectedGift = isVisitorGift && (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 30 * 60 * 1000);
-      if (!protectedGift) { leavingIndex = index; break; }
+      const age = Number.isFinite(receivedAt) ? Date.now() - receivedAt : 0;
+      const lastDecision = Date.parse(bindle.lastTreasureDecisionAt || "");
+      const decisionCooling = items === bindle.treasures && Number.isFinite(lastDecision) && Date.now() - lastDecision < 6 * 60 * 60 * 1000;
+      const protectedItem = (isVisitorGift && age < 2 * 60 * 60 * 1000) ||
+        (items === bindle.treasures && (age < 2 * 60 * 60 * 1000 || decisionCooling));
+      if (!protectedItem) { leavingIndex = index; break; }
     }
     if (leavingIndex < 0) break;
     const leaving = items.splice(leavingIndex, 1)[0];
-    const reason = bindleItemResonance(leaving);
+    const isFood = items === bindle.food;
+    const isWater = items === bindle.water;
+    const reason = isFood || isWater ? "" : bindleItemResonance(leaving);
+    if (!isFood && !isWater) bindle.lastTreasureDecisionAt = now();
     if (reason) moveBindleItemToTreasureBox(leaving, reason);
-    else recordBindleDeparture(leaving, "discarded");
+    else {
+      const action = isFood ? "eaten" : isWater ? "drank" : "discarded";
+      recordBindleDeparture(leaving, action);
+      if (action === "eaten") mabel.needs.food = clampNeed(Number(mabel.needs.food) + 0.12);
+      if (action === "drank") mabel.needs.water = clampNeed(Number(mabel.needs.water) + 0.18);
+    }
   }
 }
 
@@ -1177,6 +1192,8 @@ function settleMatureBindleItems() {
     { items: bindle.treasures || [], need: "" }
   ];
   let changed = false;
+  let nonFoodResolved = false;
+  const lastTreasureDecision = Date.parse(bindle.lastTreasureDecisionAt || "");
   groups.forEach(function (group) {
     for (let index = group.items.length - 1; index >= 0; index -= 1) {
       const item = group.items[index];
@@ -1185,18 +1202,36 @@ function settleMatureBindleItems() {
         ? mabel.world.objects.find(function (object) { return object && object.id === item.giftId; })
         : null;
       const receivedAt = Date.parse(gift && (gift.noticedAt || gift.at) || item.at || item.addedAt || "");
-      if (!Number.isFinite(receivedAt) || Date.now() - receivedAt < 30 * 60 * 1000) continue;
-      if (group.need && Number(mabel.needs[group.need]) < 0.48) continue;
-      const reason = bindleItemResonance(item);
+      const age = Number.isFinite(receivedAt) ? Date.now() - receivedAt : 0;
+      if (!Number.isFinite(receivedAt)) continue;
+      if (group.need && age < 30 * 60 * 1000) continue;
+      if (!group.need) {
+        if (nonFoodResolved || age < 2 * 60 * 60 * 1000) continue;
+        if (Number.isFinite(lastTreasureDecision) && Date.now() - lastTreasureDecision < 6 * 60 * 60 * 1000) continue;
+      }
+      if (group.need === "food" && Number(mabel.needs.food) > 0.65) continue;
+      if (group.need === "water" && Number(mabel.needs.water) > 0.65) continue;
+      const reason = group.need ? "" : bindleItemResonance(item);
       group.items.splice(index, 1);
       if (reason) moveBindleItemToTreasureBox(item, reason);
-      else recordBindleDeparture(item, "discarded");
+      else {
+        const action = group.need === "food" ? "eaten" : group.need === "water" ? "drank" : "discarded";
+        recordBindleDeparture(item, action);
+        if (action === "eaten") mabel.needs.food = clampNeed(Number(mabel.needs.food) + 0.12);
+        if (action === "drank") mabel.needs.water = clampNeed(Number(mabel.needs.water) + 0.18);
+      }
+      if (!group.need) {
+        bindle.lastTreasureDecisionAt = now();
+        nonFoodResolved = true;
+      }
       changed = true;
     }
   });
   if (changed) {
     saveBindle();
     saveMabel();
+    persistSharedNeeds();
+    updateNeeds();
     updateBindle();
   }
 }
@@ -2094,12 +2129,12 @@ function loadBindle() {
     if (saved) {
       try { localStorage.setItem(bindleStorageKey, saved); } catch (ignored) {}
       const loaded = JSON.parse(saved);
-      return { food: [], water: [], treasures: [], treasureBox: [], history: [], ...loaded };
+      return { food: [], water: [], treasures: [], treasureBox: [], history: [], lastTreasureDecisionAt: null, ...loaded };
     }
   } catch (error) {
     // Fall through to an empty bindle.
   }
-  return { food: [], water: [], treasures: [], treasureBox: [], history: [] };
+  return { food: [], water: [], treasures: [], treasureBox: [], history: [], lastTreasureDecisionAt: null };
 }
 
 function loadLastAutonomousMoment() {
@@ -2442,7 +2477,7 @@ function applyExplorationFinds(findings) {
     } else {
       const findId = "wander-find-" + Date.now() + "-" + Math.floor(Math.random() * 100000);
       bindle.treasures.unshift({ id: findId, name: name, note: note, source: "wandering" });
-      trimBindleItems(bindle.treasures, 12);
+      trimBindleItems(bindle.treasures, 20);
       mabel.world.objects.unshift({ id: findId, name: name, at: now(), source: "wandering", visitSessionId: currentVisitorSessionId(), note: note, reaction: "" });
       mabel.world.objects.length = Math.min(mabel.world.objects.length, 20);
       mabel.needs.wonder = clampNeed(mabel.needs.wonder + 0.08);
@@ -2913,6 +2948,7 @@ function updateBaking() {
   const level = document.getElementById("baking-level");
   const pantryList = document.getElementById("baking-pantry");
   const log = document.getElementById("baking-log");
+  const latestBake = document.getElementById("latest-bake");
   const skill = Math.max(0, Number(baking.skillLevel) || 0);
   if (level) level.textContent = skill
     ? "Baking practice · Level " + skill + " — Mabel is learning by trying small recipes."
@@ -2931,6 +2967,35 @@ function updateBaking() {
         item.textContent = ingredient.name || "A little ingredient";
         pantryList.appendChild(item);
       });
+    }
+  }
+  if (latestBake) {
+    latestBake.replaceChildren();
+    const newestTreat = Array.isArray(baking.treats) ? baking.treats[0] : null;
+    if (!newestTreat) {
+      const empty = document.createElement("p");
+      empty.className = "bindle-empty";
+      empty.textContent = "Mabel has not baked a little treat yet.";
+      latestBake.appendChild(empty);
+    } else {
+      const title = document.createElement("strong");
+      title.textContent = newestTreat.title || "A little baked treat";
+      latestBake.appendChild(title);
+      if (newestTreat.at) {
+        const time = document.createElement("time");
+        time.dateTime = newestTreat.at;
+        time.textContent = new Date(newestTreat.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+        latestBake.appendChild(time);
+      }
+      const description = document.createElement("p");
+      description.textContent = newestTreat.description || "Mabel made herself a little treat.";
+      latestBake.appendChild(description);
+      if (Array.isArray(newestTreat.ingredients) && newestTreat.ingredients.length) {
+        const ingredients = document.createElement("span");
+        ingredients.className = "interest-stage";
+        ingredients.textContent = "Made with " + newestTreat.ingredients.join(" and ");
+        latestBake.appendChild(ingredients);
+      }
     }
   }
   if (log) {
@@ -4406,7 +4471,7 @@ function requestedArtworkColors(message) {
   const text = String(message || "");
   if (!isArtworkRequest(text)) return [];
   const colors = ["pink", "red", "orange", "yellow", "green", "blue", "purple", "violet", "lilac", "lavender", "teal", "turquoise", "black", "white", "brown", "grey", "gray", "gold", "silver"];
-  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\\b" + color + "\\b", "i").test(text); }))).slice(0, 4);
+  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\b" + color + "\b", "i").test(text); }))).slice(0, 4);
 }
 
 function requestedArtworkColorInstruction(message) {
@@ -5422,7 +5487,7 @@ async function noticeNextVisitorGift() {
       gift.status = "saved for later";
     } else {
       bindle.treasures.unshift({ name: gift.name, note: gift.bindleNote || makeGiftKeepsakeNote(gift), giftId: gift.id, source: "visitor" });
-      trimBindleItems(bindle.treasures, 12);
+      trimBindleItems(bindle.treasures, 20);
       gift.status = "packed in Mabel’s bindle";
     }
     addFeedEntry({
@@ -7656,6 +7721,18 @@ function switchTab(tabName) {
 }
 
 
+function switchHomeRoom(roomName) {
+  const buttons = document.querySelectorAll(".home-room-button");
+  const rooms = document.querySelectorAll(".home-room-panel");
+  buttons.forEach(function (button) {
+    const selected = button.dataset.homeRoom === roomName;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+  });
+  rooms.forEach(function (room) { room.hidden = room.id !== "home-room-" + roomName; });
+  if (roomName === "kitchen") refreshSharedMabelBrain();
+}
+
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
   mabel.now = {
@@ -7843,6 +7920,10 @@ function startMabel() {
     button.addEventListener("click", function () {
       switchTab(button.dataset.tab);
     });
+  });
+
+  document.querySelectorAll(".home-room-button").forEach(function (button) {
+    button.addEventListener("click", function () { switchHomeRoom(button.dataset.homeRoom); });
   });
 
   accrueActiveVisitorTime();

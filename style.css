@@ -1685,3 +1685,96 @@ button#explore.explore-button:disabled {
 .coding-project-code code {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
+
+
+/* Little rooms inside Mabel’s home */
+.home-room-tabs {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0 16px;
+  padding: 6px;
+  width: fit-content;
+  max-width: 100%;
+  background: rgba(229, 240, 218, 0.7);
+  border: 1px solid rgba(127, 155, 109, 0.32);
+  border-radius: 999px;
+}
+.home-room-button {
+  padding: 9px 16px;
+  color: #526f50;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+}
+.home-room-button.active {
+  color: #fffaf0;
+  background: linear-gradient(135deg, #72936c, #8f759f);
+  box-shadow: 0 3px 8px rgba(67, 42, 94, 0.16);
+}
+.home-room-panel[hidden] { display: none; }
+.kitchen-scene {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.32fr) 1fr;
+  gap: 18px;
+  align-items: center;
+  margin: 18px 0;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 15% 25%, rgba(255, 221, 168, 0.68), transparent 35%),
+    linear-gradient(135deg, rgba(255, 248, 238, 0.96), rgba(244, 229, 205, 0.82));
+  border: 2px solid rgba(180, 145, 76, 0.34);
+  border-radius: 24px;
+  box-shadow: 0 8px 20px rgba(67, 42, 94, 0.09);
+}
+.kitchen-scene-mark {
+  display: grid;
+  min-height: 108px;
+  place-items: center;
+  color: #765942;
+  font-size: 1.5rem;
+  line-height: 2.3;
+  text-align: center;
+  background: rgba(255, 248, 238, 0.72);
+  border: 1px dashed rgba(180, 145, 76, 0.55);
+  border-radius: 20px;
+}
+.kitchen-scene h3, .kitchen-shelf h3 {
+  margin: 0 0 6px;
+  color: #765942;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.35rem;
+}
+.kitchen-scene p, .kitchen-shelf p { color: #62584f; }
+.kitchen-note { margin: 12px 2px; color: var(--deep-plum); }
+.kitchen-serving-card, .kitchen-shelf {
+  padding: 16px;
+  background: rgba(255, 248, 238, 0.78);
+  border: 1px solid rgba(107, 74, 143, 0.2);
+  border-radius: 18px;
+  box-shadow: 0 5px 14px rgba(67, 42, 94, 0.07);
+}
+.kitchen-card-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #6b4a8f;
+  font-weight: 700;
+}
+.kitchen-latest-bake > strong { display: block; color: var(--deep-plum); font-size: 1.1rem; }
+.kitchen-latest-bake time { display: block; margin-top: 4px; color: #716a78; font-size: 0.85rem; }
+.kitchen-latest-bake p { color: #51445e; }
+.kitchen-latest-bake .interest-stage { display: block; margin-top: 8px; color: #526f50; }
+.kitchen-shelves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.kitchen-baking-log { max-height: 340px; overflow-y: auto; }
+@media (max-width: 560px) {
+  .home-room-tabs { width: 100%; }
+  .home-room-button { flex: 1; padding: 9px 10px; }
+  .kitchen-scene { grid-template-columns: 1fr; }
+  .kitchen-shelves { grid-template-columns: 1fr; }
+}
