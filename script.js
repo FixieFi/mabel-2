@@ -71,6 +71,7 @@ const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
 const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
 const MABEL_BRAIN_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-brain";
+const MABEL_OWNER_PICK_URL = "https://mabel-life.fianna-b-murphy.workers.dev/owner-ko-fi-pick";
 const MABEL_PRIVATE_MAILBOX_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mailbox";
 const MABEL_DAY_START_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_READING_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-reading";
@@ -1958,6 +1959,9 @@ function updateArtExhibition() {
   const exhibition = sharedMabelBrain && sharedMabelBrain.artExhibition;
   const dayOf = String(exhibition && (exhibition.dayOf || exhibition.weekOf) || "");
   const works = exhibition && Array.isArray(exhibition.works) ? exhibition.works : [];
+  const leading = works.reduce(function (best, artwork) {
+    return Number(artwork && artwork.votes) > Number(best && best.votes) ? artwork : best;
+  }, null);
   if (period) {
     const date = new Date(dayOf + "T00:00:00Z");
     period.textContent = dayOf && !isNaN(date.getTime())
@@ -1985,6 +1989,23 @@ function updateArtExhibition() {
       button.addEventListener("click", function () { openGalleryArtworkDetails(artwork); });
       item.appendChild(button);
     }
+    const voteCount = Math.max(0, Number(artwork.votes) || 0);
+    const status = document.createElement("p");
+    status.className = "art-exhibition-votes";
+    status.textContent = artwork === leading && voteCount > 0
+      ? "✦ Leading Ko-fi pick · " + voteCount + (voteCount === 1 ? " vote" : " votes")
+      : voteCount + (voteCount === 1 ? " vote" : " votes");
+    item.appendChild(status);
+    const vote = document.createElement("button");
+    vote.type = "button";
+    vote.className = "gallery-exhibition-vote";
+    vote.disabled = Number(visitorProfile.bond) < 35;
+    vote.textContent = Number(visitorProfile.bond) >= 35 ? "♡ Vote to share on Ko-fi" : "Get to know Mabel to vote";
+    vote.addEventListener("click", function (event) {
+      event.stopPropagation();
+      castKoFiExhibitionVote(artwork, vote);
+    });
+    item.appendChild(vote);
     list.appendChild(item);
   });
 }
@@ -2061,19 +2082,16 @@ function vectorPathsForExhibition(artwork) {
 }
 
 function addArtExhibitionVoteControl(artwork, container) {
-  const referenceStudy = isReferenceStudyArtwork(artwork);
-  if (!container || !artwork || (artwork.source !== "autonomous" && !referenceStudy)) return;
+  if (!container || !artwork) return;
   const bondReady = Number(visitorProfile.bond) >= 35;
   const vote = document.createElement("button");
   vote.type = "button";
   vote.className = "gallery-exhibition-vote";
   vote.disabled = !bondReady;
-  vote.textContent = bondReady
-    ? (referenceStudy ? "♡ Nominate this study for the exhibition" : "♡ Vote for the exhibition")
-    : "Get to know Mabel to vote";
+  vote.textContent = bondReady ? "♡ Nominate this drawing for the exhibition" : "Get to know Mabel to nominate";
   vote.setAttribute("aria-label", bondReady
-    ? (referenceStudy ? "Nominate this reference study for the Art Exhibition" : "Vote for this drawing to be considered for the Art Exhibition")
-    : "Build a closer friendship to vote for an exhibition drawing");
+    ? "Nominate " + (artwork.title || "this drawing") + " for the Daily Art Exhibition"
+    : "Build a closer friendship to nominate a drawing for the Daily Art Exhibition");
   vote.addEventListener("click", function (event) {
     event.stopPropagation();
     castArtExhibitionVote(artwork, vote);
@@ -2083,9 +2101,8 @@ function addArtExhibitionVoteControl(artwork, container) {
 
 async function castArtExhibitionVote(artwork, button) {
   if (!artwork || Number(visitorProfile.bond) < 35) return;
-  const referenceStudy = isReferenceStudyArtwork(artwork);
   button.disabled = true;
-  button.textContent = referenceStudy ? "Sending your nomination…" : "Sending your vote…";
+  button.textContent = "Sending your nomination…";
   try {
     if (!visitorProfile.visitorId) {
       visitorProfile.visitorId = window.crypto && typeof window.crypto.randomUUID === "function"
@@ -2095,43 +2112,166 @@ async function castArtExhibitionVote(artwork, button) {
     }
     const artworkId = String(artwork.id || artwork.at || artwork.title + "-" + (artwork.seed || ""));
     const payload = {
-      kind: referenceStudy ? "exhibition-nomination-vote" : "exhibition-vote",
-      artworkId: artworkId,
+      kind: "exhibition-nomination-vote",
       visitorId: visitorProfile.visitorId,
-      bond: Number(visitorProfile.bond) || 0
-    };
-    if (referenceStudy) {
-      payload.artwork = {
+      bond: Number(visitorProfile.bond) || 0,
+      artwork: {
         id: artworkId,
         source: "visitor-nominated",
-        title: artwork.title || "A reference study",
-        subject: artwork.subject || requestedArtworkDescriptionSubject(artwork.promptContext || artwork.title) || "",
+        title: artwork.title || "A little drawing",
+        subject: artwork.subject || artwork.title || "a little drawing",
         description: artwork.description || artwork.note || "",
-        kind: artwork.kind || "reference study",
+        kind: artwork.kind || "moment",
         palette: artwork.palette,
         motif: artwork.motif,
         seed: artwork.seed,
         symbols: artwork.symbols,
         at: artwork.at || artwork.createdAt || now(),
-        referenceRetry: true,
+        referenceRetry: isReferenceStudyArtwork(artwork),
         vectorPaths: vectorPathsForExhibition(artwork)
-      };
-    }
+      }
+    };
     const response = await fetch(MABEL_BRAIN_URL, {
       method: "POST",
       headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(function () { return {}; });
-    if (!response.ok) throw new Error(result.error || "Mabel couldn’t keep that vote just now.");
-    button.textContent = result.alreadyVoted
-      ? "♡ Your vote is already counted"
-      : (referenceStudy ? "♡ Nominated for the exhibition" : "♡ Vote counted");
+    if (!response.ok) throw new Error(result.error || "Mabel couldn’t keep that nomination just now.");
+    button.textContent = result.alreadyVoted ? "♡ Your nomination is already counted" : "♡ Nominated for today’s exhibition";
     refreshSharedMabelBrain();
   } catch (error) {
     button.disabled = false;
-    button.textContent = referenceStudy ? "♡ Try nominating again" : "♡ Try your vote again";
+    button.textContent = "♡ Try nominating again";
     button.title = error && error.message || "";
+  }
+}
+
+async function castKoFiExhibitionVote(artwork, button) {
+  if (!artwork || Number(visitorProfile.bond) < 35) return;
+  button.disabled = true;
+  button.textContent = "Counting your vote…";
+  try {
+    if (!visitorProfile.visitorId) {
+      visitorProfile.visitorId = window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : "visitor-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+      saveVisitorProfile();
+    }
+    const response = await fetch(MABEL_BRAIN_URL, {
+      method: "POST",
+      headers: MABEL_LIFE_POST_HEADERS,
+      body: JSON.stringify({
+        kind: "exhibition-vote",
+        artworkId: String(artwork.id || ""),
+        visitorId: visitorProfile.visitorId,
+        bond: Number(visitorProfile.bond) || 0
+      })
+    });
+    const result = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(result.error || "That vote could not be counted just now.");
+    button.textContent = result.alreadyVoted ? "♡ Your vote is already counted" : "♡ Vote counted";
+    refreshSharedMabelBrain();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "♡ Try your vote again";
+    button.title = error && error.message || "";
+  }
+}
+
+function downloadKoFiPickPng(artwork) {
+  const card = renderMabelCard(artwork);
+  const svg = card && card.querySelector("svg");
+  if (!svg) throw new Error("Mabel’s drawing could not be prepared.");
+  const exportSvg = svg.cloneNode(true);
+  exportSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  exportSvg.setAttribute("width", "1200");
+  exportSvg.setAttribute("height", "1200");
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(exportSvg)], { type: "image/svg+xml;charset=utf-8" }));
+  const image = new Image();
+  image.onload = function () {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1200;
+    canvas.height = 1200;
+    const context = canvas.getContext("2d");
+    if (!context) { URL.revokeObjectURL(url); return; }
+    context.fillStyle = "#fffaf0";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(function (blob) {
+      if (!blob) return;
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = (String(artwork.title || "mabel-daily-art").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mabel-daily-art") + ".png";
+      link.click();
+      URL.revokeObjectURL(downloadUrl);
+    }, "image/png");
+  };
+  image.onerror = function () { URL.revokeObjectURL(url); };
+  image.src = url;
+}
+
+async function unlockOwnerKoFiPick(event) {
+  event.preventDefault();
+  const form = document.getElementById("owner-ko-fi-form");
+  const input = document.getElementById("owner-ko-fi-password");
+  const result = document.getElementById("owner-ko-fi-result");
+  const button = document.getElementById("owner-ko-fi-unlock");
+  if (!form || !input || !result || !button) return;
+  const password = input.value;
+  if (!password) return;
+  button.disabled = true;
+  button.textContent = "Opening Mabel’s note…";
+  result.replaceChildren();
+  try {
+    const response = await fetch(MABEL_OWNER_PICK_URL, {
+      method: "POST",
+      headers: MABEL_LIFE_POST_HEADERS,
+      body: JSON.stringify({ password: password })
+    });
+    const data = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(data.error || "Mabel’s private note could not be opened.");
+    input.value = "";
+    if (!data.artwork) {
+      result.textContent = "No one has voted on today’s exhibition yet. Mabel’s pick will appear here once a drawing has a vote.";
+      return;
+    }
+    const card = renderMabelCard(data.artwork);
+    const drawing = card && card.querySelector("svg");
+    if (drawing) {
+      drawing.classList.add("owner-ko-fi-artwork");
+      result.appendChild(drawing);
+    }
+    const caption = document.createElement("p");
+    caption.className = "owner-ko-fi-caption";
+    caption.textContent = data.caption || data.artwork.description || data.artwork.title || "Mabel’s daily art pick";
+    result.appendChild(caption);
+    const actions = document.createElement("div");
+    actions.className = "owner-ko-fi-actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy caption";
+    copy.addEventListener("click", async function () {
+      try {
+        await navigator.clipboard.writeText(caption.textContent);
+        copy.textContent = "Caption copied";
+      } catch { copy.textContent = "Select and copy the caption above"; }
+    });
+    const download = document.createElement("button");
+    download.type = "button";
+    download.textContent = "Download PNG for Ko-fi";
+    download.addEventListener("click", function () {
+      try { downloadKoFiPickPng(data.artwork); } catch (error) { download.title = error.message || ""; }
+    });
+    actions.append(copy, download);
+    result.appendChild(actions);
+  } catch (error) {
+    result.textContent = error && error.message || "Mabel’s private note could not be opened.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Open today’s pick";
   }
 }
 
@@ -8865,6 +9005,8 @@ function startMabel() {
     button.addEventListener("click", chooseGift);
   });
   if (visitorBoardForm) visitorBoardForm.addEventListener("submit", submitVisitorBoardMessage);
+  const ownerKoFiForm = document.getElementById("owner-ko-fi-form");
+  if (ownerKoFiForm) ownerKoFiForm.addEventListener("submit", unlockOwnerKoFiPick);
   const saveVisitorNameButton = document.getElementById("save-visitor-name");
   if (saveVisitorNameButton) saveVisitorNameButton.addEventListener("click", saveVisitorNameChoices);
   const forgetProfileButton = document.getElementById("forget-visitor-profile");
