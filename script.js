@@ -5260,7 +5260,7 @@ function separateSparkMarker(value) {
     desireText = malformedReflection[1].trim().replace(/^["“]|["”]$/g, "").slice(0, 220);
     text = text.slice(0, malformedReflection.index).replace(/[\s,;|—-]+$/, "").trim();
     if (!sparkTitle && desireText) {
-      sparkTitle = desireText.replace(/^(?:i|mabel)\s+(?:would\s+)?(?:love|want|hope)\s+to\s+/i, "")
+      sparkTitle = desireText.replace(/^(?:i(?:['’]d| would)?|mabel)\s+(?:love|want|hope)\s+to\s+/i, "")
         .replace(/^(?:find|learn|discover)\s+(?:a\s+way\s+to\s+)?/i, "")
         .replace(/[.!?]+$/, "").slice(0, 90);
       sparkQuestion = desireText.replace(/[.!?]*$/, "?").slice(0, 220);
@@ -5286,7 +5286,7 @@ async function addDesireFromReflection(value) {
   const text = String(value || "").trim().replace(/[.!?]+$/, "");
   if (text.length < 12 || !MABEL_BRAIN_URL) return false;
   let title = text
-    .replace(/^(?:i|mabel)\s+(?:would\s+)?(?:love|want|hope)\s+to\s+/i, "")
+    .replace(/^(?:i(?:['’]d| would)?|mabel)\s+(?:love|want|hope)\s+to\s+/i, "")
     .replace(/^(?:find|learn|discover)\s+(?:a\s+way\s+to\s+)?/i, "")
     .replace(/\bmy\b/gi, "her")
     .trim();
