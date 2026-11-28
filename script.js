@@ -318,7 +318,12 @@ function loadSparks() {
     const saved = localStorage.getItem(sparksStorageKey);
 
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.map(function (spark) {
+        if (!spark || typeof spark !== "object") return spark;
+        const title = cleanSparkTitle(spark.title);
+        return title ? { ...spark, title } : spark;
+      }) : [];
     }
   } catch (error) {
     // Fall through to an empty spark list.
@@ -5614,9 +5619,9 @@ function separateSparkMarker(value) {
     const parts = String(payload || "").split("|").map(function (part) {
       return part.replace(/^[*_~]+|[*_~]+$/g, "").trim();
     });
-    sparkTitle = (parts[0] || "").slice(0, 90);
-    sparkQuestion = (parts[1] || "").slice(0, 220);
-    sparkReason = (parts[2] || "").slice(0, 220);
+    sparkTitle = cleanSparkTitle(parts[0]);
+    sparkQuestion = cleanSparkField(parts[1]);
+    sparkReason = cleanSparkField(parts[2]);
     sparkKind = /^hobby$/i.test(parts[3] || "") ? "hobby" : "";
     return "";
   }).replace(/\[\[\/?SPARK\]\]/gi, "").trim();
@@ -5649,6 +5654,21 @@ function separateSparkMarker(value) {
     }
   }
   return { text: text, sparkTitle: sparkTitle, sparkQuestion: sparkQuestion, sparkReason: sparkReason, sparkKind: sparkKind, desireText: desireText };
+}
+
+function cleanSparkTitle(value) {
+  return String(value || "").split("|")[0]
+    .replace(/\b(?:small question about (?:this |the )?hobby|why this caught (?:our|my|her) attention)\b[\s\S]*$/i, "")
+    .replace(/^\s*(?:a new curiosity caught mabel[’']s attention|a new hobby is taking root|mabel is curious about)\s*:\s*/i, "")
+    .replace(/^[*_~]+|[*_~]+$/g, "")
+    .replace(/[\s:;|—-]+$/, "")
+    .trim().slice(0, 90);
+}
+
+function cleanSparkField(value) {
+  const text = String(value || "").trim();
+  if (!text || /^(?:small question about (?:this |the )?hobby|why this caught (?:our|my|her) attention|hobby)$/i.test(text)) return "";
+  return text.slice(0, 220);
 }
 
 function sparkFromMarker(parts, source, question) {
@@ -7072,8 +7092,9 @@ function recordSpark(candidate) {
   if (!candidate || !candidate.title || !isGroundedResearchTrigger(candidate)) return;
   candidate = { ...candidate, grounded: true };
 
-  const title = String(candidate.title).trim().slice(0, 90);
-  const question = String(candidate.question || "What might Mabel discover about " + title + "?").trim().slice(0, 220);
+  const title = cleanSparkTitle(candidate.title);
+  if (!title) return;
+  const question = cleanSparkField(candidate.question) || "What might Mabel discover about " + title + "?";
   const key = normalizeInterestTitle(title);
   if (!key) return;
 
@@ -7093,7 +7114,7 @@ function recordSpark(candidate) {
       id: candidate.id || "spark-" + timestamp,
       title: title,
       question: question,
-      reason: String(candidate.reason || "A thought caught Mabel’s attention.").slice(0, 220),
+      reason: cleanSparkField(candidate.reason) || "A thought caught Mabel’s attention.",
       source: candidate.source || "Mabel’s thoughts",
       originText: originText,
       originAt: originAt,

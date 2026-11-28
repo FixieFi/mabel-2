@@ -1713,6 +1713,8 @@ const VISITOR_BOARD_KEY = "mabel-visitor-board-v1";
 const MAX_BOARD_MESSAGES = 50;
 
 async function handleVisitorBoard(request, env) {
+  if (env.VISITOR_BOARD_DB) return handleVisitorBoardD1(request, env.VISITOR_BOARD_DB);
+
   let messages = [];
   let saved;
   try {
@@ -1808,6 +1810,48 @@ async function handleVisitorBoard(request, env) {
   return jsonResponse({ ok: true, message: entry });
 }
 
+async function handleVisitorBoardD1(request, db) {
+  try {
+    if (request.method === "GET") {
+      const result = await db.prepare("SELECT id, name, visitor_number AS visitorNumber, message, created_at AS createdAt FROM visitor_board_messages ORDER BY created_at DESC LIMIT ?")
+        .bind(MAX_BOARD_MESSAGES).all();
+      return jsonResponse({ messages: Array.isArray(result.results) ? result.results : [] });
+    }
+    if (request.method !== "POST") return jsonResponse({ error: "The noticeboard only accepts notes." }, 405);
+    let data;
+    try { data = await request.json(); } catch { return jsonResponse({ error: "Please write a note first." }, 400); }
+    if (data?.action === "delete") {
+      const id = cleanText(data?.id, 100);
+      if (!id) return jsonResponse({ error: "That notice could not be found." }, 404);
+      const result = await db.prepare("DELETE FROM visitor_board_messages WHERE id = ?").bind(id).run();
+      if (!result.meta?.changes) return jsonResponse({ error: "That notice could not be found." }, 404);
+      return jsonResponse({ ok: true });
+    }
+    if (data?.action === "update-name") {
+      const visitorNumber = cleanVisitorNumber(data?.visitorNumber);
+      if (!visitorNumber) return jsonResponse({ error: "A visitor number is needed to update a public name." }, 400);
+      const publicName = cleanText(data?.publicName, 40);
+      const displayName = data?.publicNameEnabled === true && publicName ? publicName : "Visitor " + visitorNumber;
+      await db.prepare("UPDATE visitor_board_messages SET name = ? WHERE visitor_number = ?").bind(displayName, visitorNumber).run();
+      return jsonResponse({ ok: true });
+    }
+    const message = cleanText(data?.message, 280);
+    const typedName = cleanText(data?.name, 40);
+    const publicName = cleanText(data?.publicName, 40);
+    const visitorNumber = cleanVisitorNumber(data?.visitorNumber);
+    const publicLabel = data?.publicNameEnabled === true && publicName ? publicName : (visitorNumber ? "Visitor " + visitorNumber : "A visitor");
+    const name = typedName || publicLabel;
+    if (!message) return jsonResponse({ error: "Please write a note first." }, 400);
+    if (visitorNumber) await db.prepare("UPDATE visitor_board_messages SET name = ? WHERE visitor_number = ?").bind(publicLabel, visitorNumber).run();
+    const entry = { id: crypto.randomUUID(), name, visitorNumber, message, createdAt: new Date().toISOString() };
+    await db.prepare("INSERT INTO visitor_board_messages (id, name, visitor_number, message, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(entry.id, entry.name, entry.visitorNumber, entry.message, entry.createdAt).run();
+    await db.prepare("DELETE FROM visitor_board_messages WHERE id NOT IN (SELECT id FROM visitor_board_messages ORDER BY created_at DESC LIMIT ?)").bind(MAX_BOARD_MESSAGES).run();
+    return jsonResponse({ ok: true, message: entry });
+  } catch (error) {
+    return jsonResponse({ error: "The shared noticeboard cannot save changes right now. Please try again later." }, 503);
+  }
+}
 async function runWitnessedMabelDay(env) {
   const day = new Date().toISOString().slice(0, 10);
   const state = await loadState(env);
