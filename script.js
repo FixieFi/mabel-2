@@ -2913,6 +2913,7 @@ function updateBaking() {
   const level = document.getElementById("baking-level");
   const pantryList = document.getElementById("baking-pantry");
   const log = document.getElementById("baking-log");
+  const latestBake = document.getElementById("latest-bake");
   const skill = Math.max(0, Number(baking.skillLevel) || 0);
   if (level) level.textContent = skill
     ? "Baking practice · Level " + skill + " — Mabel is learning by trying small recipes."
@@ -2931,6 +2932,35 @@ function updateBaking() {
         item.textContent = ingredient.name || "A little ingredient";
         pantryList.appendChild(item);
       });
+    }
+  }
+  if (latestBake) {
+    latestBake.replaceChildren();
+    const newestTreat = Array.isArray(baking.treats) ? baking.treats[0] : null;
+    if (!newestTreat) {
+      const empty = document.createElement("p");
+      empty.className = "bindle-empty";
+      empty.textContent = "Mabel has not baked a little treat yet.";
+      latestBake.appendChild(empty);
+    } else {
+      const title = document.createElement("strong");
+      title.textContent = newestTreat.title || "A little baked treat";
+      latestBake.appendChild(title);
+      if (newestTreat.at) {
+        const time = document.createElement("time");
+        time.dateTime = newestTreat.at;
+        time.textContent = new Date(newestTreat.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+        latestBake.appendChild(time);
+      }
+      const description = document.createElement("p");
+      description.textContent = newestTreat.description || "Mabel made herself a little treat.";
+      latestBake.appendChild(description);
+      if (Array.isArray(newestTreat.ingredients) && newestTreat.ingredients.length) {
+        const ingredients = document.createElement("span");
+        ingredients.className = "interest-stage";
+        ingredients.textContent = "Made with " + newestTreat.ingredients.join(" and ");
+        latestBake.appendChild(ingredients);
+      }
     }
   }
   if (log) {
