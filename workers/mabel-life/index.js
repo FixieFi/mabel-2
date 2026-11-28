@@ -93,15 +93,35 @@ function privateMailboxKey(visitorId) {
   return "mabel-private-mailbox-v1:" + makeId(visitorId).slice(0, 100);
 }
 
+async function mabelStoreGet(env, key) {
+  if (!env.VISITOR_BOARD_DB) return env.MABEL_STATE.get(key);
+  const row = await env.VISITOR_BOARD_DB.prepare("SELECT value FROM mabel_kv WHERE key = ?").bind(key).first();
+  if (row && typeof row.value === "string") return row.value;
+  const legacy = await env.MABEL_STATE.get(key);
+  if (typeof legacy === "string") {
+    await mabelStorePut(env, key, legacy);
+    return legacy;
+  }
+  return null;
+}
+
+async function mabelStorePut(env, key, value) {
+  if (!env.VISITOR_BOARD_DB) return env.MABEL_STATE.put(key, value);
+  await env.VISITOR_BOARD_DB.prepare(
+    "INSERT INTO mabel_kv (key, value, updated_at) VALUES (?, ?, ?) " +
+    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+  ).bind(String(key), String(value), new Date().toISOString()).run();
+}
+
 async function addPrivateMailboxNote(env, visitorId, note) {
   if (!visitorId || !note || !note.id) return;
   const key = privateMailboxKey(visitorId);
   let notes = [];
-  try { notes = JSON.parse(await env.MABEL_STATE.get(key) || "[]"); } catch { notes = []; }
+  try { notes = JSON.parse(await mabelStoreGet(env, key) || "[]"); } catch { notes = []; }
   if (!Array.isArray(notes)) notes = [];
   if (notes.some(item => item && item.id === note.id)) return;
   notes.unshift(note);
-  await env.MABEL_STATE.put(key, JSON.stringify(notes.slice(0, 40)));
+  await mabelStorePut(env, key, JSON.stringify(notes.slice(0, 40)));
 }
 
 function makeId(value) {
@@ -206,7 +226,7 @@ function addArtExhibitionCandidate(state, raw) {
 }
 
 async function loadState(env) {
-  const saved = await env.MABEL_STATE.get(MABEL_KEY);
+  const saved = await mabelStoreGet(env, MABEL_KEY);
   let state = structuredClone(DEFAULT_STATE);
   if (saved) {
     try {
@@ -312,7 +332,7 @@ async function loadState(env) {
 }
 
 async function saveState(env, state) {
-  await env.MABEL_STATE.put(MABEL_KEY, JSON.stringify(state));
+  await mabelStorePut(env, MABEL_KEY, JSON.stringify(state));
 }
 
 function remember(state, text, kind) {
@@ -751,13 +771,13 @@ async function getEveningReading(state, env) {
     if (Number.isFinite(lastReadAt) && Date.now() - lastReadAt < 4 * 60 * 60 * 1000) return null;
     const lastAttemptAt = Date.parse(state.lastReadingAttemptAt || "");
     if (Number.isFinite(lastAttemptAt) && Date.now() - lastAttemptAt < 10 * 60 * 1000) return null;
-    const fullText = await env.MABEL_STATE.get("mabel-book-text:" + book.id);
+    const fullText = await mabelStoreGet(env, "mabel-book-text:" + book.id);
     if (!fullText) continue;
     const start = Math.max(0, Number(book.progress) || 0);
     const passage = fullText.slice(start, start + 1800);
     if (!passage) continue;
     let provider = null;
-    try { provider = JSON.parse(await env.MABEL_STATE.get("mabel-book-provider:" + book.id) || "null"); } catch { provider = null; }
+    try { provider = JSON.parse(await mabelStoreGet(env, "mabel-book-provider:" + book.id) || "null"); } catch { provider = null; }
     return { book, passage, start, end: Math.min(fullText.length, start + passage.length), today, provider };
   }
   return null;
@@ -1368,8 +1388,8 @@ async function handleSharedWorldEvent(request, env) {
     const visitorId = cleanText(data.visitorId, 100);
     const visitorNumber = cleanVisitorNumber(data.visitorNumber);
     const book = { id, title, status: "waiting", progress: 0, totalLength: text.length, notes: [], addedAt: new Date().toISOString(), readCount: 0, visitorNumber };
-    await env.MABEL_STATE.put("mabel-book-text:" + id, text);
-    if (visitorId && visitorNumber) await env.MABEL_STATE.put("mabel-book-provider:" + id, JSON.stringify({ visitorId, visitorNumber }));
+    await mabelStorePut(env, "mabel-book-text:" + id, text);
+    if (visitorId && visitorNumber) await mabelStorePut(env, "mabel-book-provider:" + id, JSON.stringify({ visitorId, visitorNumber }));
     state.readingBooks.unshift(book);
     const wish = state.wishes.find(item => makeId(item.title) === makeId(title) && item.type === "book");
     if (wish) { wish.status = "supplied"; wish.bookId = id; }
@@ -1969,7 +1989,7 @@ export default {
       const visitorId = cleanText(url.searchParams.get("visitorId"), 100);
       if (!visitorId) return jsonResponse({ error: "A visitor identity is needed." }, 400);
       let notes = [];
-      try { notes = JSON.parse(await env.MABEL_STATE.get(privateMailboxKey(visitorId)) || "[]"); } catch { notes = []; }
+      try { notes = JSON.parse(await mabelStoreGet(env, privateMailboxKey(visitorId)) || "[]"); } catch { notes = []; }
       return jsonResponse({ notes: Array.isArray(notes) ? notes.slice(0, 40) : [] });
     }
     if (url.pathname === "/mabel-state" && request.method === "GET") {
