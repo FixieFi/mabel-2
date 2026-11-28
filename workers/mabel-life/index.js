@@ -96,8 +96,8 @@ function cleanExhibitionVectorPaths(value) {
   return value.slice(0, 24).map(item => {
     if (!item || typeof item.d !== "string") return null;
     const d = item.d.trim().slice(0, 360);
-    if (!/^[MmLlHhVvCcSsQqTtZz0-9.,+\\-\\s]+$/.test(d) || !/[MLCQ]/i.test(d)) return null;
-    const values = d.match(/-?\\d+(?:\\.\\d+)?/g) || [];
+    if (!/^[MmLlHhVvCcSsQqTtZz0-9.,+\-\s]+$/.test(d) || !/[MLCQ]/i.test(d)) return null;
+    const values = d.match(/-?\d+(?:\.\d+)?/g) || [];
     if (values.length > 100 || values.some(number => !Number.isFinite(Number(number)) || Number(number) < -20 || Number(number) > 180)) return null;
     return {
       d,
