@@ -5,6 +5,9 @@ const activityElement = document.getElementById("activity");
 const thoughtElement = document.getElementById("thought");
 const diaryElement = document.getElementById("diary");
 const activityLogElement = document.getElementById("activity-log");
+const todayLogElement = document.getElementById("today-log");
+const todayStatusElement = document.getElementById("today-status");
+const todayUpdatedElement = document.getElementById("today-updated");
 const messageElement = document.getElementById("message");
 const chatFormElement = document.getElementById("chat-form");
 const sendButton = document.getElementById("send");
@@ -64,6 +67,10 @@ const MABEL_DAY_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-day";
 const MABEL_JOURNAL_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel-journal";
 const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
 const MABEL_BRAIN_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-brain";
+const MABEL_DAY_START_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-day";
+// text/plain keeps cross-origin JSON POSTs CORS-simple, avoiding an OPTIONS
+// request before every event. Request.json() still parses the JSON body.
+const MABEL_LIFE_POST_HEADERS = { "Content-Type": "text/plain;charset=UTF-8" };
 const sharedHobbySyncQueueStorageKey = "mabel-shared-hobby-sync-queue-v1";
 
 const mabelStorageKey = "mabel-character-v5";
@@ -680,7 +687,7 @@ async function flushPendingArtworkFeedback() {
       try {
         const response = await fetch(MABEL_BRAIN_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: MABEL_LIFE_POST_HEADERS,
           body: JSON.stringify({ kind: "art-feedback", feedback: item })
         });
         if (!response.ok) continue;
@@ -867,7 +874,7 @@ function registerSharedDrawing(artwork, context) {
   const artworkId = String(artwork.id || artwork.seed || artwork.createdAt || artwork.at || "drawing") + "-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
   return fetch(MABEL_BRAIN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: MABEL_LIFE_POST_HEADERS,
     body: JSON.stringify({
       kind: "drawing-practice",
       artworkId: artworkId,
@@ -930,7 +937,7 @@ function persistSharedNeeds() {
   const eventId = "needs-" + currentVisitorSessionId() + "-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
   fetch(MABEL_BRAIN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: MABEL_LIFE_POST_HEADERS,
     body: JSON.stringify({ kind: "needs", eventId: eventId, deltas: deltas })
   }).catch(function () {});
 }
@@ -984,7 +991,7 @@ async function flushSharedHobbySyncQueue() {
       try {
         const response = await fetch(MABEL_BRAIN_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: MABEL_LIFE_POST_HEADERS,
           body: JSON.stringify({ kind: "hobby", interest: queued.interest })
         });
         if (!response.ok) continue;
@@ -1874,7 +1881,7 @@ function saveToMabelGallery(artwork) {
   if (artwork.source === "autonomous") {
     sharedArtworkUpdate = fetch(MABEL_BRAIN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify({
         kind: "artwork",
         title: artwork.title,
@@ -2047,7 +2054,7 @@ async function castArtExhibitionVote(artwork, button) {
     }
     const response = await fetch(MABEL_BRAIN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(function () { return {}; });
@@ -2573,7 +2580,7 @@ async function handleExplore(options) {
       wanderings.length = Math.min(wanderings.length, 30);
     }
     applyExplorationFinds(finds);
-    fetch(MABEL_BRAIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "exploration", finds: finds.map(function (item) { return item && item.name; }).filter(Boolean) }) }).catch(function () {});
+    fetch(MABEL_BRAIN_URL, { method: "POST", headers: MABEL_LIFE_POST_HEADERS, body: JSON.stringify({ kind: "exploration", finds: finds.map(function (item) { return item && item.name; }).filter(Boolean) }) }).catch(function () {});
     const averageCuriosity = finds.length
       ? finds.reduce(function (total, item) { return total + (Number(item.curiosityScore) || 0); }, 0) / finds.length
       : 0;
@@ -2820,7 +2827,7 @@ async function handleBookUpload(event) {
     const text = await extractPdfText(file);
     const response = await fetch(MABEL_BRAIN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify({ kind: "book-supply", title, text })
     });
     const result = await response.json().catch(function () { return {}; });
@@ -3346,6 +3353,12 @@ async function refreshSharedMabelBrain() {
     const data = await response.json();
     if (data && data.brain && data.brain.personality) {
       sharedMabelBrain = data.brain;
+      if (mabel) {
+        if (data.brain.mood) mabel.now.mood = data.brain.mood;
+        if (data.brain.activity) mabel.now.doing = data.brain.activity;
+        if (data.brain.thought) mabel.now.thought = data.brain.thought;
+        updatePage();
+      }
       queueBrowserHobbiesForSharedBrain();
       flushPendingArtworkFeedback();
       if (mabel && Array.isArray(data.brain.lifeLog)) {
@@ -3370,6 +3383,7 @@ async function refreshSharedMabelBrain() {
         updateNeeds();
       }
       updateBrain();
+      updateTodayView();
       updateWishes();
       updateReadingShelf();
       updatePracticeProps();
@@ -3382,6 +3396,79 @@ async function refreshSharedMabelBrain() {
     // Keep the browser's current Brain view if the shared Worker is unavailable.
   } finally {
     sharedMabelBrainLoading = false;
+  }
+}
+
+function updateTodayView() {
+  const brain = sharedMabelBrain || {};
+  const activity = String(brain.activity || (mabel && mabel.now.doing) || "settling into her day");
+  const mood = String(brain.mood || (mabel && mabel.now.mood) || "curious");
+  if (todayStatusElement) todayStatusElement.textContent = "Mabel is " + activity + ". She is feeling " + mood + ".";
+  const stamp = brain.updatedAt || (Array.isArray(brain.lifeLog) && brain.lifeLog[0] && brain.lifeLog[0].at) || "";
+  if (todayUpdatedElement) {
+    if (stamp) {
+      todayUpdatedElement.dateTime = stamp;
+      todayUpdatedElement.textContent = "Her shared day last changed " + new Date(stamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) + ".";
+    } else {
+      todayUpdatedElement.textContent = "Her first shared moment will appear here when it is ready.";
+    }
+  }
+  if (!todayLogElement) return;
+  todayLogElement.replaceChildren();
+  const today = new Date().toISOString().slice(0, 10);
+  const entries = (Array.isArray(brain.lifeLog) ? brain.lifeLog : [])
+    .filter(function (entry) { return entry && entry.at && String(entry.at).slice(0, 10) === today; })
+    .slice(0, 6)
+    .reverse();
+  if (!entries.length) {
+    const empty = document.createElement("li");
+    empty.className = "today-empty";
+    empty.textContent = "Mabel hasn’t had a shared moment to record today yet.";
+    todayLogElement.appendChild(empty);
+    return;
+  }
+  entries.forEach(function (entry) {
+    const item = document.createElement("li");
+    const time = document.createElement("time");
+    time.dateTime = entry.at;
+    time.textContent = new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    item.appendChild(time);
+    const text = document.createElement("p");
+    text.textContent = entry.text || "Mabel had a little moment of her own.";
+    item.appendChild(text);
+    if (entry.why) {
+      const why = document.createElement("p");
+      why.className = "today-why";
+      why.textContent = entry.why;
+      item.appendChild(why);
+    }
+    todayLogElement.appendChild(item);
+  });
+}
+
+async function startMabelDayOnVisit() {
+  const today = new Date().toISOString().slice(0, 10);
+  const startedDayKey = "mabel-witnessed-day-v1";
+  try {
+    if (localStorage.getItem(startedDayKey) === today) {
+      await refreshSharedMabelBrain();
+      return;
+    }
+  } catch (error) {}
+  if (todayStatusElement) todayStatusElement.textContent = "Mabel is beginning one small shared moment for the day…";
+  try {
+    const response = await fetch(MABEL_DAY_START_URL, {
+      method: "POST",
+      headers: MABEL_LIFE_POST_HEADERS,
+      body: JSON.stringify({ source: "page-open" })
+    });
+    if (!response.ok) throw new Error("Mabel’s day could not be started.");
+    await response.json().catch(function () { return {}; });
+    try { localStorage.setItem(startedDayKey, today); } catch (error) {}
+    await refreshSharedMabelBrain();
+  } catch (error) {
+    if (todayStatusElement) todayStatusElement.textContent = "Mabel’s shared day is resting for now. Her saved world is still here; she can try again on a later visit.";
+    updateTodayView();
   }
 }
 
@@ -3951,7 +4038,7 @@ async function loadVisitorBoard() {
           try {
             const deleteResponse = await fetch(MABEL_BOARD_URL, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: MABEL_LIFE_POST_HEADERS,
               body: JSON.stringify({ action: "delete", id: message.id })
             });
             let deleteResult = {};
@@ -3993,7 +4080,7 @@ async function submitVisitorBoardMessage(event) {
   try {
     const response = await fetch(MABEL_BOARD_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify({ name: name, message: message })
     });
     if (!response.ok) throw new Error("The shared board is unavailable.");
@@ -4417,6 +4504,7 @@ function updatePage() {
   updateMindTopics();
   updateChanges();
   updateBrain();
+  updateTodayView();
 
   updateResearchLog();
   updateCrafting();
@@ -4595,7 +4683,7 @@ async function queueHomeGift(objectName, giftKind) {
     )) {
     fetch(MABEL_BRAIN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify({ kind: "pantry-gift", eventId: gift.id, item: cleanName })
     }).catch(function () {});
   }
@@ -5654,7 +5742,7 @@ async function noticeNextVisitorGift() {
     if (gift.kind !== "food" && gift.kind !== "water" && MABEL_BRAIN_URL) {
       fetch(MABEL_BRAIN_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: MABEL_LIFE_POST_HEADERS,
         body: JSON.stringify({ kind: "practice-object", eventId: gift.id, item: gift.name })
       }).then(function (response) { if (response.ok) refreshSharedMabelBrain(); }).catch(function () {});
     }
@@ -6662,9 +6750,7 @@ async function reflectOnConversation(visitorMessage, mabelReply, sparkCandidate,
   try {
     const response = await fetch("https://mabel-life.fianna-b-murphy.workers.dev/reflect", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify({
         visitorMessage: visitorMessage,
         mabelReply: mabelReply,
@@ -7247,7 +7333,7 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
     reference.visualNotes = String(artContext.referenceObservation).slice(0, 700);
     fetch(MABEL_BRAIN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: MABEL_LIFE_POST_HEADERS,
       body: JSON.stringify({ kind: "art-reference", artReference: reference })
     }).then(function (response) {
       if (response.ok) refreshSharedMabelBrain();
@@ -7569,7 +7655,7 @@ async function handleWander(options) {
     if (relevant && focusInterest.requestType !== "art-reference" && MABEL_BRAIN_URL) {
       fetch(MABEL_BRAIN_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: MABEL_LIFE_POST_HEADERS,
         body: JSON.stringify({
           kind: "research-note",
           eventId: (research.researchId || focusInterest.id) + "-" + String(research.at || "").replace(/[^0-9]/g, ""),
@@ -7668,7 +7754,7 @@ async function handleWander(options) {
       const reference = research.artReference;
       fetch(MABEL_BRAIN_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: MABEL_LIFE_POST_HEADERS,
         body: JSON.stringify({ kind: "art-reference", artReference: reference })
       }).then(function (response) {
         if (response.ok) refreshSharedMabelBrain();
@@ -8146,12 +8232,16 @@ function startMabel() {
       switchTab(button.dataset.tab);
     });
   });
+  document.querySelectorAll("[data-go-tab]").forEach(function (button) {
+    button.addEventListener("click", function () { switchTab(button.dataset.goTab); });
+  });
 
   accrueActiveVisitorTime();
   setInterval(accrueActiveVisitorTime, 60000);
   document.addEventListener("visibilitychange", function () {
     visitorProfile.activeTickAt = Date.now();
     saveVisitorProfile();
+    if (document.visibilityState === "visible") refreshSharedMabelBrain();
   });
 
   if (chatFormElement) {
@@ -8257,12 +8347,14 @@ function startMabel() {
   const resetBrowserButton = document.getElementById("reset-browser-mabel");
   if (resetBrowserButton) resetBrowserButton.addEventListener("click", resetThisBrowserMabel);
   loadVisitorBoard();
-  refreshSharedMabelBrain();
-  setInterval(refreshSharedMabelBrain, 60000);
+  startMabelDayOnVisit();
+  setInterval(function () {
+    if (document.visibilityState === "visible") refreshSharedMabelBrain();
+  }, 15 * 60 * 1000);
   setInterval(function () {
     const boardPanel = document.getElementById("visitor-board");
     if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
-  }, 30000);
+  }, 120000);
 
   // Read each shared board note once, independently of her longer autonomous moments.
   setInterval(function () {
@@ -8296,37 +8388,12 @@ function startMabel() {
     if (dueGift) noticeNextVisitorGift();
   }, 60000);
 
-  // Mabel can choose a needs-led wander while the page is open.
-  setInterval(runNeedsDrivenAutonomousWander, 60000);
-
-  // Mabel's ordinary life continues every 45 seconds.
+  // Evening notes are checked gently; the life worker has one shared daily moment.
   setInterval(function () {
-    if (mabel) {
-      chooseAction();
-    }
-  }, 45000);
-
-  // Mabel has one AI-generated autonomous moment every 5 to 10 minutes.
-  setInterval(function () {
-    const timeSinceLastMoment = Date.now() - lastAutonomousMoment;
-    const fiveMinutes = 5 * 60 * 1000;
-    const tenMinutes = 10 * 60 * 1000;
-
-    const nextMomentDelay =
-      fiveMinutes + Math.random() * (tenMinutes - fiveMinutes);
-
-    if (
-      mabel &&
-      document.visibilityState === "visible" &&
-      timeSinceLastMoment >= nextMomentDelay
-    ) {
-      handleAutonomousMoment();
-    }
-
     if (mabel && document.visibilityState === "visible") {
       writeEndOfDayReflection();
     }
-  }, 15000);
+  }, 15 * 60 * 1000);
 }
 
 startMabel();

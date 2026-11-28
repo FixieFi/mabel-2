@@ -197,6 +197,42 @@ progress::-moz-progress-bar {
   display: block;
 }
 
+.today-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin: 1rem 0;
+  padding: 1.2rem 1.35rem;
+  border: 1px solid rgba(113, 82, 139, .2);
+  border-left: 5px solid #789b6a;
+  border-radius: 20px;
+  background: linear-gradient(140deg, rgba(255,252,246,.96), rgba(237,246,227,.92));
+  box-shadow: 0 5px 18px rgba(71,53,38,.06);
+}
+.today-card-mark { font-size: 2rem; white-space: nowrap; }
+.today-needs-card { margin: 1rem 0; padding: 1rem 1.2rem; }
+.today-needs-card h3 { margin: 0 0 .5rem; }
+.today-needs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.4rem; }
+.today-needs-grid label { margin: .4rem 0; }
+.today-card p { margin: .3rem 0; color: var(--deep-plum); font-size: 1.15rem; }
+.today-card time { color: #766e75; font-size: .84rem; }
+.today-timeline { margin-top: 1.25rem; padding: 1rem 1.2rem; border-radius: 18px; background: rgba(255,248,238,.82); }
+.today-timeline h3 { margin-top: .2rem; }
+.today-log { display: grid; gap: .65rem; list-style: none; padding: 0; }
+.today-log li { padding: .8rem 1rem; border-left: 3px solid #b99bd2; border-radius: 0 12px 12px 0; background: #fffdf8; }
+.today-log time { display: block; margin-bottom: .25rem; color: #766e75; font-size: .8rem; }
+.today-log p { margin: 0; line-height: 1.45; }
+.today-log .today-why { margin-top: .25rem; color: #746b73; font-size: .92rem; }
+.today-links { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
+.today-links button { padding: .7rem 1rem; border: 1px solid rgba(107,74,143,.25); border-radius: 999px; color: var(--deep-plum); background: #fff8ee; font: inherit; font-weight: 600; cursor: pointer; }
+.today-links button:hover { background: #e3d1ff; }
+.inner-life-details { margin: 1rem 0; padding: .85rem 1rem; border: 1px solid rgba(107,74,143,.18); border-radius: 16px; background: rgba(255,252,246,.72); }
+.inner-life-details > summary { color: var(--deep-plum); font-size: 1.05rem; font-weight: 700; cursor: pointer; }
+.inner-life-details[open] > summary { margin-bottom: .8rem; }
+.inner-life-details > h3:first-of-type { margin-top: .5rem; }
+@media(max-width:560px) { .today-card { grid-template-columns: 1fr; } .today-card-mark { font-size: 1.6rem; } .today-needs-grid { grid-template-columns: 1fr; } }
+
 h2,
 h3 {
   color: var(--deep-plum);
