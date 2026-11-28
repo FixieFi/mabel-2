@@ -730,6 +730,14 @@ footer {
   padding-left: 0.65rem;
 }
 
+.research-follow-up {
+  margin: 0.45rem 0 0;
+  padding-left: 0.65rem;
+  border-left: 2px solid #b89bd0;
+  color: #6b4a8f;
+  font-style: italic;
+}
+
 
 /* Personal notes Mabel chooses to keep about a visitor */
 .visitor-profile-list {
