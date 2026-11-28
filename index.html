@@ -38,7 +38,7 @@
         <button class="tab-button" data-tab="musings">Explore</button>
         <button class="tab-button" data-tab="research">Library</button>
         <button class="tab-button" data-tab="day">Activity log</button>
-        <button class="tab-button" data-tab="inner-life">Inner Life</button>
+        <button class="tab-button" data-tab="inner-life">Mabel’s Brain</button>
         <button class="tab-button" data-tab="gallery-tab">Gallery</button>
         <button class="tab-button" data-tab="art-exhibition">Daily Art Exhibition</button>
         <button class="tab-button" data-tab="postbox">Your mailbox</button>
@@ -53,7 +53,7 @@
           <strong id="spark-notice-heading">A new hobby spark has appeared</strong>
           <p id="spark-notice-text">Mabel is curious about a new hobby.</p>
         </div>
-        <button id="view-spark" type="button">See in Inner Life</button>
+          <button id="view-spark" type="button">See in Mabel’s Brain</button>
       </aside>
       <aside id="gallery-notice-card" class="spark-notice-card gallery-notice-card hidden" aria-live="polite" aria-atomic="true">
         <span class="spark-notice-star" aria-hidden="true">✧</span>
@@ -113,7 +113,7 @@
           <button type="button" data-go-tab="musings">🍂 Explore</button>
           <button type="button" data-go-tab="research">📚 Library</button>
           <button type="button" data-go-tab="hollow">🏡 Her home</button>
-          <button type="button" data-go-tab="inner-life">✨ Inner Life</button>
+          <button type="button" data-go-tab="inner-life">✨ Mabel’s Brain</button>
         </div>
       </section>
 
@@ -231,6 +231,15 @@
           <progress id="visitor-bond-progress" max="100" value="0" aria-label="Friendship with Mabel"></progress>
           <p id="visitor-bond-note">Grows through time spent together, chats, and gifts Mabel notices.</p>
         </div>
+        <div class="visitor-name-card">
+          <h3>What Mabel calls you</h3>
+          <p>Choose a name for Mabel to use in your private conversations. It stays in this browser unless you separately choose to show it on the shared noticeboard.</p>
+          <label for="visitor-name-choice">Name for Mabel</label>
+          <input id="visitor-name-choice" maxlength="32" autocomplete="nickname" placeholder="Your name, or leave blank">
+          <label class="visitor-public-name-choice"><input id="visitor-public-name" type="checkbox"> Show this name beside my public noticeboard notes</label>
+          <button id="save-visitor-name" type="button">Save name choices</button>
+          <p id="visitor-name-status" aria-live="polite"></p>
+        </div>
         <p class="day-intro">Notes she chose to keep from things you shared and moments between you. They stay in this browser.</p>
         <h3>Things you’ve shared</h3>
         <ul id="visitor-profile-facts" class="visitor-profile-list"></ul>
@@ -250,7 +259,7 @@
         <p class="day-intro">Leave a note for the next visitor. Notes are shared with everyone who visits this page.</p>
         <form id="visitor-board-form" class="visitor-board-form">
           <label for="visitor-board-name">Your name or sign-off (optional)</label>
-          <input id="visitor-board-name" name="name" maxlength="40" autocomplete="nickname" placeholder="A little sign-off">
+          <input id="visitor-board-name" name="name" maxlength="40" autocomplete="nickname" placeholder="Leave blank to use your visitor name">
           <label for="visitor-board-message">A note for another visitor</label>
           <textarea id="visitor-board-message" name="message" rows="3" maxlength="280" required placeholder="What would you like the next visitor to know?"></textarea>
           <button type="submit">Post to the board</button>
@@ -334,7 +343,7 @@
             <ul id="brain-core-traits" class="brain-trait-list"></ul>
           </section>
           <section class="brain-trait-card brain-evolved-card">
-            <h3>What is growing</h3><p>Small habits and beliefs she has returned to over time.</p>
+            <h3>What is growing</h3><p>Personality qualities and beliefs supported by repeated moments.</p>
             <ul id="brain-evolved-traits" class="brain-trait-list"></ul>
           </section>
         </div>
@@ -346,6 +355,9 @@
 
         <h3>Mabel’s wishes</h3>
         <ul id="wishes"></ul>
+        <h3>Mabel’s fears</h3>
+        <p class="day-intro">Small worries that have returned often enough to matter to her.</p>
+        <ul id="fears"></ul>
 
         <h3>Hobbies</h3>
         <p class="day-intro">A hobby appears only when Mabel repeatedly returns to a specific, recognizable activity. New hobbies begin at the very start and grow through time and practice.</p>
