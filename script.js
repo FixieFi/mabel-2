@@ -323,7 +323,12 @@ function loadSparks() {
     const saved = localStorage.getItem(sparksStorageKey);
 
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.map(function (spark) {
+        if (!spark || typeof spark !== "object") return spark;
+        const title = cleanSparkTitle(spark.title);
+        return title ? { ...spark, title } : spark;
+      }) : [];
     }
   } catch (error) {
     // Fall through to an empty spark list.
@@ -5668,6 +5673,21 @@ function cleanSparkField(value) {
   return text.slice(0, 220);
 }
   return { text: text, sparkTitle: sparkTitle, sparkQuestion: sparkQuestion, sparkReason: sparkReason, sparkKind: sparkKind, desireText: desireText };
+}
+
+function cleanSparkTitle(value) {
+  return String(value || "").split("|")[0]
+    .replace(/\b(?:small question about (?:this |the )?hobby|why this caught (?:our|my|her) attention)\b[\s\S]*$/i, "")
+    .replace(/^\s*(?:a new curiosity caught mabel[’']s attention|a new hobby is taking root|mabel is curious about)\s*:\s*/i, "")
+    .replace(/^[*_~]+|[*_~]+$/g, "")
+    .replace(/[\s:;|—-]+$/, "")
+    .trim().slice(0, 90);
+}
+
+function cleanSparkField(value) {
+  const text = String(value || "").trim();
+  if (!text || /^(?:small question about (?:this |the )?hobby|why this caught (?:our|my|her) attention|hobby)$/i.test(text)) return "";
+  return text.slice(0, 220);
 }
 
 function sparkFromMarker(parts, source, question) {
