@@ -1101,7 +1101,7 @@ function recordBindleDeparture(item, action, at) {
 function bindleItemResonance(item) {
   if (!item || item.edible === true || item.kind === "food" || item.kind === "water") return "";
   const text = String((item.name || "") + " " + (item.note || "")).toLowerCase();
-  if (/\\b(oats?|flour|sugar|honey|berries|blackberries|blueberries|raspberries|strawberries|nuts?|hazelnuts?|walnuts?|almonds?|seeds?|mushrooms?|apple|apples|bread|crumbs?|muffin|cake|biscuit|cookie|focaccia|bagel|pizza crust|water|tea)\\b/.test(text)) return "";
+  if (/\b(oats?|flour|sugar|honey|berries|blackberries|blueberries|raspberries|strawberries|nuts?|hazelnuts?|walnuts?|almonds?|seeds?|mushrooms?|apple|apples|bread|crumbs?|muffin|cake|biscuit|cookie|focaccia|bagel|pizza crust|water|tea)\b/.test(text)) return "";
   const keptAt = Date.parse((bindle.treasureBox || [])[0]?.keptAt || "");
   if (Number.isFinite(keptAt) && Date.now() - keptAt < 24 * 60 * 60 * 1000) return "";
   const words = text.match(/[a-z]{4,}/g) || [];
@@ -4453,7 +4453,7 @@ function requestedArtworkColors(message) {
   const text = String(message || "");
   if (!isArtworkRequest(text)) return [];
   const colors = ["pink", "red", "orange", "yellow", "green", "blue", "purple", "violet", "lilac", "lavender", "teal", "turquoise", "black", "white", "brown", "grey", "gray", "gold", "silver"];
-  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\\b" + color + "\\b", "i").test(text); }))).slice(0, 4);
+  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\b" + color + "\b", "i").test(text); }))).slice(0, 4);
 }
 
 function requestedArtworkColorInstruction(message) {
