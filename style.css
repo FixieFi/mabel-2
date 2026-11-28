@@ -530,6 +530,33 @@ footer {
   margin: 0;
 }
 
+.kofi-image-button {
+  display: inline-block;
+  width: min(180px, 65vw);
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(59, 72, 100, 0.18);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.kofi-image-button img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.kofi-image-button:hover,
+.kofi-image-button:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 7px 16px rgba(59, 72, 100, 0.24);
+}
+
+.kofi-image-button:focus-visible {
+  outline: 3px solid var(--deep-plum);
+  outline-offset: 3px;
+}
+
 .gallery-intro {
   margin-top: 0;
   color: var(--plum);
