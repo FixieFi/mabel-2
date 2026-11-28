@@ -134,12 +134,13 @@
 
 <div id="hollow" class="tab-panel">
   <h2>Mabel’s home</h2>
-  <p class="day-intro">A quiet little place to leave Mabel something, or visit the kitchen where she tries new treats.</p>
-  <div class="home-room-tabs" role="tablist" aria-label="Rooms in Mabel’s home">
-    <button id="home-room-tab-home" class="home-room-button active" type="button" role="tab" aria-selected="true" aria-controls="home-room-home" data-home-room="home">Home &amp; bindle</button>
-    <button id="home-room-tab-kitchen" class="home-room-button" type="button" role="tab" aria-selected="false" aria-controls="home-room-kitchen" data-home-room="kitchen">Mabel’s kitchen</button>
-  </div>
-  <div id="home-room-home" class="home-room-panel" role="tabpanel" aria-labelledby="home-room-tab-home">
+  <p class="day-intro home-intro">A little place for Mabel’s gifts and things, with her kitchen just around the corner.</p>
+  <nav class="home-room-nav" aria-label="Corners of Mabel’s home">
+    <a class="home-room-link home-room-link-gifts" href="#home-room-home"><span aria-hidden="true">♡</span><span>Gift nook</span><span class="home-room-link-arrow" aria-hidden="true">↓</span></a>
+    <a class="home-room-link home-room-link-kitchen" href="#home-room-kitchen"><span aria-hidden="true">🥣</span><span>Visit the kitchen</span><span class="home-room-link-arrow" aria-hidden="true">↓</span></a>
+  </nav>
+  <section id="home-room-home" class="home-room-section gift-nook-section">
+    <h3 class="home-room-heading">A little nook for Mabel</h3>
   <div class="home-nest-art" aria-hidden="true">
     <svg viewBox="0 0 96 64" role="img" shape-rendering="crispEdges" aria-label="Pixel blackberry">
       <rect x="44" y="8" width="8" height="8" fill="#6f8f5e"/><rect x="36" y="12" width="8" height="8" fill="#85a76c"/><rect x="52" y="12" width="8" height="8" fill="#85a76c"/><rect x="44" y="16" width="8" height="8" fill="#71945e"/>
@@ -171,30 +172,30 @@
   <div id="hollow-speech" class="hollow-speech hidden" aria-live="polite">
     <p id="hollow-speech-text"></p>
   </div>
-  <p id="hollow-status">Gifts wait here for Mabel’s next quiet moment, usually every 5–10 minutes while this page is open. Her reaction appears here and in her activity log.</p>
+  <p id="hollow-status">Mabel will come across anything you leave here during one of her quiet moments.</p>
   <div class="home-inventory">
     <h3>Mabel’s bindle</h3>
-    <p class="bindle-intro">Everything Mabel is carrying: useful things, snacks, and little treasures.</p>
+    <p class="bindle-intro">Things Mabel is carrying for now. She may eat, drink, keep, or move on from them as she needs.</p>
     <div id="bindle" class="bindle-card">
       <p class="bindle-empty">Mabel’s bindle is light today.</p>
     </div>
     <h3>Mabel’s treasure box</h3>
-    <p class="bindle-intro">Things she chose to keep because they connect with an interest, a conversation, or simply felt special.</p>
+    <p class="bindle-intro">Only the things that become especially meaningful to Mabel find a place here.</p>
     <div id="treasure-box" class="bindle-card treasure-box-card">
       <p class="bindle-empty">Nothing has found its way into the treasure box yet.</p>
     </div>
-    <h3>Things no longer in her bindle</h3>
+    <h3>Things she has used or moved on from</h3>
     <div id="bindle-history" class="bindle-card bindle-history-card">
       <p class="bindle-empty">Nothing has left Mabel’s bindle yet.</p>
     </div>
   </div>
-  </div>
-  <section id="home-room-kitchen" class="home-room-panel" role="tabpanel" aria-labelledby="home-room-tab-kitchen" hidden>
+  </section>
+  <section id="home-room-kitchen" class="home-room-section kitchen-room-section">
     <div class="kitchen-scene">
       <div class="kitchen-scene-mark" aria-hidden="true">🥣　🍓　🍯</div>
       <div>
         <h3>Mabel’s little kitchen</h3>
-        <p>A warm nook for the treats she dreams up from ingredients she has gathered. When she bakes, she eats the treat herself and gets a little less hungry.</p>
+        <p>Her own small corner for trying sweet things with ingredients she has gathered. A treat she bakes is for her to eat, and helps ease her hunger.</p>
       </div>
     </div>
     <p id="baking-level" class="kitchen-note">Mabel’s baking hobby is just beginning; she’ll try a treat when she has suitable ingredients.</p>
@@ -214,6 +215,7 @@
         <ul id="baking-log" class="brain-trait-list kitchen-baking-log"></ul>
       </section>
     </div>
+    <a class="home-room-return" href="#home-room-home"><span aria-hidden="true">↑</span> Back to the gift nook</a>
   </section>
 </div>
 

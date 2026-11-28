@@ -1687,39 +1687,73 @@ button#explore.explore-button:disabled {
 }
 
 
-/* Little rooms inside Mabel’s home */
-.home-room-tabs {
-  display: flex;
-  gap: 10px;
-  margin: 18px 0 16px;
-  padding: 6px;
-  width: fit-content;
-  max-width: 100%;
-  background: rgba(229, 240, 218, 0.7);
-  border: 1px solid rgba(127, 155, 109, 0.32);
-  border-radius: 999px;
+/* A gentle in-page path through Mabel’s home */
+.home-intro { max-width: 48rem; }
+.home-room-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 22px;
 }
-.home-room-button {
-  padding: 9px 16px;
+.home-room-link {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 12px 16px;
   color: #526f50;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font: inherit;
-  cursor: pointer;
+  text-decoration: none;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.08rem;
+  background: linear-gradient(135deg, rgba(255, 248, 238, 0.96), rgba(229, 240, 218, 0.9));
+  border: 1px solid rgba(127, 155, 109, 0.38);
+  border-radius: 18px;
+  box-shadow: 0 4px 12px rgba(67, 42, 94, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.home-room-button.active {
-  color: #fffaf0;
-  background: linear-gradient(135deg, #72936c, #8f759f);
-  box-shadow: 0 3px 8px rgba(67, 42, 94, 0.16);
+.home-room-link-kitchen {
+  color: #765942;
+  background: linear-gradient(135deg, rgba(255, 248, 238, 0.96), rgba(244, 229, 205, 0.9));
+  border-color: rgba(180, 145, 76, 0.36);
 }
-.home-room-panel[hidden] { display: none; }
+.home-room-link:hover, .home-room-link:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 7px 16px rgba(67, 42, 94, 0.13);
+}
+.home-room-link > span:first-child { font-size: 1.35rem; }
+.home-room-link-arrow { justify-self: end; opacity: 0.72; }
+.home-room-section {
+  scroll-margin-top: 18px;
+  margin: 20px 0 28px;
+  padding: 20px;
+  background: rgba(255, 248, 238, 0.64);
+  border: 1px solid rgba(107, 74, 143, 0.18);
+  border-radius: 22px;
+}
+.home-room-heading {
+  margin: 0 0 12px;
+  color: var(--deep-plum);
+  font-family: "Fraunces", Georgia, serif;
+}
+.gift-nook-section .home-nest-art { margin-top: 8px; }
+.gift-nook-section .home-inventory {
+  margin-right: -2px;
+  margin-bottom: -4px;
+  margin-left: -2px;
+}
+.kitchen-room-section {
+  background:
+    radial-gradient(circle at 90% 5%, rgba(255, 221, 168, 0.28), transparent 34%),
+    rgba(255, 248, 238, 0.78);
+  border-color: rgba(180, 145, 76, 0.3);
+}
 .kitchen-scene {
   display: grid;
   grid-template-columns: minmax(110px, 0.32fr) 1fr;
   gap: 18px;
   align-items: center;
-  margin: 18px 0;
+  margin: 0 0 16px;
   padding: 20px;
   background:
     radial-gradient(circle at 15% 25%, rgba(255, 221, 168, 0.68), transparent 35%),
@@ -1750,7 +1784,7 @@ button#explore.explore-button:disabled {
 .kitchen-note { margin: 12px 2px; color: var(--deep-plum); }
 .kitchen-serving-card, .kitchen-shelf {
   padding: 16px;
-  background: rgba(255, 248, 238, 0.78);
+  background: rgba(255, 248, 238, 0.88);
   border: 1px solid rgba(107, 74, 143, 0.2);
   border-radius: 18px;
   box-shadow: 0 5px 14px rgba(67, 42, 94, 0.07);
@@ -1772,9 +1806,18 @@ button#explore.explore-button:disabled {
   margin-top: 14px;
 }
 .kitchen-baking-log { max-height: 340px; overflow-y: auto; }
+.home-room-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: #526f50;
+  font-family: "Fraunces", Georgia, serif;
+  text-decoration-color: rgba(82, 111, 80, 0.42);
+}
 @media (max-width: 560px) {
-  .home-room-tabs { width: 100%; }
-  .home-room-button { flex: 1; padding: 9px 10px; }
+  .home-room-nav { grid-template-columns: 1fr; }
+  .home-room-section { padding: 14px; }
   .kitchen-scene { grid-template-columns: 1fr; }
   .kitchen-shelves { grid-template-columns: 1fr; }
 }

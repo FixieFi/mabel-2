@@ -4471,7 +4471,7 @@ function requestedArtworkColors(message) {
   const text = String(message || "");
   if (!isArtworkRequest(text)) return [];
   const colors = ["pink", "red", "orange", "yellow", "green", "blue", "purple", "violet", "lilac", "lavender", "teal", "turquoise", "black", "white", "brown", "grey", "gray", "gold", "silver"];
-  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\b" + color + "\b", "i").test(text); }))).slice(0, 4);
+  return Array.from(new Set(colors.filter(function (color) { return new RegExp("\\b" + color + "\\b", "i").test(text); }))).slice(0, 4);
 }
 
 function requestedArtworkColorInstruction(message) {
@@ -7721,18 +7721,6 @@ function switchTab(tabName) {
 }
 
 
-function switchHomeRoom(roomName) {
-  const buttons = document.querySelectorAll(".home-room-button");
-  const rooms = document.querySelectorAll(".home-room-panel");
-  buttons.forEach(function (button) {
-    const selected = button.dataset.homeRoom === roomName;
-    button.classList.toggle("active", selected);
-    button.setAttribute("aria-selected", selected ? "true" : "false");
-  });
-  rooms.forEach(function (room) { room.hidden = room.id !== "home-room-" + roomName; });
-  if (roomName === "kitchen") refreshSharedMabelBrain();
-}
-
 function startMabel() {
   mabel = loadMabel() || createDefaultMabel();
   mabel.now = {
@@ -7920,10 +7908,6 @@ function startMabel() {
     button.addEventListener("click", function () {
       switchTab(button.dataset.tab);
     });
-  });
-
-  document.querySelectorAll(".home-room-button").forEach(function (button) {
-    button.addEventListener("click", function () { switchHomeRoom(button.dataset.homeRoom); });
   });
 
   accrueActiveVisitorTime();
