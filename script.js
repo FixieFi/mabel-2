@@ -55,6 +55,7 @@ const visitorBoardMessages = document.getElementById("visitor-board-messages");
 const visitorBoardStatus = document.getElementById("visitor-board-status");
 const visitorBoardCacheStorageKey = "mabel-visitor-board-cache-v1";
 const visitorBoardLastFetchStorageKey = "mabel-visitor-board-last-fetch-v1";
+const visitorBoardLastAttemptStorageKey = "mabel-visitor-board-last-attempt-v1";
 const brainCoreTraitsElement = document.getElementById("brain-core-traits");
 const brainEvolvedTraitsElement = document.getElementById("brain-evolved-traits");
 
@@ -4225,9 +4226,13 @@ async function loadVisitorBoard(options) {
     if (Array.isArray(cachedMessages)) renderVisitorBoardMessages(cachedMessages);
   } catch (error) {}
   let lastFetch = 0;
+  let lastAttempt = 0;
   try { lastFetch = Number(localStorage.getItem(visitorBoardLastFetchStorageKey)) || 0; } catch (error) {}
-  if (!options.force && Date.now() - lastFetch < 60 * 1000) return;
-  try { localStorage.setItem(visitorBoardLastFetchStorageKey, String(Date.now())); } catch (error) {}
+  try { lastAttempt = Number(localStorage.getItem(visitorBoardLastAttemptStorageKey)) || 0; } catch (error) {}
+  const attemptedTooRecently = Date.now() - lastAttempt < 15 * 1000;
+  const fetchedRecently = Date.now() - lastFetch < 60 * 1000;
+  if (!options.force && (attemptedTooRecently || fetchedRecently)) return;
+  try { localStorage.setItem(visitorBoardLastAttemptStorageKey, String(Date.now())); } catch (error) {}
   try {
     const response = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
     if (!response.ok) {
@@ -4239,9 +4244,15 @@ async function loadVisitorBoard(options) {
     const messages = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
     renderVisitorBoardMessages(messages);
     try { localStorage.setItem(visitorBoardCacheStorageKey, JSON.stringify(messages)); } catch (error) {}
+    try { localStorage.setItem(visitorBoardLastFetchStorageKey, String(Date.now())); } catch (error) {}
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
   } catch (error) {
-    if (visitorBoardStatus) visitorBoardStatus.textContent = error && error.message ? error.message : "The noticeboard is resting for now. Please try again later.";
+    // A failed attempt must not be cached as a successful fetch. Keep any
+    // saved notes visible and let the visitor retry without waiting a minute.
+    try { localStorage.removeItem(visitorBoardLastFetchStorageKey); } catch (storageError) {}
+    if (visitorBoardStatus) visitorBoardStatus.textContent = error && error.message
+      ? error.message + " Saved notes remain visible; you can try again shortly."
+      : "The shared board couldn’t be reached from this browser. Saved notes remain visible; you can try again shortly.";
   }
 }
 
