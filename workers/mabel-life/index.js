@@ -34,7 +34,8 @@ const DEFAULT_STATE = {
   reflections: [],
   currentThread: null,
   pendingThought: null,
-  lastLifeUpdate: null
+  lastLifeUpdate: null,
+  lastWitnessedDay: null
 };
 
 function clamp(value) {
@@ -937,8 +938,9 @@ function advanceLifeNeeds(state) {
   state.lastNeedsTickAt = new Date(nowMs).toISOString();
 }
 
-async function runMabelLife(env) {
-  const state = await loadState(env);
+async function runMabelLife(env, startingState) {
+  const state = startingState || await loadState(env);
+  const latestLifeLogId = state.lifeLog && state.lifeLog[0] && state.lifeLog[0].id;
   advanceLifeNeeds(state);
   if (practiceWithAvailableObject(state)) {
     state.lastLifeUpdate = new Date().toISOString();
@@ -1152,6 +1154,9 @@ async function runMabelLife(env) {
       remember(state, "Mabel wrote a small " + codeProject.language + " program called " + codeProject.title + ".", "coding");
     } else {
       maybeBakeTreat(state);
+    }
+    if ((!state.lifeLog || !state.lifeLog[0] || state.lifeLog[0].id === latestLifeLogId) && state.activity) {
+      recordLifeAction(state, "Mabel spent a little time " + cleanText(state.activity, 180) + ".", state.thought || "A small moment from her own day.");
     }
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
@@ -1565,11 +1570,22 @@ async function handleVisitorBoard(request, env) {
   return jsonResponse({ ok: true, message: entry });
 }
 
-export default {
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(runMabelLife(env));
-  },
+async function runWitnessedMabelDay(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  const state = await loadState(env);
+  if (state.lastWitnessedDay === day) {
+    return { ok: true, alreadyRan: true, day };
+  }
 
+  // Claim the shared daily moment before the AI call. This keeps visitors who
+  // arrive together from each starting a separate run.
+  state.lastWitnessedDay = day;
+  await saveState(env, state);
+  await runMabelLife(env, state);
+  return { ok: true, alreadyRan: false, day };
+}
+
+export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
@@ -1591,6 +1607,7 @@ export default {
       return jsonResponse({
         brain: {
           mood: state.mood,
+          activity: state.activity,
           thought: state.thought,
           needs: state.needs,
           personality: state.personality,
@@ -1606,7 +1623,8 @@ export default {
           wishes: state.wishes,
           readingBooks: state.readingBooks,
           practiceProps: state.practiceProps,
-          updatedAt: state.lastLifeUpdate
+          updatedAt: state.lastLifeUpdate,
+          witnessedDay: state.lastWitnessedDay || null
         }
       });
     }
@@ -1619,8 +1637,9 @@ export default {
     if (url.pathname === "/board" && (request.method === "GET" || request.method === "POST")) {
       return handleVisitorBoard(request, env);
     }
-    if (url.pathname === "/mabel-life" && (request.method === "GET" || request.method === "POST")) {
-      return jsonResponse({ ok: true, state: await runMabelLife(env) });
+    if ((url.pathname === "/mabel-day" && request.method === "POST") ||
+        (url.pathname === "/mabel-life" && (request.method === "GET" || request.method === "POST"))) {
+      return jsonResponse(await runWitnessedMabelDay(env));
     }
     return jsonResponse({ error: "Mabel's life is not here." }, 404);
   }

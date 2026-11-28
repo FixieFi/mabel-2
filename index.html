@@ -31,51 +31,13 @@
       </div>
     </section>
 
-    <section class="needs-card">
-      <h2>Mabel’s needs</h2>
-
-      <label>
-        Comfort
-        <progress id="need-comfort" max="1" value="0.7"></progress>
-      </label>
-
-      <label>
-        Curiosity
-        <progress id="need-curiosity" max="1" value="0.6"></progress>
-      </label>
-
-      <label>
-        Connection
-        <progress id="need-connection" max="1" value="0.4"></progress>
-      </label>
-
-      <label>
-        Rest
-        <progress id="need-rest" max="1" value="0.8"></progress>
-      </label>
-
-      <label>
-        Wonder
-        <progress id="need-wonder" max="1" value="0.5"></progress>
-      </label>
-
-      <label>
-        Food
-        <progress id="need-food" max="1" value="0.7"></progress>
-      </label>
-
-      <label>
-        Water
-        <progress id="need-water" max="1" value="0.75"></progress>
-      </label>
-    </section>
-
     <section class="tabs-card">
       <div class="tab-buttons">
-        <button class="tab-button active" data-tab="chat">Chat</button>
+        <button class="tab-button active" data-tab="today">Today with Mabel</button>
+        <button class="tab-button" data-tab="chat">Chat</button>
         <button class="tab-button" data-tab="musings">Explore</button>
         <button class="tab-button" data-tab="research">Library</button>
-        <button class="tab-button" data-tab="day">Activity log</button>
+        <button class="tab-button" data-tab="day">Diary &amp; activity</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
         <button class="tab-button" data-tab="gallery-tab">Gallery</button>
         <button class="tab-button" data-tab="art-exhibition">Daily Art Exhibition</button>
@@ -119,7 +81,43 @@
         <button id="view-postbox" type="button">Open the postbox</button>
         <button id="dismiss-postbox" type="button" class="notice-dismiss">Later</button>
       </aside>
-      <section id="chat" class="tab-panel active">
+      <section id="today" class="tab-panel active">
+        <h2>A little time with Mabel</h2>
+        <p class="day-intro">When someone visits, Mabel gets one shared moment to herself for the day. She may follow an interest, practise something, bake when she has ingredients, or simply notice what is around her. Her world rests when nobody is here.</p>
+        <section class="needs-card today-needs-card">
+          <h3>How Mabel is feeling</h3>
+          <div class="today-needs-grid">
+            <label>Comfort<progress id="need-comfort" max="1" value="0.7"></progress></label>
+            <label>Curiosity<progress id="need-curiosity" max="1" value="0.6"></progress></label>
+            <label>Connection<progress id="need-connection" max="1" value="0.4"></progress></label>
+            <label>Rest<progress id="need-rest" max="1" value="0.8"></progress></label>
+            <label>Wonder<progress id="need-wonder" max="1" value="0.5"></progress></label>
+            <label>Food<progress id="need-food" max="1" value="0.7"></progress></label>
+            <label>Water<progress id="need-water" max="1" value="0.75"></progress></label>
+          </div>
+        </section>
+        <div class="today-card">
+          <div class="today-card-mark" aria-hidden="true">🍃 ✦ 🐭</div>
+          <div>
+            <span class="brain-label">Right now</span>
+            <p id="today-status" aria-live="polite">Mabel is settling into her day…</p>
+            <time id="today-updated"></time>
+          </div>
+        </div>
+        <section class="today-timeline">
+          <h3>Moments from Mabel’s day</h3>
+          <p class="day-intro">Her shared activity, in the order it happened.</p>
+          <ul id="today-log" class="today-log"></ul>
+        </section>
+        <div class="today-links" aria-label="Visit parts of Mabel’s world">
+          <button type="button" data-go-tab="musings">🍂 Explore</button>
+          <button type="button" data-go-tab="research">📚 Library</button>
+          <button type="button" data-go-tab="hollow">🏡 Her home</button>
+          <button type="button" data-go-tab="inner-life">✨ Inner Life</button>
+        </div>
+      </section>
+
+      <section id="chat" class="tab-panel">
         <h2>Chat with Mabel</h2>
         <p class="day-intro chat-one-turn-note">Each message and reply stays together in its own card, with the newest conversation at the top.</p>
         <form id="chat-form" class="chat-form">
@@ -328,6 +326,8 @@
           <p id="brain-thought" class="brain-current-thought"></p>
           <small>Balance is the average of Mabel’s current needs, shown out of 100.</small>
         </div>
+        <details class="inner-life-details">
+          <summary>Her steady self and what is growing</summary>
         <div class="brain-trait-columns">
           <section class="brain-trait-card brain-core-card">
             <h3>Her steady self</h3><p>These are Mabel’s starting traits.</p>
@@ -338,6 +338,7 @@
             <ul id="brain-evolved-traits" class="brain-trait-list"></ul>
           </section>
         </div>
+        </details>
 
         <div class="inner-life-note">
           <p>Mabel grows and changes through the things you share, the places she explores, and the questions she researches at the library. Come back to see what begins to matter to her.</p>
@@ -350,6 +351,8 @@
         <p class="day-intro">A hobby appears only when Mabel repeatedly returns to a specific, recognizable activity. New hobbies begin at the very start and grow through time and practice.</p>
         <ul id="interests"></ul>
 
+        <details class="inner-life-details">
+          <summary>Skills and projects</summary>
         <h3>Things Mabel can try</h3>
         <p class="day-intro">Useful objects she finds or receives can become invitations to practise. She’ll choose a suitable quiet moment herself.</p>
         <ul id="practice-props" class="brain-trait-list"></ul>
@@ -366,7 +369,10 @@
         <ul id="crafting-materials" class="brain-trait-list crafting-materials"></ul>
         <h4>Ideas she is trying</h4>
         <ul id="crafting-projects" class="brain-trait-list"></ul>
+        </details>
 
+        <details class="inner-life-details">
+          <summary>Thoughts and lasting changes</summary>
         <h3>What’s on Mabel’s mind?</h3>
         <p class="day-intro">Questions, discoveries, and subjects that have caught her attention. Some may lead to more research; most are simply thoughts for now.</p>
         <ul id="mind-topics"></ul>
@@ -380,9 +386,13 @@
           <p class="day-intro">Little bits of knowledge she has gathered and wants to remember.</p>
           <ul id="item-knowledge" class="research-log"></ul>
         </div>
+        </details>
 
+        <details class="inner-life-details">
+          <summary>Diary pages</summary>
         <h3>Mabel’s diary</h3>
         <ul id="diary"></ul>
+        </details>
 
       </section>
 
