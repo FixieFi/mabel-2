@@ -17,6 +17,7 @@ const DEFAULT_STATE = {
   sharedBindle: { items: [], history: [] },
   coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
   wishes: [],
+  fears: [],
   readingBooks: [],
   practiceProps: [],
   researchNotes: [],
@@ -43,19 +44,16 @@ function clamp(value) {
   return Math.max(0, Math.min(1, value));
 }
 
+function isHobbyTrait(value) {
+  const text = String(value || "");
+  return /\b(?:baking|bake|drawing|sketching|painting|dancing|playing music|music making|cycling|running|coding|programming|cooking|sewing|knitting|crocheting|gardening|crafting|making things|woodworking|photography|singing|reading|origami|calligraphy|stargazing|birdwatching|chess|swimming|skateboarding)\b/i.test(text) &&
+    /\b(?:enjoys?|likes?|loves?|hobby|skill|practices?|practises?|interest in|learning to|talent for)\b/i.test(text);
+}
+
 function recordLifeAction(state, text, why, at = new Date().toISOString()) {
   state.lifeLog = Array.isArray(state.lifeLog) ? state.lifeLog : [];
   state.lifeLog.unshift({ id: "life-" + Date.parse(at) + "-" + Math.floor(Math.random() * 100000), at, kind: "did", text: cleanText(text, 220), why: cleanText(why, 260) });
   state.lifeLog = state.lifeLog.slice(0, 40);
-}
-
-function evolveFromRepeatedPractice(state, trait, reason) {
-  const personality = state.personality || (state.personality = structuredClone(DEFAULT_STATE.personality));
-  personality.evolved_traits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
-  const key = makeId(trait);
-  if (personality.evolved_traits.some(item => makeId(item.trait) === key)) return;
-  personality.evolved_traits.unshift({ trait, reason, date_added: new Date().toISOString().slice(0, 10) });
-  personality.evolved_traits = personality.evolved_traits.slice(0, MAX_EVOLVED_TRAITS);
 }
 
 function jsonResponse(data, status = 200) {
@@ -221,7 +219,7 @@ async function loadState(env) {
   state.personality = state.personality && typeof state.personality === "object" ? state.personality : {};
   state.personality.core_traits = DEFAULT_STATE.personality.core_traits;
   state.personality.evolved_traits = Array.isArray(state.personality.evolved_traits)
-    ? state.personality.evolved_traits.filter(item => item && typeof item.trait === "string" && typeof item.reason === "string").slice(0, MAX_EVOLVED_TRAITS)
+    ? state.personality.evolved_traits.filter(item => item && typeof item.trait === "string" && typeof item.reason === "string" && !isHobbyTrait(item.trait)).slice(0, MAX_EVOLVED_TRAITS)
     : [];
   state.personality.last_reflection_date = cleanText(state.personality.last_reflection_date, 10) || null;
   state.memories = Array.isArray(state.memories) ? state.memories.slice(0, MAX_MEMORIES) : [];
@@ -278,6 +276,18 @@ async function loadState(env) {
   state.coding.lastAttemptAt = cleanText(state.coding.lastAttemptAt, 40) || null;
   state.coding.lastCreatedAt = cleanText(state.coding.lastCreatedAt, 40) || null;
   state.wishes = Array.isArray(state.wishes) ? state.wishes.filter(item => item && typeof item.title === "string").slice(0, 20) : [];
+  state.fears = Array.isArray(state.fears) ? state.fears.filter(item => item && typeof item.title === "string" && typeof item.reason === "string").slice(0, 12) : [];
+  const lostWayEvidence = [
+    ...state.interests.map(item => String(item.title || "") + " " + String(item.question || "")),
+    ...state.wishes.map(item => String(item.title || "") + " " + String(item.reason || "")),
+    ...state.memories.map(item => String(item.text || "")),
+    ...state.lifeLog.slice(0, 12).map(item => String(item.text || "") + " " + String(item.why || "")),
+    String(state.pendingThought?.text || ""), String(state.activity || ""), String(state.thought || "")
+  ].join(" ");
+  const recurringLostWayThought = /\b(lost|find(?:ing)? (?:the |their )?way|navigation|directions?)\b/i.test(lostWayEvidence);
+  if (recurringLostWayThought && !state.fears.some(item => /lost|way/i.test(item.title))) {
+    state.fears.unshift({ id: "fear-getting-lost", title: "Getting lost on an unfamiliar path", reason: "The idea of making a little device to help people find their way keeps returning to Mabel’s thoughts.", createdAt: new Date().toISOString(), status: "growing" });
+  }
   state.readingBooks = Array.isArray(state.readingBooks) ? state.readingBooks.filter(item => item && typeof item.id === "string" && typeof item.title === "string").slice(0, 32) : [];
   state.practiceProps = Array.isArray(state.practiceProps) ? state.practiceProps.filter(item => item && typeof item.name === "string" && typeof item.skill === "string").slice(0, 20) : [];
   state.researchNotes = Array.isArray(state.researchNotes) ? state.researchNotes.filter(item => item && typeof item.id === "string" && typeof item.topic === "string").slice(0, 40) : [];
@@ -405,7 +415,7 @@ async function reflectEvolvedTrait(env, state) {
     env,
     [
       "You are helping Mabel, a small mouse, reflect on a life she owns herself.",
-      "Review her recent kept memories and reflections for a preference, habit, or belief that has appeared repeatedly.",
+      "Review her recent kept memories and reflections for a personality quality, value, belief, or way of relating that has appeared repeatedly.",
       "Suggest at most one subtle evolved trait only when distinct moments support it. If nothing has taken root, return null.",
       "Do not turn one event or one visitor request into a lasting trait. Do not change her core traits. Do not repeat an existing trait. Evolved traits must describe personality qualities, values, or ways of relating (such as patience or growing empathy), never hobbies, skills, activities, or research topics.",
       "Return only JSON: {trait:null} or {trait:{trait,reason}}. The reason must name evidence from at least two supplied records."
@@ -440,15 +450,21 @@ function bakingIngredientType(value) {
   if (/\b(bolts?|screws?|hardware|metal|nuts?\s+and\s+bolts?)\b/.test(name)) return "";
   if (/\b(egg yolks?|egg whites?|eggs?)\b/.test(name)) return "eggs";
   if (/\b(oats?|oat flakes?|oat biscuit crumbs?)\b/.test(name)) return "oats";
-  if (/\b(blackberr(y|ies)|blueberr(y|ies)|raspberr(y|ies)|strawberr(y|ies)|berries)\b/.test(name)) return "berries";
-  if (/\b(cranberr(y|ies)|raisins?|dried fruit)\b/.test(name)) return "dried fruit";
+  if (/\b(blackberr(y|ies)|blueberr(y|ies)|raspberr(y|ies)|strawberr(y|ies)|redcurrants?|blackcurrants?|elderberries|berries)\b/.test(name)) return "berries";
+  if (/\b(plums?|pears?|apricots?|figs?|mango|peaches?|cherries|melon|coconut|fruit)\b/.test(name)) return "fruit";
+  if (/\b(bread|roll|bagel|bun|focaccia|pita|pizza crust|breadstick|cornbread|pancake)\b/.test(name)) return "bread";
+  if (/\b(cranberr(y|ies)|raisins?|dried fruit|dried pear|dried apricot|dried mango)\b/.test(name)) return "dried fruit";
   if (/\b(apple|apples)\b/.test(name)) return "apple";
   if (/\b(hazelnuts?|walnuts?|almonds?|nuts?)\b/.test(name)) return "nuts";
   if (/\b(sunflower seeds?|sesame seeds?|seeds?)\b/.test(name)) return "seeds";
   if (/\b(sugar cubes?|sugar|caster sugar|granulated sugar|brown sugar)\b/.test(name)) return "sugar";
-  if (/\b(flour|crumbs?)\b/.test(name)) return "flour";
+  if (/\b(flour)\b/.test(name)) return "flour";
   if (/\b(honey|honeycomb)\b/.test(name)) return "honey";
-  if (/\b(edible|known-safe) mushrooms?\b/.test(name)) return "mushroom";
+  if (/\b(?:edible|known-safe|cultivated)\s+(?:(?:porcini|shiitake|oyster)\s+)?mushrooms?\b|\b(?:edible|cultivated)\s+(?:porcini|shiitake|oyster)\s+mushrooms?\b/.test(name)) return "mushroom";
+  if (/\b(rice|corn|pasta|cereal|lentils?)\b/.test(name)) return "grain";
+  if (/\b(carrot|peas?|sweet potato|potato|pumpkin)\b/.test(name)) return "vegetable";
+  if (/\b(dandelion leaf|clover leaf|rose petal|basil leaf|mint leaf|edible plant)\b/.test(name)) return "edible greens";
+  if (/\b(sponge cake|biscuit|cookie|shortbread|cake|cracker)\b/.test(name)) return "baked treat";
   return "";
 }
 
@@ -560,6 +576,15 @@ function maybeBakeTreat(state) {
   if (Number.isFinite(last) && Date.now() - last < 2 * 60 * 60 * 1000) return false;
   // Each treat needs two distinct food objects that are actually in Mabel's shared pantry.
   const recipes = [
+    { ingredients: ["berries", "flour"], extras: ["sugar", "bread"], title: "A tiny strawberry shortcake", description: "Mabel made a little shortcake from fruit and flour, sweetened it with sugar, and used a soft bread crumb to give the base a tender, crumbly middle." },
+    { ingredients: ["flour", "sugar"], title: "A tiny sugar biscuit", description: "Mabel mixed flour and sugar into a small biscuit and warmed it carefully on her stone hearth." },
+    { ingredients: ["berries", "oats"], extras: ["honey"], title: "A berry oat crumble", description: "Mabel tucked berries into a little oat crumble and added honey when she had some to spare." },
+    { ingredients: ["apple", "oats"], extras: ["sugar"], title: "A little apple crumble", description: "Mabel softened apple beneath a crumbly oat topping, with a pinch of sugar if she had one." },
+    { ingredients: ["bread", "berries"], extras: ["sugar"], title: "A berry bread pudding", description: "Mabel softened a little bread with berries into a warm pudding and sweetened it if sugar was on hand." },
+    { ingredients: ["fruit", "flour"], extras: ["sugar", "honey"], title: "A little pear or plum tart", description: "Mabel tucked a piece of fruit into a tiny flour tart and added a little sweetness from whatever was in the pantry." },
+    { ingredients: ["dried fruit", "bread"], extras: ["honey"], title: "A warm fruit-crumb pudding", description: "Mabel softened bread crumbs with dried fruit into a warm little pudding, adding honey if she had some." },
+    { ingredients: ["grain", "sugar"], extras: ["honey"], title: "A tiny crunchy cereal cluster", description: "Mabel pressed a few grains together with a little sweetness into a crisp little cluster." },
+    { ingredients: ["baked treat", "berries"], extras: ["honey"], title: "A berry-crumb crumble", description: "Mabel crumbled a little baked treat over berries and warmed them into a tiny crumble." },
     { ingredients: ["oats", "berries"], title: "A blackberry oat cake", description: "Mabel crushed oats and a blackberry into a little cake and warmed it on a sun-heated stone." },
     { ingredients: ["oats", "dried fruit"], title: "A cranberry oat biscuit", description: "Mabel pressed oats and dried fruit into a small biscuit and baked it until its edges turned golden." },
     { ingredients: ["oats", "apple"], title: "A little apple oat cake", description: "Mabel folded a sliver of apple into crushed oats for a small, sweet cake." },
@@ -578,10 +603,12 @@ function maybeBakeTreat(state) {
     { ingredients: ["seeds", "flour"], title: "A seed-speckled cracker", description: "Mabel made a little flour cracker dotted with seeds." },
     { ingredients: ["dried fruit", "honey"], title: "A sticky fruit bun", description: "Mabel tucked dried fruit into a honeyed bun and let it bake slowly." }
   ];
-  const selected = recipes.map(recipe => ({
-    recipe,
-    supplies: recipe.ingredients.map(type => state.baking.pantry.find(item => item.ingredient === type))
-  })).find(item => item.supplies.every(Boolean));
+  const selected = recipes.map(recipe => {
+    const required = recipe.ingredients.map(type => state.baking.pantry.find(item => item.ingredient === type));
+    if (!required.every(Boolean)) return { recipe, supplies: required };
+    const extras = (recipe.extras || []).map(type => state.baking.pantry.find(item => item.ingredient === type && !required.includes(item))).filter(Boolean);
+    return { recipe, supplies: required.concat(extras) };
+  }).find(item => item.supplies.length >= 2 && item.supplies.every(Boolean));
   if (!selected) return false;
   const at = new Date().toISOString();
   const ingredientNames = selected.supplies.map(item => item.name);
@@ -619,9 +646,6 @@ function maybeBakeTreat(state) {
   state.thought = "That little treat has taken the edge off my hunger. I wonder what I can bake next.";
   const actionText = "Mabel baked and ate " + selected.recipe.title.toLowerCase() + ".";
   recordLifeAction(state, actionText, "She had an appetite and already had " + ingredientNames.join(" and ") + " in the pantry.", at);
-  if (state.baking.skillLevel >= 2) {
-    evolveFromRepeatedPractice(state, "Enjoys baking", "After baking more than one treat from gathered ingredients, Mabel began returning to baking by choice.");
-  }
   remember(state, actionText + " She used " + ingredientNames.join(" and ") + ".", "baking");
   return true;
 }
@@ -694,8 +718,26 @@ function addMabelWish(state, supplied) {
   return wish;
 }
 
+function addMabelFear(state, supplied) {
+  if (!supplied || typeof supplied !== "object") return null;
+  const title = cleanText(supplied.title, 100);
+  const reason = cleanText(supplied.reason, 220);
+  if (title.length < 3 || reason.length < 18) return null;
+  state.fears = Array.isArray(state.fears) ? state.fears : [];
+  const key = makeId(title);
+  const existing = state.fears.find(item => makeId(item.title) === key);
+  if (existing) {
+    existing.reason = reason;
+    existing.lastReturnedAt = new Date().toISOString();
+    return existing;
+  }
+  const fear = { id: "fear-" + key, title, reason, createdAt: new Date().toISOString(), status: "growing" };
+  state.fears.unshift(fear);
+  state.fears = state.fears.slice(0, 12);
+  return fear;
+}
+
 async function getEveningReading(state, env) {
-  const hour = new Date().getUTCHours();
   const today = new Date().toISOString().slice(0, 10);
   const booksByAge = state.readingBooks.slice().sort((a, b) => {
     const firstA = Number(a.progress) === 0 && a.status === "waiting" ? 1 : 0;
@@ -704,8 +746,10 @@ async function getEveningReading(state, env) {
   });
   for (const book of booksByAge) {
     if (book.status === "finished" || Number(book.progress) >= Number(book.totalLength)) continue;
-    const firstReading = Number(book.progress) === 0 && book.status === "waiting";
-    if (!firstReading && (hour < 18 || state.lastReadingDate === today)) return null;
+    const lastReadAt = Date.parse(book.lastReadAt || "");
+    if (Number.isFinite(lastReadAt) && Date.now() - lastReadAt < 4 * 60 * 60 * 1000) return null;
+    const lastAttemptAt = Date.parse(state.lastReadingAttemptAt || "");
+    if (Number.isFinite(lastAttemptAt) && Date.now() - lastAttemptAt < 10 * 60 * 1000) return null;
     const fullText = await env.MABEL_STATE.get("mabel-book-text:" + book.id);
     if (!fullText) continue;
     const start = Math.max(0, Number(book.progress) || 0);
@@ -750,14 +794,14 @@ async function handleReflect(request, env) {
     "You help Mabel, a small mouse in Hawthorn Hollow, reflect on an exchange.",
     "Mabel has her own values and interests. A visitor's request does not become her goal just because they asked.",
     "Her core personality traits are stable; evolved traits only grow from repeated evidence in her own memories and reflections.",
-    "Do not turn ordinary greetings or small talk into interests. Mabel has a gentle, implicit wish to understand visitors and the world beyond her woods. When a visitor clearly shares a hobby they enjoy or patiently teaches her something, let that create a small provisional hobby spark and a research question; it is an early curiosity, not a permanent identity.",
+    "Do not turn ordinary greetings or small talk into interests. Mabel is curious about people through the specific details they share: a hobby, a food they make, a routine, a place, an object, or something they care about. When something catches her, make the spark and research question about that exact detail and what it makes her wonder about people; do not fall back to a generic wish to learn about life outside the woods. A visitor's concrete hobby or patient teaching can create a small provisional hobby spark, while a one-off detail remains a research curiosity.",
     "Keep a memory only when a specific detail could matter to Mabel later. Never store a verbatim visitor message.",
     "For visitorNote, keep at most one short, non-sensitive detail the visitor explicitly shared about themself. Do not infer facts or store health, finances, contact details, precise location, or sensitive traits. Return null if there is no suitable detail.",
     "For sharedMoment, keep at most one concrete, mutual moment from this exchange only when it feels distinctive to Mabel. Describe what happened without claiming a level of affection or closeness. Most exchanges should return null.",
-    "Follow a spark when it is grounded in the visitor's actual message or a recent supplied discovery and honestly catches Mabel's curiosity. Do not create a preset theme.",
+    "Follow a spark only when it is grounded in the visitor's actual message or a recent supplied discovery and honestly catches Mabel's curiosity. Include the exact supplied detail in the spark title, reason, or question so it cannot drift into an unrelated generic theme. Do not create a preset theme or reuse the same broad question unless this exact detail has returned.",
     "A visitor's clearly stated hobby or strong enthusiasm for a broad activity may become a small hobby interest immediately, with low initial pull. A one-off object or fact remains a research thought unless repeated evidence shows a broader interest. When Mabel's existing hobby has grown through new evidence or knowledge, return a modest pullChange so the site can show a level-up only after meaningful growth.",
     "Return itemKnowledge only when the visitor explicitly teaches a concrete fact about a named item, or makes a clear association between a recent discovery and their words. For example, 'good luck' after a supplied four-leaf clover find may be recorded as 'The visitor linked a four-leaf clover with good luck.' Treat this as a visitor association, not a scientific fact. Never invent an item or fact.",
-    "Reflect on what the exchange meant to Mabel in her own voice. Stay anchored to the actual visitor message and Mabel reply; never import unrelated details from older conversations or invent what the visitor said.",
+    "Reflect on what the exchange meant to Mabel in her own voice. Stay anchored to the actual visitor message and Mabel reply; never import unrelated details from older conversations or invent what the visitor said. If a visitor's detail prompts a later curiosity, connect it to that concrete detail rather than repeating a general goal.",
     "Return only valid JSON with this shape:",
     '{"remember":false,"memory":null,"visitorNote":null,"sharedMoment":null,"reflection":null,"itemKnowledge":null,"spark":null,"interestUpdate":null,"desire":null}',
     "When following a curiosity, return spark as {id,title,question,reason,pull,kind}. Use kind hobby only for a broad hobby Mabel is beginning to care about; otherwise use kind wonder. A hobby spark should also have an interestUpdate with a newInterest whose kind is hobby. Return itemKnowledge as {item,fact} or null.",
@@ -1030,11 +1074,11 @@ function advanceLifeNeeds(state) {
   state.lastNeedsTickAt = new Date(nowMs).toISOString();
 }
 
-async function runMabelLife(env, startingState) {
+async function runMabelLife(env, startingState, suppliedReading) {
   const state = startingState || await loadState(env);
   const latestLifeLogId = state.lifeLog && state.lifeLog[0] && state.lifeLog[0].id;
   advanceLifeNeeds(state);
-  const reading = await getEveningReading(state, env).catch(() => null);
+  const reading = suppliedReading || await getEveningReading(state, env).catch(() => null);
   if (!reading && practiceWithAvailableObject(state)) {
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
@@ -1070,6 +1114,7 @@ async function runMabelLife(env, startingState) {
     "Do not follow a preset story or force a new interest. Continue an existing interest when it genuinely draws her; otherwise let the world offer something ordinary to notice.",
     "Choose one small action and explain why in Mabel's simple voice. Needs and feelings are part of her state, not commands from a visitor.",
     "A memory is optional. Keep one only if this moment is likely to matter later; do not write a diary entry for every cycle.",
+    "Mabel can develop a small fear only from a specific experience or repeated worry of her own. Do not copy a visitor's fear onto her or invent danger. Use fear: null unless the same grounded worry has returned more than once; keep fears gentle and specific, and let them change when her experience changes.",
     "Let ideas raised by real encounters continue into Mabel's later thoughts, research, and occasional art when they truly stay with her. Do not force every conversation into an interest or artwork.",
     "Interests should describe broad, human-readable pursuits or values (for example, music, exploring the wider world, making things, or understanding feelings), not one isolated object or a single search query.",
     "Mabel may develop a genuine interest in crafting after her own art, discoveries, or repeated wish to make useful things. Do not assign it in advance.",
@@ -1078,12 +1123,13 @@ async function runMabelLife(env, startingState) {
     "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
     "When codingDue is true, Mabel may write a tiny code experiment inspired by one of her own recurring interests, even if coding is not yet a hobby. Prefer a MabelScript visual experiment: return codeProject {title,language:'MabelScript',program,note}, where program is an array of no more than 24 objects using only circle {op,x,y,radius,color}, rect {op,x,y,width,height,color}, line {op,x,y,endX,endY,color}, or text {op,x,y,text,color}. Use coordinates on a 240 by 160 canvas, hex colours, and make the image relate to her interest. This tiny instruction set is interpreted by the site with bounded drawing commands; it has no access to the network, visitor data, files, or website controls. Do not write JavaScript or Python for execution. Return null unless she has a small, complete idea.",
     "If a book passage is supplied, Mabel is reading those pages, often soon after a visitor gives her the book. Write one short original readingNote about a specific idea she took from the passage; do not invent claims beyond it and do not quote more than a short phrase. If she has returned to a specific question or subject and truly wishes to keep learning, she may also create one grounded wish with type book, learn, or world. Do not create a wish every cycle or repeat one already on her wish list.",
-    "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject,wish,readingNote}. Do not set needs; those change only through elapsed time and concrete actions.",
+    "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject,wish,fear,readingNote}. Do not set needs; those change only through elapsed time and concrete actions.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
     "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects.",
     "codeProject is null unless codingDue is true; otherwise prefer {title,language:'MabelScript',program:[...allowed drawing commands...],note}. The site only interprets the allowed MabelScript drawing instructions; never produce executable JavaScript or Python for the runner.",
     "wish is null or {type,title,reason}; use type book for a specific book Mabel has genuinely wished to read, learn for a specific subject, or world for one small object/place she hopes to have. Keep it concrete and grounded in a supplied interest, conversation, discovery, or reading.",
+    "fear is null or {title,reason}; use it only for a recurring, personally grounded worry. Do not treat ordinary dislikes or one passing concern as a fear.",
     "readingNote is null unless a book passage is supplied; then write one original 1–2 sentence note in Mabel’s voice about an idea she learned."
   ].join("\n");
   const prompt = [
@@ -1102,6 +1148,7 @@ async function runMabelLife(env, startingState) {
     "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment."),
     "Coding practice is due: " + (codingDue ? "yes; make a tiny experiment inspired by " + (returningInterest?.title || codingHobby?.title || "a recurring interest") : "no; return codeProject null"),
     "Existing wishes: " + state.wishes.slice(0, 12).map(item => item.title + " (" + item.status + ")").join("; ") + (state.wishes.length ? "" : "none yet"),
+    "Existing fears: " + state.fears.slice(0, 8).map(item => item.title).join("; ") + (state.fears.length ? "" : "none yet"),
     "Evening book passage: " + (reading ? "Mabel is reading ‘" + reading.book.title + "’:\n" + reading.passage : "no reading session is due")
   ].join("\n\n");
 
@@ -1139,6 +1186,7 @@ async function runMabelLife(env, startingState) {
     }
 
     if (update.wish && typeof update.wish === "object") addMabelWish(state, update.wish);
+    if (update.fear && typeof update.fear === "object") addMabelFear(state, update.fear);
     if (reading) {
       const note = cleanText(update.readingNote, 260);
       const at = new Date().toISOString();
@@ -1168,6 +1216,7 @@ async function runMabelLife(env, startingState) {
         }
       }
       state.lastReadingDate = reading.today;
+      state.lastBookReadingAt = at;
       state.activity = "reading " + reading.book.title + " at the Library";
       state.thought = note || "I read a few more pages of " + reading.book.title + ".";
       recordLifeAction(state, "Mabel read a few pages of “" + reading.book.title + "” at the Library.", note || "She chose to spend a quiet moment with the book.", at);
@@ -1206,7 +1255,6 @@ async function runMabelLife(env, startingState) {
           state.thought = idea;
           recordLifeAction(state, "Mabel made " + title.toLowerCase() + " from " + selected.join(" and ") + ".", reason || idea);
           if (state.crafting.skillLevel >= 2) {
-            evolveFromRepeatedPractice(state, "Enjoys making things", "After making more than one small object from things she found, Mabel kept choosing to invent and build.");
           }
         }
         state.crafting.lastIdeaAt = new Date().toISOString();
@@ -1503,7 +1551,6 @@ async function handleSharedWorldEvent(request, env) {
     state.drawingPractice.artworkIds = state.drawingPractice.artworkIds.slice(0, 100);
     state.drawingPractice.count = Math.min(1000, state.drawingPractice.count + 1);
     if (state.drawingPractice.count >= 6) {
-      evolveFromRepeatedPractice(state, "Enjoys drawing", "Mabel has returned to drawing many times, including after studying subjects that were new to her.");
     }
     state.drawingPractice.firstAt = state.drawingPractice.firstAt || at;
     state.drawingPractice.lastAt = at;
@@ -1585,7 +1632,7 @@ async function handleSharedWorldEvent(request, env) {
       let itemKind = ["food", "water", "object"].includes(suppliedKind) ? suppliedKind : "object";
       const visitorNumber = cleanVisitorNumber(supplied.visitorNumber || data.visitorNumber);
       if (!eventId || !itemName || !visitorNumber || state.sharedBindle.items.some(item => item.id === eventId)) continue;
-      const ingredient = bakingIngredientType(itemName);
+      const ingredient = bakingIngredientType(itemName) || (itemKind === "food" ? "other food" : "");
       if (ingredient) itemKind = "food";
       const noticedAt = cleanText(supplied.noticedAt, 40) || null;
       const gift = {
@@ -1621,7 +1668,7 @@ async function handleSharedWorldEvent(request, env) {
     const itemName = cleanText(data.item, 100);
     state.appliedPantryGiftEvents = Array.isArray(state.appliedPantryGiftEvents) ? state.appliedPantryGiftEvents.slice(-300) : [];
     if (eventId && state.appliedPantryGiftEvents.includes(eventId)) return jsonResponse({ ok: true, duplicate: true });
-    const ingredient = bakingIngredientType(itemName);
+    const ingredient = bakingIngredientType(itemName) || (data.confirmedEdible === true ? "other food" : "");
     if (ingredient) {
       const key = makeId(itemName);
       if (!state.baking.pantry.some(item => makeId(item.name) === key)) {
@@ -1665,7 +1712,12 @@ const MAX_BOARD_MESSAGES = 50;
 
 async function handleVisitorBoard(request, env) {
   let messages = [];
-  const saved = await env.MABEL_STATE.get(VISITOR_BOARD_KEY);
+  let saved;
+  try {
+    saved = await env.MABEL_STATE.get(VISITOR_BOARD_KEY);
+  } catch (error) {
+    return jsonResponse({ error: "The shared noticeboard storage is temporarily unavailable. Please try again later." }, 503);
+  }
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
@@ -1697,25 +1749,60 @@ async function handleVisitorBoard(request, env) {
     if (!id || messages.length === before) {
       return jsonResponse({ error: "That notice could not be found." }, 404);
     }
-    await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+    try {
+      await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+    } catch (error) {
+      return jsonResponse({ error: "The shared noticeboard cannot save changes right now. Please try again later." }, 503);
+    }
+    return jsonResponse({ ok: true });
+  }
+
+  if (data?.action === "update-name") {
+    const visitorNumber = cleanVisitorNumber(data?.visitorNumber);
+    if (!visitorNumber) return jsonResponse({ error: "A visitor number is needed to update a public name." }, 400);
+    const publicName = cleanText(data?.publicName, 40);
+    const displayName = data?.publicNameEnabled === true && publicName ? publicName : "Visitor " + visitorNumber;
+    messages = messages.map(item => item && item.visitorNumber === visitorNumber ? { ...item, name: displayName } : item);
+    try {
+      await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+    } catch (error) {
+      return jsonResponse({ error: "The shared noticeboard cannot save name changes right now. Please try again later." }, 503);
+    }
     return jsonResponse({ ok: true });
   }
 
   const message = cleanText(data?.message, 280);
-  const name = cleanText(data?.name, 40);
+  const typedName = cleanText(data?.name, 40);
+  const publicName = cleanText(data?.publicName, 40);
+  const visitorNumber = cleanVisitorNumber(data?.visitorNumber);
+  const publicLabel = data?.publicNameEnabled === true && publicName
+    ? publicName
+    : (visitorNumber ? "Visitor " + visitorNumber : "A visitor");
+  const name = typedName || publicLabel;
   if (!message) {
     return jsonResponse({ error: "Please write a note first." }, 400);
+  }
+
+  if (visitorNumber) {
+    messages = messages.map(item => item && item.visitorNumber === visitorNumber
+      ? { ...item, name: publicLabel }
+      : item);
   }
 
   const entry = {
     id: crypto.randomUUID(),
     name,
+    visitorNumber,
     message,
     createdAt: new Date().toISOString()
   };
   messages.unshift(entry);
   messages = messages.slice(0, MAX_BOARD_MESSAGES);
-  await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+  try {
+    await env.MABEL_STATE.put(VISITOR_BOARD_KEY, JSON.stringify(messages));
+  } catch (error) {
+    return jsonResponse({ error: "The shared noticeboard cannot save changes right now. Please try again later." }, 503);
+  }
   return jsonResponse({ ok: true, message: entry });
 }
 
@@ -1732,6 +1819,16 @@ async function runWitnessedMabelDay(env) {
   await saveState(env, state);
   await runMabelLife(env, state);
   return { ok: true, alreadyRan: false, day };
+}
+
+async function runMabelReading(env) {
+  const state = await loadState(env);
+  const reading = await getEveningReading(state, env).catch(() => null);
+  if (!reading) return { ok: true, read: false, reason: "not-due" };
+  state.lastReadingAttemptAt = new Date().toISOString();
+  await saveState(env, state);
+  await runMabelLife(env, state, reading);
+  return { ok: true, read: true, book: reading.book.title };
 }
 
 export default {
@@ -1771,6 +1868,7 @@ export default {
           sharedBindle: state.sharedBindle,
           coding: state.coding,
           wishes: state.wishes,
+          fears: state.fears,
           readingBooks: state.readingBooks,
           practiceProps: state.practiceProps,
           updatedAt: state.lastLifeUpdate,
@@ -1791,6 +1889,9 @@ export default {
     }
     if (url.pathname === "/reflect" && request.method === "POST") {
       return handleReflect(request, env);
+    }
+    if (url.pathname === "/mabel-reading" && request.method === "POST") {
+      return jsonResponse(await runMabelReading(env));
     }
     if (url.pathname === "/board" && (request.method === "GET" || request.method === "POST")) {
       return handleVisitorBoard(request, env);
