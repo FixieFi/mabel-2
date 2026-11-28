@@ -430,9 +430,19 @@
 
       <section id="art-exhibition" class="tab-panel">
         <h2>Daily Art Exhibition</h2>
-        <p class="gallery-intro">Each day Mabel chooses a little collection of drawings to hang for everyone. Visitors can also nominate a reference study; her personal Gallery stays just for this browser.</p>
+        <p class="gallery-intro">Each day Mabel chooses a little collection of drawings to hang for everyone. Visitors who have grown close to her can nominate any drawing from her Gallery. The most-loved piece is the daily Ko-fi pick.</p>
         <p id="art-exhibition-week" class="exhibition-period"></p>
         <ul id="art-exhibition-works" class="gallery-stream art-exhibition-stream"></ul>
+        <details class="owner-kofi-panel">
+          <summary>For Mabel’s keeper · prepare today’s Ko-fi pick</summary>
+          <p>Unlock this private note with the owner passcode stored in Cloudflare. Visitors can see the exhibition, but only you can open the current pick.</p>
+          <form id="owner-ko-fi-form" class="owner-kofi-form">
+            <label for="owner-ko-fi-password">Owner passcode</label>
+            <input id="owner-ko-fi-password" type="password" autocomplete="current-password" required>
+            <button id="owner-ko-fi-unlock" type="submit">Open today’s pick</button>
+          </form>
+          <div id="owner-ko-fi-result" class="owner-ko-fi-result" aria-live="polite"></div>
+        </details>
       </section>
 
       <section id="postbox" class="tab-panel">
