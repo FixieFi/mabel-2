@@ -1165,9 +1165,16 @@ function trimBindleItems(items, limit) {
     }
     if (leavingIndex < 0) break;
     const leaving = items.splice(leavingIndex, 1)[0];
-    const reason = bindleItemResonance(leaving);
+    const isFood = items === bindle.food;
+    const isWater = items === bindle.water;
+    const reason = isFood || isWater ? "" : bindleItemResonance(leaving);
     if (reason) moveBindleItemToTreasureBox(leaving, reason);
-    else recordBindleDeparture(leaving, "discarded");
+    else {
+      const action = isFood ? "eaten" : isWater ? "drank" : "discarded";
+      recordBindleDeparture(leaving, action);
+      if (action === "eaten") mabel.needs.food = clampNeed(Number(mabel.needs.food) + 0.12);
+      if (action === "drank") mabel.needs.water = clampNeed(Number(mabel.needs.water) + 0.18);
+    }
   }
 }
 
