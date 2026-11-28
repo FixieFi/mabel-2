@@ -1139,21 +1139,26 @@ function recordBindleDeparture(item, action, at) {
 function bindleItemResonance(item) {
   if (!item || item.edible === true || item.kind === "food" || item.kind === "water") return "";
   const text = String((item.name || "") + " " + (item.note || "")).toLowerCase();
-  if (/\b(oats?|flour|sugar|honey|berries|blackberries|blueberries|raspberries|strawberries|nuts?|hazelnuts?|walnuts?|almonds?|seeds?|mushrooms?|apple|apples|bread|crumbs?|muffin|cake|biscuit|cookie|focaccia|bagel|pizza crust|water|tea)\b/.test(text)) return "";
+  if (/\b(oats?|flour|sugar|honey|berries|blackberries|blueberries|raspberries|strawberries|nuts?|hazelnuts?|walnuts?|almonds?|mushrooms?|apple|apples|bread|crumbs?|muffin|cake|biscuit|cookie|focaccia|bagel|pizza crust|water|tea)\b/.test(text)) return "";
   const keptAt = Date.parse((bindle.treasureBox || [])[0]?.keptAt || "");
   if (Number.isFinite(keptAt) && Date.now() - keptAt < 24 * 60 * 60 * 1000) return "";
+  const normalizeWord = function (word) {
+    if (word.endsWith("ies") && word.length > 5) return word.slice(0, -3) + "y";
+    if (word.endsWith("s") && word.length > 4) return word.slice(0, -1);
+    return word;
+  };
   const words = text.match(/[a-z]{4,}/g) || [];
   const meaningful = Array.from(new Set(words.filter(function (word) {
     return !/^(mabel|little|small|tiny|found|piece|thing|things|looked|seemed|wondered|might|could|would|with|from|that|this|their|there|what|when|where|once|again|visitor|gift|really|very|about|under|over|after|before|while|some|more|than|just|like)$/.test(word);
-  })));
+  }).map(normalizeWord)));
   if (!meaningful.length) return "";
   const interests = (Array.isArray(mabel.interests) ? mabel.interests : []).concat(
     sharedMabelBrain && Array.isArray(sharedMabelBrain.interests) ? sharedMabelBrain.interests : []
   );
   for (const interest of interests) {
     if (!interest || !(interest.kind === "hobby" || interest.stage === "pursuing" || interest.stage === "growing")) continue;
-    const interestWords = String(interest.title || "").toLowerCase().match(/[a-z]{4,}/g) || [];
-    if (interestWords.some(function (word) { return meaningful.includes(word); }) && Math.random() < 0.18) {
+    const interestWords = (String(interest.title || "").toLowerCase().match(/[a-z]{4,}/g) || []).map(normalizeWord);
+    if (interestWords.some(function (word) { return meaningful.includes(word); }) && Math.random() < 0.78) {
       return "It connects with Mabel’s growing interest in " + interest.title + ".";
     }
   }
