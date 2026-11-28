@@ -42,6 +42,7 @@ const needWonder = document.getElementById("need-wonder");
 const needFood = document.getElementById("need-food");
 const needWater = document.getElementById("need-water");
 const wishesElement = document.getElementById("wishes");
+const fearsElement = document.getElementById("fears");
 const interestsElement = document.getElementById("interests");
 const mindTopicsElement = document.getElementById("mind-topics");
 const changesElement = document.getElementById("changes");
@@ -52,13 +53,15 @@ const wanderingsElement = document.getElementById("wanderings");
 const visitorBoardForm = document.getElementById("visitor-board-form");
 const visitorBoardMessages = document.getElementById("visitor-board-messages");
 const visitorBoardStatus = document.getElementById("visitor-board-status");
+const visitorBoardCacheStorageKey = "mabel-visitor-board-cache-v1";
+const visitorBoardLastFetchStorageKey = "mabel-visitor-board-last-fetch-v1";
 const brainCoreTraitsElement = document.getElementById("brain-core-traits");
 const brainEvolvedTraitsElement = document.getElementById("brain-evolved-traits");
 
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
 
-const MABEL_GUIDING_AIM = "Mabel wants to build a fulfilling life by discovering more about the world beyond the Hawthorn Hollow and following the subjects she keeps finding meaningful. If an interest stays with her through real conversations, discoveries, and research, she may someday imagine work that feels right to her. Her path can change as she does.";
+const MABEL_GUIDING_AIM = "Mabel wants to build a fulfilling life through what she experiences and the people she meets. She follows specific details from conversations, objects, and discoveries that keep mattering to her, letting her questions and interests change over time. If an interest stays with her through real moments and research, she may someday imagine work that feels right to her.";
 
 const MABEL_AI_URL = "https://mabel-ai.fianna-b-murphy.workers.dev/mabel";
 const MABEL_ART_URL = "https://mabel-ai-artwork.fianna-b-murphy.workers.dev/mabel-art";
@@ -69,6 +72,8 @@ const MABEL_BOARD_URL = "https://mabel-life.fianna-b-murphy.workers.dev/board";
 const MABEL_BRAIN_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-brain";
 const MABEL_PRIVATE_MAILBOX_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mailbox";
 const MABEL_DAY_START_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-day";
+const MABEL_READING_URL = "https://mabel-life.fianna-b-murphy.workers.dev/mabel-reading";
+const mabelReadingCheckStorageKey = "mabel-reading-check-v1";
 // text/plain keeps cross-origin JSON POSTs CORS-simple, avoiding an OPTIONS
 // request before every event. Request.json() still parses the JSON body.
 const MABEL_LIFE_POST_HEADERS = { "Content-Type": "text/plain;charset=UTF-8" };
@@ -370,6 +375,8 @@ function applyPostboxSeenState(raw) {
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     postboxSeenThroughId = String(parsed.id || "");
     postboxSeenThroughAt = Math.max(postboxSeenThroughAt, Number(parsed.at) || 0);
+    if (Array.isArray(parsed.ids)) viewedPostboxIds = new Set(parsed.ids.map(String).slice(-200));
+    if (postboxSeenThroughId) viewedPostboxIds.add(postboxSeenThroughId);
     return;
   }
   const ids = Array.isArray(parsed) ? parsed.map(String) : (typeof parsed === "string" && parsed ? [parsed] : (raw ? [String(raw)] : []));
@@ -393,7 +400,7 @@ function markPostboxNoticeSeen() {
     if (entry && entry.id) viewedPostboxIds.add(String(entry.id));
   });
   try {
-    localStorage.setItem(postboxSeenStorageKey, JSON.stringify({ id: postboxSeenThroughId, at: postboxSeenThroughAt }));
+    localStorage.setItem(postboxSeenStorageKey, JSON.stringify({ id: postboxSeenThroughId, at: postboxSeenThroughAt, ids: Array.from(viewedPostboxIds).slice(-200) }));
   } catch (error) {}
   if (postboxNoticeCard) postboxNoticeCard.classList.add("hidden");
 }
@@ -401,7 +408,8 @@ function refreshPostboxNotice() {
   if (!postboxNoticeCard) return;
   const unread = mabelPostboxItems.filter(function (entry) {
     if (!entry || !entry.id || (!entry.artwork && !(typeof entry.text === "string" && entry.text.trim()))) return false;
-    const at = Date.parse(entry.at || "");
+    if (viewedPostboxIds.has(String(entry.id))) return false;
+    const at = Date.parse(entry.receivedAt || entry.at || "");
     if (Number.isFinite(at)) return at > postboxSeenThroughAt;
     return String(entry.id) !== postboxSeenThroughId && !viewedPostboxIds.has(String(entry.id));
   });
@@ -570,7 +578,7 @@ function deliverDueComfortPostboxMail() {
     due.forEach(function (item) {
       addMabelPostboxItem({
         id: item.id,
-        kind: "artwork",
+        kind: item.artwork ? "artwork" : "note",
         title: item.title || "Mabel sent you a thoughtful note",
         text: item.text || "Mabel wanted to leave you a little kindness after your message.",
         artwork: item.artwork || null,
@@ -2731,6 +2739,29 @@ function updateNeeds() {
 function updateWishes() {
   if (!wishesElement) return;
   wishesElement.innerHTML = "";
+  if (fearsElement) {
+    fearsElement.replaceChildren();
+    const fears = sharedMabelBrain && Array.isArray(sharedMabelBrain.fears) ? sharedMabelBrain.fears.slice(0, 8) : [];
+    if (!fears.length) {
+      const emptyFear = document.createElement("li");
+      emptyFear.textContent = "Mabel hasn’t named a recurring fear yet.";
+      fearsElement.appendChild(emptyFear);
+    } else {
+      fears.forEach(function (fear) {
+        const item = document.createElement("li");
+        item.className = "mabel-wish mabel-fear";
+        const title = document.createElement("strong");
+        title.textContent = "Mabel feels uneasy about " + String(fear.title || "something") + ".";
+        item.appendChild(title);
+        if (fear.reason) {
+          const reason = document.createElement("p");
+          reason.textContent = fear.reason;
+          item.appendChild(reason);
+        }
+        fearsElement.appendChild(item);
+      });
+    }
+  }
 
   const sharedWishes = sharedMabelBrain && Array.isArray(sharedMabelBrain.wishes)
     ? sharedMabelBrain.wishes.filter(function (wish) { return wish && wish.status !== "fulfilled"; }).slice(0, 8)
@@ -2817,6 +2848,38 @@ function updateReadingShelf() {
     }
     list.appendChild(row);
   });
+}
+
+let mabelReadingRequestInProgress = false;
+async function maybeRequestMabelReading() {
+  const books = sharedMabelBrain && Array.isArray(sharedMabelBrain.readingBooks) ? sharedMabelBrain.readingBooks : [];
+  const nextBook = books.filter(function (book) { return book && book.status !== "finished"; })
+    .sort(function (a, b) { return Date.parse(a.addedAt || 0) - Date.parse(b.addedAt || 0); })[0];
+  if (document.visibilityState !== "visible" || mabelReadingRequestInProgress || !nextBook) return;
+  const lastReadAt = Date.parse(nextBook.lastReadAt || "");
+  if (Number.isFinite(lastReadAt) && Date.now() - lastReadAt < 4 * 60 * 60 * 1000) return;
+  let lastCheck = 0;
+  try { lastCheck = Number(localStorage.getItem(mabelReadingCheckStorageKey)) || 0; } catch (error) {}
+  if (Date.now() - lastCheck < 4 * 60 * 60 * 1000) return;
+  mabelReadingRequestInProgress = true;
+  try { localStorage.setItem(mabelReadingCheckStorageKey, String(Date.now())); } catch (error) {}
+  try {
+    const response = await fetch(MABEL_READING_URL, {
+      method: "POST",
+      headers: MABEL_LIFE_POST_HEADERS,
+      body: JSON.stringify({ source: "page-open" })
+    });
+    if (!response.ok) throw new Error("Mabel couldn’t visit her book just now.");
+    const result = await response.json();
+    if (result.read) {
+      await refreshSharedMabelBrain();
+      await refreshPrivateMailbox();
+    }
+  } catch (error) {
+    try { localStorage.setItem(mabelReadingCheckStorageKey, String(Date.now() - 3.5 * 60 * 60 * 1000)); } catch (storageError) {}
+  } finally {
+    mabelReadingRequestInProgress = false;
+  }
 }
 
 function updatePracticeProps() {
@@ -3360,6 +3423,12 @@ function updateCoding() {
   });
 }
 
+function isHobbyPersonalityTrait(value) {
+  const text = String(value || "");
+  return /\b(?:baking|bake|drawing|sketching|painting|dancing|playing music|music making|cycling|running|coding|programming|cooking|sewing|knitting|crocheting|gardening|crafting|making things|woodworking|photography|singing|reading|origami|calligraphy|stargazing|birdwatching|chess|swimming|skateboarding)\b/i.test(text) &&
+    /\b(?:enjoys?|likes?|loves?|hobby|skill|practices?|practises?|interest in|learning to|talent for)\b/i.test(text);
+}
+
 function updateBrain() {
   const mood = document.getElementById("brain-mood");
   const moodScore = document.getElementById("brain-mood-score");
@@ -3372,7 +3441,9 @@ function updateBrain() {
     : (Array.isArray(mabel && mabel.personality && mabel.personality.core_traits) && mabel.personality.core_traits.length
       ? mabel.personality.core_traits
       : ["gentle", "curious", "thoughtful", "quietly playful"]);
-  const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
+  const evolvedTraits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits.filter(function (entry) {
+    return entry && !isHobbyPersonalityTrait(entry.trait);
+  }) : [];
   updateCrafting();
   updateBaking();
   updateCoding();
@@ -3508,6 +3579,7 @@ async function refreshSharedMabelBrain() {
       updateMindTopics();
       updateCrafting();
       updateArtExhibition();
+      window.setTimeout(maybeRequestMabelReading, 0);
     }
   } catch (error) {
     // Keep the browser's current Brain view if the shared Worker is unavailable.
@@ -3569,6 +3641,7 @@ async function startMabelDayOnVisit(force) {
   try {
     if (!force && localStorage.getItem(startedDayKey) === today) {
       await refreshSharedMabelBrain();
+      await refreshPrivateMailbox();
       return;
     }
   } catch (error) {}
@@ -3583,6 +3656,7 @@ async function startMabelDayOnVisit(force) {
     await response.json().catch(function () { return {}; });
     try { localStorage.setItem(startedDayKey, today); } catch (error) {}
     await refreshSharedMabelBrain();
+    await refreshPrivateMailbox();
   } catch (error) {
     if (todayStatusElement) todayStatusElement.textContent = "Mabel’s shared day is resting for now. Her saved world is still here; she can try again on a later visit.";
     updateTodayView();
@@ -3593,7 +3667,7 @@ function addEvolvedTrait(candidate, evidence) {
   if (!candidate || typeof candidate !== "object") return false;
   const trait = String(candidate.trait || "").trim().replace(/\s+/g, " ").slice(0, 100);
   const reason = String(candidate.reason || "").trim().replace(/\s+/g, " ").slice(0, 240);
-  if (trait.length < 4 || reason.length < 20 || !textSharesSpecificDetail(reason, evidence)) return false;
+  if (trait.length < 4 || reason.length < 20 || isHobbyPersonalityTrait(trait) || !textSharesSpecificDetail(reason, evidence)) return false;
   const personality = mabel.personality || (mabel.personality = { core_traits: [], evolved_traits: [] });
   personality.evolved_traits = Array.isArray(personality.evolved_traits) ? personality.evolved_traits : [];
   const key = normalizeInterestTitle(trait);
@@ -4142,73 +4216,85 @@ function updateWanderings() {
   });
 }
 
-async function loadVisitorBoard() {
+async function loadVisitorBoard(options) {
   if (!visitorBoardMessages) return;
+  options = options || {};
+  let cachedMessages = null;
+  try {
+    cachedMessages = JSON.parse(localStorage.getItem(visitorBoardCacheStorageKey) || "null");
+    if (Array.isArray(cachedMessages)) renderVisitorBoardMessages(cachedMessages);
+  } catch (error) {}
+  let lastFetch = 0;
+  try { lastFetch = Number(localStorage.getItem(visitorBoardLastFetchStorageKey)) || 0; } catch (error) {}
+  if (!options.force && Date.now() - lastFetch < 60 * 1000) return;
+  try { localStorage.setItem(visitorBoardLastFetchStorageKey, String(Date.now())); } catch (error) {}
   try {
     const response = await fetch(MABEL_BOARD_URL, { method: "GET", cache: "no-store" });
-    if (!response.ok) throw new Error("The shared board is unavailable.");
-    const data = await response.json();
-    visitorBoardMessages.replaceChildren();
-    const messages = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
-    if (!messages.length) {
-      const empty = document.createElement("li");
-      empty.textContent = "The board is waiting for its first note.";
-      visitorBoardMessages.appendChild(empty);
+    if (!response.ok) {
+      let result = {};
+      try { result = await response.json(); } catch (parseError) {}
+      throw new Error(result.error || "The shared board is unavailable.");
     }
-    messages.forEach(function (message) {
-      const item = document.createElement("li");
-      const text = document.createElement("p");
-      text.textContent = message.message || "";
-      item.appendChild(text);
-      const signoff = document.createElement("strong");
-      signoff.textContent = message.name ? "— " + message.name : "— A visitor";
-      item.appendChild(signoff);
-      if (message.createdAt) {
-        const time = document.createElement("time");
-        time.dateTime = message.createdAt;
-        time.textContent = new Date(message.createdAt).toLocaleString();
-        item.appendChild(time);
-      }
-      if (message.id) {
-        const removeButton = document.createElement("button");
-        removeButton.type = "button";
-        removeButton.className = "board-delete-button";
-        removeButton.textContent = "Delete";
-        removeButton.setAttribute("aria-label", "Delete this notice");
-        removeButton.addEventListener("click", async function () {
-          if (!window.confirm("Delete this notice from the shared board?")) return;
-          removeButton.disabled = true;
-          try {
-            const deleteResponse = await fetch(MABEL_BOARD_URL, {
-              method: "POST",
-              headers: MABEL_LIFE_POST_HEADERS,
-              body: JSON.stringify({ action: "delete", id: message.id })
-            });
-            let deleteResult = {};
-            try { deleteResult = await deleteResponse.json(); } catch (parseError) { /* Keep the HTTP status below. */ }
-            if (!deleteResponse.ok) {
-              if (deleteResponse.status === 404) {
-                await loadVisitorBoard();
-                if (visitorBoardStatus) visitorBoardStatus.textContent = "That notice was already removed, so the board has been refreshed.";
-                return;
-              }
-              throw new Error(deleteResult.error || ("The notice could not be deleted (status " + deleteResponse.status + ")."));
-            }
-            await loadVisitorBoard();
-            if (visitorBoardStatus) visitorBoardStatus.textContent = "The notice has been removed for everyone.";
-          } catch (error) {
-            removeButton.disabled = false;
-            if (visitorBoardStatus) visitorBoardStatus.textContent = error && error.message ? error.message : "That notice could not be removed just now.";
-          }
-        });
-        item.appendChild(removeButton);
-      }
-      visitorBoardMessages.appendChild(item);
-    });
+    const data = await response.json();
+    const messages = Array.isArray(data.messages) ? data.messages.slice(0, 50) : [];
+    renderVisitorBoardMessages(messages);
+    try { localStorage.setItem(visitorBoardCacheStorageKey, JSON.stringify(messages)); } catch (error) {}
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Notes from visitors appear here for everyone.";
   } catch (error) {
-    if (visitorBoardStatus) visitorBoardStatus.textContent = "The noticeboard is resting for now. Please try again later.";
+    if (visitorBoardStatus) visitorBoardStatus.textContent = error && error.message ? error.message : "The noticeboard is resting for now. Please try again later.";
   }
+}
+
+function renderVisitorBoardMessages(messages) {
+  if (!visitorBoardMessages) return;
+  visitorBoardMessages.replaceChildren();
+  messages = Array.isArray(messages) ? messages.slice(0, 50) : [];
+  if (!messages.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "The board is waiting for its first note.";
+    visitorBoardMessages.appendChild(empty);
+  }
+  messages.forEach(function (message) {
+    const item = document.createElement("li");
+    const text = document.createElement("p");
+    text.textContent = message.message || "";
+    item.appendChild(text);
+    const signoff = document.createElement("strong");
+    signoff.textContent = "— " + (message.name || (message.visitorNumber ? "Visitor " + message.visitorNumber : "A visitor"));
+    item.appendChild(signoff);
+    if (message.createdAt) {
+      const time = document.createElement("time");
+      time.dateTime = message.createdAt;
+      time.textContent = new Date(message.createdAt).toLocaleString();
+      item.appendChild(time);
+    }
+    if (message.id) {
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "board-delete-button";
+      removeButton.textContent = "Delete";
+      removeButton.setAttribute("aria-label", "Delete this notice");
+      removeButton.addEventListener("click", async function () {
+        if (!window.confirm("Delete this notice from the shared board?")) return;
+        removeButton.disabled = true;
+        try {
+          const deleteResponse = await fetch(MABEL_BOARD_URL, { method: "POST", headers: MABEL_LIFE_POST_HEADERS, body: JSON.stringify({ action: "delete", id: message.id }) });
+          let deleteResult = {};
+          try { deleteResult = await deleteResponse.json(); } catch (parseError) {}
+          if (!deleteResponse.ok) throw new Error(deleteResult.error || ("The notice could not be deleted (status " + deleteResponse.status + ")."));
+          const saved = JSON.parse(localStorage.getItem(visitorBoardCacheStorageKey) || "[]");
+          localStorage.setItem(visitorBoardCacheStorageKey, JSON.stringify(saved.filter(function (entry) { return entry.id !== message.id; })));
+          await loadVisitorBoard({ force: true });
+          if (visitorBoardStatus) visitorBoardStatus.textContent = "The notice has been removed for everyone.";
+        } catch (error) {
+          removeButton.disabled = false;
+          if (visitorBoardStatus) visitorBoardStatus.textContent = error && error.message ? error.message : "That notice could not be removed just now.";
+        }
+      });
+      item.appendChild(removeButton);
+    }
+    visitorBoardMessages.appendChild(item);
+  });
 }
 
 async function submitVisitorBoardMessage(event) {
@@ -4217,21 +4303,25 @@ async function submitVisitorBoardMessage(event) {
   const nameInput = document.getElementById("visitor-board-name");
   const messageInput = document.getElementById("visitor-board-message");
   const message = messageInput ? messageInput.value.trim().slice(0, 280) : "";
-  const name = nameInput ? nameInput.value.trim().slice(0, 40) : "";
+  const signOff = nameInput ? nameInput.value.trim().slice(0, 40) : "";
   if (!message) return;
   if (visitorBoardStatus) visitorBoardStatus.textContent = "Posting your note…";
   try {
     const response = await fetch(MABEL_BOARD_URL, {
       method: "POST",
       headers: MABEL_LIFE_POST_HEADERS,
-      body: JSON.stringify({ name: name, message: message })
+      body: JSON.stringify({ name: signOff, publicName: visitorProfile.publicNameEnabled ? visitorProfile.publicName : "", publicNameEnabled: visitorProfile.publicNameEnabled === true, visitorNumber: visitorProfile.visitorNumber, message: message })
     });
-    if (!response.ok) throw new Error("The shared board is unavailable.");
+    if (!response.ok) {
+      let result = {};
+      try { result = await response.json(); } catch (parseError) {}
+      throw new Error(result.error || "The shared board is unavailable.");
+    }
     if (messageInput) messageInput.value = "";
     if (visitorBoardStatus) visitorBoardStatus.textContent = "Your note is on the board.";
-    await loadVisitorBoard();
+    await loadVisitorBoard({ force: true });
   } catch (error) {
-    if (visitorBoardStatus) visitorBoardStatus.textContent = "The noticeboard is resting for now. Your note has not been posted.";
+    if (visitorBoardStatus) visitorBoardStatus.textContent = error && error.message ? error.message + " Your note has not been posted." : "The noticeboard is resting for now. Your note has not been posted.";
   }
 }
 
@@ -4268,13 +4358,15 @@ function loadVisitorProfile() {
         activeTickAt: Number(parsed.activeTickAt) || 0,
         visitorId: String(parsed.visitorId || ""),
         visitorNumber: String(parsed.visitorNumber || ""),
-        visitorName: String(parsed.visitorName || "").slice(0, 32)
+        visitorName: String(parsed.visitorName || "").slice(0, 32),
+        publicName: String(parsed.publicName || "").slice(0, 40),
+        publicNameEnabled: parsed.publicNameEnabled === true
       };
     }
   } catch (error) {
     // Use an empty local profile if storage is unavailable.
   }
-  return { facts: [], moments: [], bond: 0, activeMinutes: 0, activeDay: "", activeBondToday: 0, activeTickAt: 0, visitorId: "", visitorNumber: "", visitorName: "" };
+  return { facts: [], moments: [], bond: 0, activeMinutes: 0, activeDay: "", activeBondToday: 0, activeTickAt: 0, visitorId: "", visitorNumber: "", visitorName: "", publicName: "", publicNameEnabled: false };
 }
 
 function stableVisitorNumber(visitorId) {
@@ -4298,6 +4390,43 @@ function ensureVisitorIdentity() {
   return visitorProfile;
 }
 
+function visitorBoardDisplayName() {
+  const identity = ensureVisitorIdentity();
+  return identity.publicNameEnabled && identity.publicName
+    ? identity.publicName
+    : "Visitor " + identity.visitorNumber;
+}
+
+async function saveVisitorNameChoices() {
+  ensureVisitorIdentity();
+  const input = document.getElementById("visitor-name-choice");
+  const publicChoice = document.getElementById("visitor-public-name");
+  const status = document.getElementById("visitor-name-status");
+  const value = input ? input.value.trim().slice(0, 32) : "";
+  visitorProfile.visitorName = value;
+  visitorProfile.publicNameEnabled = Boolean(publicChoice && publicChoice.checked && value);
+  visitorProfile.publicName = visitorProfile.publicNameEnabled ? value : "";
+  saveVisitorProfile();
+  if (status) status.textContent = "Saving your name choices…";
+  try {
+    const response = await fetch(MABEL_BOARD_URL, {
+      method: "POST",
+      headers: MABEL_LIFE_POST_HEADERS,
+      body: JSON.stringify({ action: "update-name", visitorNumber: visitorProfile.visitorNumber, publicName: visitorProfile.publicName, publicNameEnabled: visitorProfile.publicNameEnabled })
+    });
+    let result = {};
+    try { result = await response.json(); } catch (parseError) {}
+    if (!response.ok) throw new Error(result.error || "The shared board could not update your older notes.");
+    try { localStorage.removeItem(visitorBoardLastFetchStorageKey); } catch (error) {}
+    await loadVisitorBoard({ force: true });
+    if (status) status.textContent = visitorProfile.publicNameEnabled
+      ? "Saved. Your chosen name will appear on your public noticeboard notes."
+      : "Saved. Mabel can use your name privately; public notes will show your visitor number.";
+  } catch (error) {
+    if (status) status.textContent = "Your choice is saved here, but the shared board could not update older notes. Save again when the board is available.";
+  }
+}
+
 async function refreshPrivateMailbox() {
   const identity = ensureVisitorIdentity();
   try {
@@ -4308,7 +4437,7 @@ async function refreshPrivateMailbox() {
     let added = false;
     notes.forEach(function (note) {
       if (!note || !note.id || mabelPostboxItems.some(function (item) { return item && item.id === note.id; })) return;
-      mabelPostboxItems.unshift({ ...note, kind: note.kind || "note" });
+      mabelPostboxItems.unshift({ ...note, receivedAt: now(), kind: note.kind || "note" });
       added = true;
     });
     if (added) {
@@ -4658,6 +4787,10 @@ function updateVisitorProfile() {
   const momentList = document.getElementById("visitor-profile-moments");
   const emptyNotice = document.getElementById("visitor-profile-empty");
   const forgetButton = document.getElementById("forget-visitor-profile");
+  const nameChoice = document.getElementById("visitor-name-choice");
+  const publicNameChoice = document.getElementById("visitor-public-name");
+  if (nameChoice && document.activeElement !== nameChoice) nameChoice.value = visitorProfile.visitorName || "";
+  if (publicNameChoice) publicNameChoice.checked = visitorProfile.publicNameEnabled === true;
 
   function renderList(list, key) {
     if (!list) return;
@@ -4901,7 +5034,7 @@ function showHollowSpeech(text) {
 function isClearlyEdibleGiftName(value) {
   const name = String(value || "").toLowerCase();
   if (/\b(bolts?|screws?|hardware|metal|nuts?\s+and\s+bolts?)\b/.test(name)) return false;
-  return /\b(egg yolks?|egg whites?|eggs?|flour|sugar|oats?|oatmeal|honey|bread|focaccia|cracker|biscuit|cake|cookie|pastry|berries|blackberry|blueberry|raspberry|strawberry|cranberry|raisin|apple|banana|pear|hazelnut|walnut|almond|pistachio|pine nut|sunflower seeds?|sesame seeds?|cheese|chocolate|rice|pasta|pizza crust|tomato|potato|carrot|basil|mint)\b/.test(name);
+  return /\b(egg yolks?|egg whites?|eggs?|flour|sugar|oats?|oatmeal|honey|bread|focaccia|cracker|biscuit|cake|cookie|pastry|berries|blackberry|blueberry|raspberry|strawberry|redcurrant|blackcurrant|cranberry|elderberry|raisin|apple|banana|pear|plum|apricot|fig|mango|peach|cherry|melon|coconut|hazelnut|walnut|almond|cashew|pistachio|pine nut|sunflower seeds?|pumpkin seeds?|sesame seeds?|cheese|chocolate|rice|pasta|cereal|corn|lentil|pizza crust|tomato|potato|carrot|peas?|sweet potato|pumpkin|basil|mint|dandelion leaf|clover leaf|rose petal|edible (?:porcini|shiitake|oyster) mushroom|cultivated oyster mushroom)\b/.test(name);
 }
 
 async function queueHomeGift(objectName, giftKind) {
@@ -4947,22 +5080,50 @@ function chooseGift(event) {
     food: [
       "a blackberry", "three sunflower seeds", "a fallen hazelnut", "a little oat crumb",
       "a small piece of plain pizza crust", "a crumb from an old bakery roll", "a piece of stale artisan focaccia", "a dried edible porcini mushroom",
-      "a dried shiitake mushroom", "a piece of cultivated oyster mushroom", "a pistachio kernel", "a pine nut",
+      "a dried edible shiitake mushroom", "a piece of cultivated oyster mushroom", "a pistachio kernel", "a pine nut",
       "a fresh basil leaf", "a mint leaf", "a raspberry", "a blueberry",
       "a sliver of apple", "half a dried cranberry", "a corner of plain cracker",
-      "a crumb of oat biscuit", "a sesame seed", "a little strawberry top", "a crumb of mild cheese"
+      "a crumb of oat biscuit", "a sesame seed", "a little strawberry top", "a crumb of mild cheese",
+      "a redcurrant", "a blackcurrant", "a tiny plum slice", "a pear cube", "a dried apricot piece",
+      "a raisin", "a pumpkin seed", "a sunflower kernel", "a walnut crumb", "a cashew piece",
+      "an almond sliver", "a cooked lentil", "a plain rice grain", "a rolled oat", "a little corn kernel",
+      "a piece of cooked sweet potato", "a carrot shaving", "a pea from a garden pod", "a clean dandelion leaf",
+      "a clover leaf", "a rose petal", "a tiny piece of plain sponge cake", "a biscuit crumb", "a bit of plain pancake",
+      "a dry pasta bow", "a crumb of cornbread", "a small piece of plain pita", "a little baked potato skin",
+      "a dried coconut flake", "a piece of dried mango", "a little peach skin", "a cherry piece without its stone",
+      "a tiny piece of cooked pumpkin", "a flake of plain cereal", "a crumb of shortbread", "a pinch of oats and honey",
+      "a piece of dried pear", "a small blackberry", "a strawberry seed cluster", "a piece of plain bagel",
+      "a tiny piece of steamed carrot", "a crumb of unsalted breadstick", "a dried elderberry", "a piece of ripe melon"
     ],
     water: [
       "a sip of clean rainwater in a curled leaf", "a bead of fresh dew", "a small cup of fresh water",
       "a drop of rain caught in an acorn cap", "a little spring-water in a shell", "a clean sip from the stream",
-      "a sip from a muddy puddle", "a little cloudy puddle water"
+      "a sip from a muddy puddle", "a little cloudy puddle water", "a clear drop caught on a fern",
+      "a clean sip from a rain barrel", "a drop from a fresh stream pool", "a little frost melt in a shell",
+      "a rain drop gathered beneath a broad leaf", "a sip from a clean birdbath after rain"
     ],
     surprise: [
       "a dried flower tied with thread", "a smooth shell", "a little brass bell", "a pale green glass pebble",
       "a scrap of soft blue cloth", "a tiny wooden bead", "a pressed four-leaf clover", "a tiny wooden spool",
       "a miniature paper star", "a little copper key", "a worn postage stamp", "a small piece of sea glass",
       "a tiny thimble", "a green ribbon bow", "a little carved acorn",
-      "an old faded Nintendo DS game cartridge", "a used tea-light candle with cool wax"
+      "an old faded Nintendo DS game cartridge", "a used tea-light candle with cool wax",
+      "a tiny blue marble", "a bent paperclip", "a brass shirt button", "a little wooden peg",
+      "a tiny plastic dinosaur", "a cracked domino tile", "a faded sticker star", "a small jingle bell",
+      "a smooth piece of driftwood", "a short length of soft yarn", "a bottle cap with a lemon picture",
+      "a little ceramic bead", "a miniature toy wheel", "a tiny folded paper boat", "a feather with a grey tip",
+      "a short piece of ribbon", "a chipped chess pawn", "a little metal washer", "a tiny key ring",
+      "a faded playing card", "a small wooden alphabet block", "a clean cork stopper", "a tiny shell button",
+      "a little brass charm shaped like a moon", "a miniature plastic horse", "a soft patch of felt",
+      "a tiny toy drumstick", "a broken pencil with a pink eraser", "a small glass bead with a swirl",
+      "a little cardboard ticket stub", "a tiny paper clip shaped like a heart", "a miniature sewing needle case",
+      "a smooth tile shard", "a small wooden spool with thread", "a tiny plastic ring", "a toy robot arm",
+      "a little tin lid", "a violet crayon nub", "a tiny music-box key", "a small brass bell pull",
+      "a dried leaf pressed inside a paper square", "a little paper crown", "a tiny red game token",
+      "a miniature paintbrush", "a striped pebble", "a little shell with a natural hole", "a small knitted square",
+      "a tiny wooden train carriage", "a miniature toy teacup", "a little envelope with no letter inside",
+      "a small patch with a crooked star", "a tiny plastic game token", "a clean bottle cork", "a blue glass button",
+      "a small brass key with a bent tooth", "a little fabric flower", "a miniature wooden spoon", "a tiny bead shaped like a strawberry"
     ]
   };
   const options = gifts[kind] || gifts.surprise;
@@ -5000,6 +5161,12 @@ function comfortDrawingSubject(message) {
 
 function visitorSeemsDistressed(message) {
   return /\b(sad|upset|lonely|alone|isolated|no one|nobody|scared|anxious|anxiety|stressed|overwhelmed|heartbroken|grieving|rough day|bad day|feeling low|feel awful|crying|in tears)\b/i.test(String(message || ""));
+}
+
+function shouldMakeComfortDrawing() {
+  // Most comfort gifts are a small picture, with occasional notes that feel
+  // more like something Mabel chose to write herself.
+  return Math.random() < 0.65;
 }
 
 function requestedArtworkColors(message) {
@@ -5731,7 +5898,7 @@ async function handleVisitorMessage() {
         await requestMabelArtwork({ source: "visitor", message: message, forceLocalFallback: true }, replyElement);
         queueArtworkReferenceResearch(message);
       } else if (visitorSeemsDistressed(message)) {
-        const comfortArt = await requestMabelArtwork({
+        const comfortArt = shouldMakeComfortDrawing() ? await requestMabelArtwork({
           source: "comfort",
           comfortRequest: true,
           message: message,
@@ -5740,7 +5907,7 @@ async function handleVisitorMessage() {
           activity: "making a small comfort drawing for a visitor",
           thought: "A little picture might be a kind thing to leave for them.",
           forceLocalFallback: true
-        }, null);
+        }, null) : null;
         queueComfortPostboxMail(message, comfortArt);
       }
       if (chatStatusElement) {
@@ -5777,14 +5944,14 @@ async function handleVisitorMessage() {
       requestedArtwork = await requestMabelArtwork({ source: "visitor", message: message }, replyElement);
       queueArtworkReferenceResearch(message);
     } else if (visitorSeemsDistressed(message)) {
-      requestedArtwork = await requestMabelArtwork({
+      requestedArtwork = shouldMakeComfortDrawing() ? await requestMabelArtwork({
         source: "comfort",
         comfortRequest: true,
         message: message,
         mood: mabel.now.mood,
         activity: "making a small comfort drawing for a visitor",
         thought: "A little picture might be a kind thing to leave for them."
-      }, null);
+      }, null) : null;
       queueComfortPostboxMail(message, requestedArtwork);
     }
 
@@ -6859,7 +7026,7 @@ function showSparkNotice() {
         ? "See why she chose it and how she is growing in Mabel’s Inner Life."
         : "See the question it opened up in Mabel’s curiosities.";
   }
-  if (viewSparkButton) viewSparkButton.textContent = latest && latest.notificationType === "curiosity" ? "See her curiosity" : "See in Inner Life";
+  if (viewSparkButton) viewSparkButton.textContent = latest && latest.notificationType === "curiosity" ? "See her curiosity" : "See in Mabel’s Brain";
   if (sparkNoticeCard) {
     sparkNoticeCard.classList.toggle("hidden", !key || key === lastViewedSparkId);
   }
@@ -7613,8 +7780,9 @@ function chooseResearchPostcardSentence(research) {
 async function redrawResearchReference(focusInterest, reference, researchEntry) {
   if (!mabel || !focusInterest || !reference || !reference.imageUrl) return false;
   if (researchEntry && researchEntry.redrawAttemptedAt) return false;
+  if (researchEntry && researchEntry.redrawStartedAt && Date.now() - Date.parse(researchEntry.redrawStartedAt) < 2 * 60 * 1000) return false;
   if (researchEntry) {
-    researchEntry.redrawAttemptedAt = now();
+    researchEntry.redrawStartedAt = now();
     researchEntry.redrawDueAt = "";
     saveResearchLog();
   }
@@ -7678,7 +7846,11 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
         why: "She wanted to share the second study after learning from a visual reference."
       });
     }
-    if (researchEntry) researchEntry.redrawDeliveredAt = now();
+    if (researchEntry) {
+      researchEntry.redrawAttemptedAt = now();
+      researchEntry.redrawDeliveredAt = researchEntry.redrawAttemptedAt;
+      delete researchEntry.redrawStartedAt;
+    }
     saveResearchLog();
     updatePage();
     return true;
@@ -7690,7 +7862,9 @@ async function redrawResearchReference(focusInterest, reference, researchEntry) 
     why: "The Library reference is saved, so she can return to the art studio later."
   });
   if (researchEntry) {
-    researchEntry.redrawFailedAt = now();
+    researchEntry.redrawAttemptedAt = now();
+    researchEntry.redrawFailedAt = researchEntry.redrawAttemptedAt;
+    delete researchEntry.redrawStartedAt;
     researchEntry.redrawFailure = "The single studio attempt did not return a usable drawing.";
     saveResearchLog();
   }
@@ -8372,7 +8546,7 @@ function startMabel() {
   mabel.personality.core_traits = defaultCoreTraits;
   mabel.personality.evolved_traits = Array.isArray(mabel.personality.evolved_traits)
     ? mabel.personality.evolved_traits.filter(function (entry) {
-        return entry && typeof entry.trait === "string" && typeof entry.reason === "string";
+        return entry && typeof entry.trait === "string" && typeof entry.reason === "string" && !isHobbyPersonalityTrait(entry.trait);
       }).slice(0, 18)
     : [];
   mabel.knowledge = Array.isArray(mabel.knowledge) ? mabel.knowledge.slice(0, 40) : [];
@@ -8441,7 +8615,9 @@ function startMabel() {
       isGiftArtReference: false
     };
     const dueAt = Date.parse(unfinishedReferenceRedraw.redrawDueAt || "");
-    const resumeDelay = Number.isFinite(dueAt) ? Math.max(15000, dueAt - Date.now()) : 30000;
+    const startedAt = Date.parse(unfinishedReferenceRedraw.redrawStartedAt || "");
+    const staleAttemptDelay = Number.isFinite(startedAt) ? Math.max(15000, 2 * 60 * 1000 - (Date.now() - startedAt)) : 0;
+    const resumeDelay = Math.max(staleAttemptDelay, Number.isFinite(dueAt) ? dueAt - Date.now() : 30000, 15000);
     window.setTimeout(function () {
       redrawResearchReference(referenceFocus, unfinishedReferenceRedraw.artReference, unfinishedReferenceRedraw);
     }, resumeDelay);
@@ -8657,6 +8833,8 @@ function startMabel() {
     button.addEventListener("click", chooseGift);
   });
   if (visitorBoardForm) visitorBoardForm.addEventListener("submit", submitVisitorBoardMessage);
+  const saveVisitorNameButton = document.getElementById("save-visitor-name");
+  if (saveVisitorNameButton) saveVisitorNameButton.addEventListener("click", saveVisitorNameChoices);
   const forgetProfileButton = document.getElementById("forget-visitor-profile");
   if (forgetProfileButton) forgetProfileButton.addEventListener("click", forgetVisitorProfile);
   const resetBrowserButton = document.getElementById("reset-browser-mabel");
@@ -8666,9 +8844,14 @@ function startMabel() {
   setInterval(function () {
     if (document.visibilityState === "visible") {
       refreshSharedMabelBrain();
-      refreshPrivateMailbox();
     }
   }, 15 * 60 * 1000);
+  setInterval(function () {
+    if (document.visibilityState === "visible") refreshPrivateMailbox();
+  }, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") refreshPrivateMailbox();
+  });
   setInterval(function () {
     const boardPanel = document.getElementById("visitor-board");
     if (boardPanel && boardPanel.classList.contains("active")) loadVisitorBoard();
