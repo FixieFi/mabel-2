@@ -91,8 +91,27 @@ function artExhibitionDayOf(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+function cleanExhibitionVectorPaths(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 24).map(item => {
+    if (!item || typeof item.d !== "string") return null;
+    const d = item.d.trim().slice(0, 360);
+    if (!/^[MmLlHhVvCcSsQqTtZz0-9.,+\\-\\s]+$/.test(d) || !/[MLCQ]/i.test(d)) return null;
+    const values = d.match(/-?\\d+(?:\\.\\d+)?/g) || [];
+    if (values.length > 100 || values.some(number => !Number.isFinite(Number(number)) || Number(number) < -20 || Number(number) > 180)) return null;
+    return {
+      d,
+      fill: Number.isInteger(item.fill) && item.fill >= 0 && item.fill < 3 ? item.fill : null,
+      stroke: Number.isInteger(item.stroke) && item.stroke >= 0 && item.stroke < 3 ? item.stroke : 2,
+      width: typeof item.width === "number" ? Math.max(0.35, Math.min(5, item.width)) : 1.4,
+      opacity: typeof item.opacity === "number" ? Math.max(0.15, Math.min(1, item.opacity)) : 0.85
+    };
+  }).filter(Boolean);
+}
+
 function cleanExhibitionArtwork(raw) {
-  if (!raw || typeof raw !== "object" || raw.source !== "autonomous") return null;
+  if (!raw || typeof raw !== "object" || !["autonomous", "visitor-nominated"].includes(raw.source)) return null;
+  const source = raw.source;
   const title = cleanText(raw.title, 100);
   if (!title) return null;
   const palette = Array.isArray(raw.palette)
@@ -101,12 +120,16 @@ function cleanExhibitionArtwork(raw) {
   const seed = Number(raw.seed);
   return {
     id: makeId(cleanText(raw.id, 140, title + "-" + (Number.isFinite(seed) ? seed : ""))),
-    source: "autonomous",
+    source,
     title,
-    description: "A little drawing Mabel chose for today’s exhibition.",
-    exhibitionReason: cleanText(raw.exhibitionReason, 220, cleanText(raw.inspirationTitle, 100)
-      ? "Mabel chose this because a thought about " + cleanText(raw.inspirationTitle, 100) + " stayed with her."
-      : "She was especially pleased with the colours and little details in this one."),
+    description: source === "visitor-nominated"
+      ? "A reference study of " + cleanText(raw.subject, 60, title) + ", nominated by a visitor."
+      : "A little drawing Mabel chose for today’s exhibition.",
+    exhibitionReason: cleanText(raw.exhibitionReason, 220, source === "visitor-nominated"
+      ? "A visitor nominated this study after Mabel returned to the subject with a visual reference."
+      : cleanText(raw.inspirationTitle, 100)
+        ? "Mabel chose this because a thought about " + cleanText(raw.inspirationTitle, 100) + " stayed with her."
+        : "She was especially pleased with the colours and little details in this one."),
     exhibitionAddedAt: cleanText(raw.exhibitionAddedAt, 40),
     inspirationTitle: cleanText(raw.inspirationTitle, 100),
     kind: cleanText(raw.kind, 30, "moment"),
@@ -116,6 +139,7 @@ function cleanExhibitionArtwork(raw) {
     subject: cleanText(raw.subject, 60),
     selfPortrait: Boolean(raw.selfPortrait),
     symbols: Array.isArray(raw.symbols) ? raw.symbols.map(item => cleanText(item, 30)).filter(Boolean).slice(0, 3) : [],
+    vectorPaths: cleanExhibitionVectorPaths(raw.vectorPaths),
     at: cleanText(raw.at, 40, new Date().toISOString()),
     score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 0,
     votes: Math.max(0, Number(raw.votes) || 0),
@@ -462,8 +486,9 @@ function trackRepeatedHobbyMention(state, message) {
 
 function maybeBakeTreat(state) {
   const hobby = state.interests.find(item => item && item.kind === "hobby" && /\bbak(e|ing)\b/i.test(String(item.title || "")));
-  // Food is a fullness score: bake when she has an appetite, but not when depleted.
-  if (!hobby || state.needs.food < 0.18 || state.needs.food > 0.78 ||
+  // Food is a fullness score: low food means she is hungry, which can motivate baking.
+  // She only waits when already quite full, or when water/rest are too low to bake safely.
+  if (!hobby || state.needs.food > 0.78 ||
       state.needs.water < 0.3 || state.needs.rest < 0.3) return false;
   const last = Date.parse(state.baking.lastBakedAt || "");
   if (Number.isFinite(last) && Date.now() - last < 2 * 60 * 60 * 1000) return false;
@@ -1005,6 +1030,36 @@ async function handleSharedWorldEvent(request, env) {
     refreshArtExhibitionWorks(state.artExhibition);
     await saveState(env, state);
     return jsonResponse({ ok: true, votes: candidate.votes });
+  }
+
+  if (kind === "exhibition-nomination-vote") {
+    const visitorId = cleanText(data.visitorId, 100);
+    const bond = Math.max(0, Number(data.bond) || 0);
+    const supplied = data.artwork && typeof data.artwork === "object" ? data.artwork : {};
+    if (!visitorId || bond < 35) return jsonResponse({ error: "A closer friendship with Mabel is needed before nominating a drawing." }, 403);
+    if (supplied.referenceRetry !== true || !cleanText(supplied.subject, 80)) {
+      return jsonResponse({ error: "Only a finished reference study can be nominated this way." }, 400);
+    }
+    const artwork = cleanExhibitionArtwork({ ...supplied, source: "visitor-nominated" });
+    if (!artwork || !artwork.vectorPaths.length) {
+      return jsonResponse({ error: "That reference drawing is missing its finished artwork." }, 400);
+    }
+    let candidate = state.artExhibition.candidates.find(item => item && item.id === artwork.id);
+    if (!candidate) {
+      candidate = { ...artwork, score: 0, votes: 0, votedBy: [] };
+      state.artExhibition.candidates.push(candidate);
+    }
+    candidate.votedBy = Array.isArray(candidate.votedBy) ? candidate.votedBy : [];
+    if (candidate.votedBy.includes(visitorId)) return jsonResponse({ ok: true, alreadyVoted: true });
+    candidate.votedBy.push(visitorId);
+    candidate.votedBy = candidate.votedBy.slice(-200);
+    candidate.votes = Math.max(0, Number(candidate.votes) || 0) + 1;
+    candidate.score = (Number(candidate.score) || 0) + 1.5;
+    state.artExhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
+    state.artExhibition.candidates = state.artExhibition.candidates.slice(0, 24);
+    refreshArtExhibitionWorks(state.artExhibition);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, votes: candidate.votes, artworkId: candidate.id });
   }
   if (kind === "art-reference") {
     const supplied = data.artReference && typeof data.artReference === "object" ? data.artReference : {};
