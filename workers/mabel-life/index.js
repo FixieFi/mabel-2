@@ -216,7 +216,12 @@ async function loadState(env) {
   state.interests = Array.isArray(state.interests)
     ? state.interests.filter(item => item && !LEGACY_SEEDS.has(item.id)).slice(0, MAX_INTERESTS)
     : [];
-  state.lifeLog = Array.isArray(state.lifeLog) ? state.lifeLog.filter(item => item && item.id).slice(0, 40) : [];
+  state.lifeLog = Array.isArray(state.lifeLog)
+    ? state.lifeLog.filter(item => item && item.id &&
+        !(/^Mabel spent a little time\b/i.test(String(item.text || "")) &&
+          /\b(research(?:ing)?|library|search(?:ing)?|look(?:ing)? up)\b/i.test(String(item.text || ""))))
+        .slice(0, 40)
+    : [];
   state.crafting = state.crafting && typeof state.crafting === "object" ? state.crafting : structuredClone(DEFAULT_STATE.crafting);
   state.crafting.skillLevel = Math.max(0, Math.min(5, Number(state.crafting.skillLevel) || 0));
   state.crafting.materials = Array.isArray(state.crafting.materials)
@@ -231,7 +236,12 @@ async function loadState(env) {
   state.crafting.lastIdeaAt = cleanText(state.crafting.lastIdeaAt, 40) || null;
   state.baking = state.baking && typeof state.baking === "object" ? state.baking : structuredClone(DEFAULT_STATE.baking);
   state.baking.skillLevel = Math.max(0, Math.min(5, Number(state.baking.skillLevel) || 0));
-  state.baking.pantry = Array.isArray(state.baking.pantry) ? state.baking.pantry.filter(item => item && typeof item.name === "string" && typeof item.ingredient === "string").slice(0, 30) : [];
+  state.baking.pantry = Array.isArray(state.baking.pantry)
+    ? state.baking.pantry.filter(item => item && typeof item.name === "string")
+        .map(item => ({ ...item, ingredient: bakingIngredientType(item.name) }))
+        .filter(item => Boolean(item.ingredient))
+        .slice(0, 30)
+    : [];
   state.baking.treats = Array.isArray(state.baking.treats) ? state.baking.treats.filter(item => item && typeof item.title === "string").slice(0, 20) : [];
   state.baking.lastBakedAt = cleanText(state.baking.lastBakedAt, 40) || null;
   state.coding = state.coding && typeof state.coding === "object" ? state.coding : structuredClone(DEFAULT_STATE.coding);
@@ -290,7 +300,7 @@ function upsertInterest(state, interest, pullChange = 0.1) {
     existing.question = question || existing.question;
     existing.stage = existing.pull < 0.18 ? "resting" : existing.pull > 0.75 ? "pursuing" : "wondering";
     existing.events = Array.isArray(existing.events) ? existing.events : [];
-    existing.events.unshift({ at: new Date().toISOString(), text: cleanText(interest.evidence, 180, "Mabel returned to this thought.") });
+    existing.events.unshift({ at: new Date().toISOString(), text: cleanText(interest.evidence, 500, "Mabel returned to this thought.") });
     existing.events.length = Math.min(existing.events.length, 12);
     return existing;
   }
@@ -304,7 +314,7 @@ function upsertInterest(state, interest, pullChange = 0.1) {
     pull: clamp(typeof interest.pull === "number" ? interest.pull : 0.5),
     stage: "wondering",
     createdAt: new Date().toISOString(),
-    events: [{ at: new Date().toISOString(), text: cleanText(interest.evidence, 180, "A new thought caught Mabel's attention.") }]
+    events: [{ at: new Date().toISOString(), text: cleanText(interest.evidence, 500, "A new thought caught Mabel's attention.") }]
   };
   state.interests.unshift(existing);
   if (state.interests.length > MAX_INTERESTS) state.interests.length = MAX_INTERESTS;
@@ -369,7 +379,7 @@ async function reflectEvolvedTrait(env, state) {
       "You are helping Mabel, a small mouse, reflect on a life she owns herself.",
       "Review her recent kept memories and reflections for a preference, habit, or belief that has appeared repeatedly.",
       "Suggest at most one subtle evolved trait only when distinct moments support it. If nothing has taken root, return null.",
-      "Do not turn one event or one visitor request into a lasting trait. Do not change her core traits. Do not repeat an existing trait.",
+      "Do not turn one event or one visitor request into a lasting trait. Do not change her core traits. Do not repeat an existing trait. Evolved traits must describe personality qualities, values, or ways of relating (such as patience or growing empathy), never hobbies, skills, activities, or research topics.",
       "Return only JSON: {trait:null} or {trait:{trait,reason}}. The reason must name evidence from at least two supplied records."
     ].join(" "),
     [
@@ -384,7 +394,10 @@ async function reflectEvolvedTrait(env, state) {
   const trait = cleanText(candidate?.trait, 100);
   const reason = cleanText(candidate?.reason, 240);
   const key = makeId(trait);
+  const isHobbyLabel = TRACKED_HOBBIES.some(item => key === makeId(item.title) || key.includes(makeId(item.title))) ||
+    /\b(baking|sewing|dancing|music|cycling|running|coding|painting|drawing|gardening|knitting|crocheting|woodworking|photography|singing|crafting|calligraphy|origami|stargazing|birdwatching|chess|skateboarding|swimming)\b/i.test(trait);
   if (trait && reason && traitReasonHasRepeatedEvidence(reason, records) &&
+      !isHobbyLabel &&
       !personality.evolved_traits.some(item => makeId(item.trait) === key)) {
     personality.evolved_traits.unshift({ trait, reason, date_added: day });
     personality.evolved_traits = personality.evolved_traits.slice(0, MAX_EVOLVED_TRAITS);
@@ -396,6 +409,8 @@ async function reflectEvolvedTrait(env, state) {
 
 function bakingIngredientType(value) {
   const name = String(value || "").toLowerCase();
+  if (/\b(bolts?|screws?|hardware|metal|nuts?\s+and\s+bolts?)\b/.test(name)) return "";
+  if (/\b(egg yolks?|egg whites?|eggs?)\b/.test(name)) return "eggs";
   if (/\b(oats?|oat flakes?|oat biscuit crumbs?)\b/.test(name)) return "oats";
   if (/\b(blackberr(y|ies)|blueberr(y|ies)|raspberr(y|ies)|strawberr(y|ies)|berries)\b/.test(name)) return "berries";
   if (/\b(cranberr(y|ies)|raisins?|dried fruit)\b/.test(name)) return "dried fruit";
@@ -445,10 +460,24 @@ const TRACKED_HOBBIES = [
   { title: "Coding", pattern: /\b(cod(e|ing)|program(ming)?|write a program)\b/i, question: "What small useful or playful program could Mabel learn to make?" }
 ];
 
+function visitorClearlyEnjoysHobby(title, message) {
+  const text = String(message || "").toLowerCase();
+  const key = makeId(title);
+  const patterns = {
+    baking: /\b(?:i\s+(?:(?:love|like|enjoy|adore|often|regularly|sometimes|do|practice|practise|am learning to)\s+)?(?:baking|bake|baked|making cakes|make cakes)|my\s+(?:hobby|interest)\s+is\s+baking|baking\s+is\s+my\s+hobby)\b/,
+    dancing: /\b(?:i\s+(?:(?:love|like|enjoy|adore|often|regularly|sometimes|do|practice|practise|am learning to)\s+)?(?:dancing|dance)|my\s+(?:hobby|interest)\s+is\s+dancing|dancing\s+is\s+my\s+hobby)\b/,
+    "playing music": /\b(?:i\s+(?:love|like|enjoy|adore|often|regularly|sometimes|play|make|am learning to play)\s+(?:playing music|music|an? instrument|the piano|the guitar|the violin|the drums?)|my\s+(?:hobby|interest)\s+is\s+(?:music|playing music))\b/,
+    cycling: /\b(?:i\s+(?:love|like|enjoy|adore|often|regularly|sometimes|go|do|am learning)\s+(?:cycling|bike riding)|i\s+(?:cycle|bike|ride my bike)|my\s+(?:hobby|interest)\s+is\s+cycling)\b/,
+    running: /\b(?:i\s+(?:love|like|enjoy|adore|often|regularly|sometimes|go)\s+(?:running|jogging)|i\s+(?:run|jog)\b|my\s+(?:hobby|interest)\s+is\s+running)\b/,
+    coding: /\b(?:i\s+(?:love|like|enjoy|adore|often|regularly|sometimes|do|practice|practise|am learning)\s+(?:coding|programming|to code)|i\s+code\b|my\s+(?:hobby|interest)\s+is\s+(?:coding|programming))\b/
+  };
+  return Boolean(patterns[key] && patterns[key].test(text));
+}
+
 function trackRepeatedHobbyMention(state, message) {
   const text = String(message || "");
   const hobby = TRACKED_HOBBIES.find(item => item.pattern.test(text));
-  if (!hobby) return null;
+  if (!hobby || !visitorClearlyEnjoysHobby(hobby.title, text)) return null;
   const key = makeId(hobby.title);
   let record = state.hobbyEvidence.find(item => makeId(item.title) === key);
   if (!record) {
@@ -606,7 +635,7 @@ function practiceWithAvailableObject(state) {
 function addMabelWish(state, supplied) {
   if (!supplied || typeof supplied !== "object") return null;
   const title = cleanText(supplied.title, 100);
-  const type = ["book", "learn", "world"].includes(supplied.type) ? supplied.type : "learn";
+  const type = ["book", "learn", "world", "desire"].includes(supplied.type) ? supplied.type : "learn";
   const reason = cleanText(supplied.reason, 220);
   if (title.length < 3 || reason.length < 12) return null;
   state.wishes = Array.isArray(state.wishes) ? state.wishes : [];
@@ -787,6 +816,9 @@ async function handleReflect(request, env) {
         source: "conversation"
       };
     }
+    if (spark?.kind === "hobby" && !visitorClearlyEnjoysHobby(spark.title, visitorMessage)) spark = null;
+    if (interestUpdate?.newInterest?.kind === "hobby" &&
+        !visitorClearlyEnjoysHobby(interestUpdate.newInterest.title, visitorMessage)) interestUpdate = null;
 
     if (interestUpdate?.newInterest) {
       const interest = upsertInterest(
@@ -1155,7 +1187,8 @@ async function runMabelLife(env, startingState) {
     } else {
       maybeBakeTreat(state);
     }
-    if ((!state.lifeLog || !state.lifeLog[0] || state.lifeLog[0].id === latestLifeLogId) && state.activity) {
+    if ((!state.lifeLog || !state.lifeLog[0] || state.lifeLog[0].id === latestLifeLogId) && state.activity &&
+        !/\b(research(?:ing)?|library|search(?:ing)?|look(?:ing)? up)\b/i.test(state.activity)) {
       recordLifeAction(state, "Mabel spent a little time " + cleanText(state.activity, 180) + ".", state.thought || "A small moment from her own day.");
     }
     state.lastLifeUpdate = new Date().toISOString();
@@ -1462,7 +1495,7 @@ async function handleSharedWorldEvent(request, env) {
       title,
       kind: "hobby",
       question,
-      evidence: cleanText(supplied.reason, 180, "This activity kept catching Mabel's attention."),
+      evidence: cleanText(supplied.reason, 500, "This activity kept catching Mabel's attention."),
       pull: typeof supplied.pull === "number" ? clamp(supplied.pull) : 0.5
     }, 0.08);
     if (!saved) return jsonResponse({ error: "Mabel could not keep that hobby yet." }, 400);

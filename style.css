@@ -358,6 +358,7 @@ li {
 
 .interest-item {
   display: grid;
+  min-width: 0;
   gap: 5px;
   padding: 14px;
   background: rgba(227, 209, 255, 0.42);
@@ -371,14 +372,21 @@ li {
 
 .interest-reason {
   display: block;
+  min-width: 0;
   margin-top: 0.35rem;
   color: #6b4a8f;
   font-size: 0.92rem;
   line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .interest-question {
+  display: block;
+  min-width: 0;
   color: var(--plum);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .interest-stage {
