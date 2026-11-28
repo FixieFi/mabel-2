@@ -77,7 +77,6 @@
         <button class="tab-button" data-tab="research">Library</button>
         <button class="tab-button" data-tab="day">Activity log</button>
         <button class="tab-button" data-tab="inner-life">Inner Life</button>
-        <button class="tab-button" data-tab="brain">Mabel’s Brain</button>
         <button class="tab-button" data-tab="gallery-tab">Gallery</button>
         <button class="tab-button" data-tab="art-exhibition">Daily Art Exhibition</button>
         <button class="tab-button" data-tab="postbox">Your mailbox</button>
@@ -292,6 +291,18 @@
         <p class="day-intro">Notes and sources from the questions Mabel has researched.</p>
         <p id="wander-status" aria-live="polite"></p>
         <ul id="research-log" class="research-log" aria-live="polite"></ul>
+        <div class="reading-shelf-card">
+          <h3>Books Mabel wants to read</h3>
+          <p class="day-intro">If a book has caught her imagination, you can add a PDF. Mabel keeps the book privately on her shared library shelf and chooses a little to read during quiet evenings.</p>
+          <ul id="reading-shelf" class="research-log"></ul>
+          <form id="book-upload-form" class="book-upload-form">
+            <label for="book-title-input">Add a book for Mabel</label>
+            <input id="book-title-input" name="title" maxlength="120" placeholder="Book title" required>
+            <input id="book-pdf-input" name="book" type="file" accept="application/pdf,.pdf" required>
+            <button type="submit">Place it on the shelf</button>
+            <p id="book-upload-status" role="status" aria-live="polite">PDFs are converted to text for Mabel’s gradual reading; the original file is not kept.</p>
+          </form>
+        </div>
       </section>
 
       
@@ -309,6 +320,25 @@
       <section id="inner-life" class="tab-panel">
         <h2>Mabel’s Inner Life</h2>
 
+        <div class="brain-state-card">
+          <div class="brain-mood-row">
+            <div><span class="brain-label">Right now</span><strong id="brain-mood"></strong></div>
+            <div><span class="brain-label">Mood balance</span><strong id="brain-mood-score"></strong></div>
+          </div>
+          <p id="brain-thought" class="brain-current-thought"></p>
+          <small>Balance is the average of Mabel’s current needs, shown out of 100.</small>
+        </div>
+        <div class="brain-trait-columns">
+          <section class="brain-trait-card brain-core-card">
+            <h3>Her steady self</h3><p>These are Mabel’s starting traits.</p>
+            <ul id="brain-core-traits" class="brain-trait-list"></ul>
+          </section>
+          <section class="brain-trait-card brain-evolved-card">
+            <h3>What is growing</h3><p>Small habits and beliefs she has returned to over time.</p>
+            <ul id="brain-evolved-traits" class="brain-trait-list"></ul>
+          </section>
+        </div>
+
         <div class="inner-life-note">
           <p>Mabel grows and changes through the things you share, the places she explores, and the questions she researches at the library. Come back to see what begins to matter to her.</p>
         </div>
@@ -320,8 +350,12 @@
         <p class="day-intro">A hobby appears only when Mabel repeatedly returns to a specific, recognizable activity. New hobbies begin at the very start and grow through time and practice.</p>
         <ul id="interests"></ul>
 
+        <h3>Things Mabel can try</h3>
+        <p class="day-intro">Useful objects she finds or receives can become invitations to practise. She’ll choose a suitable quiet moment herself.</p>
+        <ul id="practice-props" class="brain-trait-list"></ul>
+
         <h3>Mabel’s coding notebook</h3>
-        <p class="day-intro">If coding becomes one of her hobbies, Mabel may write little programs inspired by the things she’s learning.</p>
+        <p class="day-intro">Mabel’s little programs can grow from the subjects she keeps returning to. Some can be tried in her sealed drawing lab, which only understands a few safe picture-making instructions.</p>
         <p id="coding-level" class="day-intro">If coding becomes one of Mabel’s hobbies, she may start a tiny programming experiment.</p>
         <ul id="coding-projects" class="brain-trait-list"></ul>
 
@@ -352,28 +386,6 @@
 
       </section>
 
-      <section id="brain" class="tab-panel">
-        <h2>Mabel’s Brain</h2>
-        <p class="day-intro">A small window into the parts of Mabel that stay steady and the parts that are slowly growing.</p>
-        <div class="brain-state-card">
-          <div class="brain-mood-row">
-            <div><span class="brain-label">Right now</span><strong id="brain-mood"></strong></div>
-            <div><span class="brain-label">Mood balance</span><strong id="brain-mood-score"></strong></div>
-          </div>
-          <p id="brain-thought" class="brain-current-thought"></p>
-          <small>Balance is the average of Mabel’s current needs, shown out of 100.</small>
-        </div>
-        <div class="brain-trait-columns">
-          <section class="brain-trait-card brain-core-card">
-            <h3>Her steady self</h3><p>These are Mabel’s starting traits.</p>
-            <ul id="brain-core-traits" class="brain-trait-list"></ul>
-          </section>
-          <section class="brain-trait-card brain-evolved-card">
-            <h3>What is growing</h3><p>Small habits and beliefs she has returned to over time.</p>
-            <ul id="brain-evolved-traits" class="brain-trait-list"></ul>
-          </section>
-        </div>
-      </section>
       <section id="gallery-tab" class="tab-panel">
         <h2>Mabel’s Gallery</h2>
         <p class="gallery-intro">Little drawings Mabel made when a thought or moment felt worth keeping. With a closer friendship, you can vote for her own-time drawings or nominate a reference study for the shared Art Exhibition.</p>
@@ -415,3 +427,4 @@
   <script src="script.js"></script>
 </body>
 </html>
+
