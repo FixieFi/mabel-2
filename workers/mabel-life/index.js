@@ -15,6 +15,10 @@ const DEFAULT_STATE = {
   crafting: { skillLevel: 0, materials: [], projects: [], artInspirations: [], lastIdeaAt: null },
   baking: { skillLevel: 0, pantry: [], treats: [], lastBakedAt: null },
   coding: { skillLevel: 0, projects: [], lastAttemptAt: null, lastCreatedAt: null },
+  wishes: [],
+  readingBooks: [],
+  practiceProps: [],
+  researchNotes: [],
   hobbyEvidence: [],
   lifeLog: [],
   artExhibition: { dayOf: null, candidates: [], works: [] },
@@ -234,6 +238,10 @@ async function loadState(env) {
   state.coding.projects = Array.isArray(state.coding.projects) ? state.coding.projects.filter(item => item && typeof item.title === "string" && typeof item.code === "string").slice(0, 12) : [];
   state.coding.lastAttemptAt = cleanText(state.coding.lastAttemptAt, 40) || null;
   state.coding.lastCreatedAt = cleanText(state.coding.lastCreatedAt, 40) || null;
+  state.wishes = Array.isArray(state.wishes) ? state.wishes.filter(item => item && typeof item.title === "string").slice(0, 20) : [];
+  state.readingBooks = Array.isArray(state.readingBooks) ? state.readingBooks.filter(item => item && typeof item.id === "string" && typeof item.title === "string").slice(0, 32) : [];
+  state.practiceProps = Array.isArray(state.practiceProps) ? state.practiceProps.filter(item => item && typeof item.name === "string" && typeof item.skill === "string").slice(0, 20) : [];
+  state.researchNotes = Array.isArray(state.researchNotes) ? state.researchNotes.filter(item => item && typeof item.id === "string" && typeof item.topic === "string").slice(0, 40) : [];
   state.crafting.materials.forEach(item => {
     const ingredient = bakingIngredientType(item.name);
     const key = makeId(item.name);
@@ -503,7 +511,14 @@ function maybeBakeTreat(state) {
     { ingredients: ["flour", "honey"], title: "A little honey bun", description: "Mabel mixed flour and honey into a tiny bun and baked it until the top turned golden." },
     { ingredients: ["flour", "dried fruit"], title: "A tiny fruit bun", description: "Mabel tucked dried fruit into a small bun and baked it in her stone nook." },
     { ingredients: ["flour", "berries"], title: "A berry tartlet", description: "Mabel folded a berry into a little flour pastry and made a warm tartlet." },
-    { ingredients: ["oats", "mushroom"], title: "A savoury mushroom oatcake", description: "Mabel made a small savoury oatcake with a mushroom she already knew was safe to eat." }
+    { ingredients: ["oats", "mushroom"], title: "A savoury mushroom oatcake", description: "Mabel made a small savoury oatcake with a mushroom she already knew was safe to eat." },
+    { ingredients: ["flour", "oats"], title: "A little oat-and-flour scone", description: "Mabel mixed flour and oats into a crumbly little scone and warmed it on her stone hearth." },
+    { ingredients: ["sugar", "berries"], title: "A berry sugar drop", description: "Mabel pressed a berry into a tiny sugar-sweetened pastry." },
+    { ingredients: ["honey", "oats"], title: "A honey oat bite", description: "Mabel bound crushed oats with honey and baked a chewy little bite." },
+    { ingredients: ["apple", "flour"], title: "A little apple turnover", description: "Mabel wrapped a sliver of apple in a small flour pastry and baked it until soft." },
+    { ingredients: ["nuts", "flour"], title: "A nutty little biscuit", description: "Mabel folded chopped nuts into flour and baked a crisp biscuit." },
+    { ingredients: ["seeds", "flour"], title: "A seed-speckled cracker", description: "Mabel made a little flour cracker dotted with seeds." },
+    { ingredients: ["dried fruit", "honey"], title: "A sticky fruit bun", description: "Mabel tucked dried fruit into a honeyed bun and let it bake slowly." }
   ];
   const selected = recipes.map(recipe => ({
     recipe,
@@ -539,6 +554,91 @@ function maybeBakeTreat(state) {
   }
   remember(state, actionText + " She used " + ingredientNames.join(" and ") + ".", "baking");
   return true;
+}
+
+function practiceSkillForObject(name) {
+  const value = String(name || "").toLowerCase();
+  if (/\b(bicycle|bike|tricycle|velocipede)\b/.test(value)) return { title: "Cycling", question: "How might Mabel learn to ride safely and enjoy a little journey?", action: "practised riding her little bicycle" };
+  if (/\b(guitar|piano|violin|drum|ukulele|recorder|instrument)\b/.test(value)) return { title: "Playing music", question: "What sounds and simple tunes might Mabel learn to make?", action: "spent time practising music with her little instrument" };
+  if (/\b(sewing kit|needle|thread|yarn|fabric|embroidery hoop)\b/.test(value)) return { title: "Sewing", question: "What small useful things could Mabel learn to sew?", action: "practised sewing a tiny useful thing" };
+  if (/\b(sketchbook|pencil|paintbrush|watercolou?r|crayon|charcoal)\b/.test(value)) return { title: "Drawing", question: "What could Mabel learn to express through drawing?", action: "practised making a little drawing" };
+  if (/\b(code|computer|keyboard|microcontroller|raspberry pi)\b/.test(value)) return { title: "Coding", question: "What small playful or useful program might Mabel make?", action: "tried a little coding experiment" };
+  return null;
+}
+
+function practiceWithAvailableObject(state) {
+  const available = state.practiceProps.find(item => {
+    const rule = practiceSkillForObject(item.name);
+    if (!rule) return false;
+    const last = Date.parse(item.lastPractisedAt || "");
+    return !Number.isFinite(last) || Date.now() - last >= 18 * 60 * 60 * 1000;
+  });
+  if (!available || state.needs.rest < 0.32 || state.needs.water < 0.28) return false;
+  const rule = practiceSkillForObject(available.name);
+  const at = new Date().toISOString();
+  available.lastPractisedAt = at;
+  available.practiceCount = Math.min(1000, (Number(available.practiceCount) || 0) + 1);
+  const interest = upsertInterest(state, {
+    id: makeId(rule.title), title: rule.title, kind: "hobby", question: rule.question,
+    evidence: "Mabel has a " + available.name + " and chose to practise with it herself.",
+    pull: Math.min(0.9, 0.35 + available.practiceCount * 0.1)
+  }, 0.04);
+  if (interest) {
+    interest.kind = "hobby";
+    interest.level = Math.min(5, 1 + Math.floor((available.practiceCount - 1) / 3));
+    interest.practiceCount = Math.max(Number(interest.practiceCount) || 0, available.practiceCount);
+    interest.lastPracticedAt = at;
+    interest.stage = interest.pull > 0.75 ? "pursuing" : "growing";
+    interest.events = Array.isArray(interest.events) ? interest.events : [];
+    interest.events.unshift({ at, text: "Mabel " + rule.action + " with the " + available.name + "." });
+    interest.events = interest.events.slice(0, 12);
+  }
+  state.activity = "practising with her " + available.name;
+  state.thought = "I wonder what else I can learn to do with this.";
+  state.needs.rest = clamp(state.needs.rest - 0.035);
+  state.needs.wonder = clamp(state.needs.wonder + 0.04);
+  recordLifeAction(state, "Mabel " + rule.action + " with the " + available.name + ".", "She had the object nearby and enough energy to practise.", at);
+  remember(state, "Mabel chose to practise " + rule.title.toLowerCase() + " with her " + available.name + ".", "practice");
+  return true;
+}
+
+function addMabelWish(state, supplied) {
+  if (!supplied || typeof supplied !== "object") return null;
+  const title = cleanText(supplied.title, 100);
+  const type = ["book", "learn", "world"].includes(supplied.type) ? supplied.type : "learn";
+  const reason = cleanText(supplied.reason, 220);
+  if (title.length < 3 || reason.length < 12) return null;
+  state.wishes = Array.isArray(state.wishes) ? state.wishes : [];
+  const key = makeId(title);
+  const existing = state.wishes.find(item => makeId(item.title) === key);
+  if (existing) {
+    if (existing.status !== "fulfilled") {
+      existing.reason = reason;
+      existing.updatedAt = new Date().toISOString();
+    }
+    return existing;
+  }
+  const wish = { id: "wish-" + key, title, type, reason, status: "waiting", createdAt: new Date().toISOString() };
+  state.wishes.unshift(wish);
+  state.wishes = state.wishes.slice(0, 20);
+  return wish;
+}
+
+async function getEveningReading(state, env) {
+  const hour = new Date().getUTCHours();
+  const today = new Date().toISOString().slice(0, 10);
+  if (hour < 18 || state.lastReadingDate === today) return null;
+  const booksByAge = state.readingBooks.slice().sort((a, b) => Date.parse(a.addedAt || 0) - Date.parse(b.addedAt || 0));
+  for (const book of booksByAge) {
+    if (book.status === "finished" || Number(book.progress) >= Number(book.totalLength)) continue;
+    const fullText = await env.MABEL_STATE.get("mabel-book-text:" + book.id);
+    if (!fullText) continue;
+    const start = Math.max(0, Number(book.progress) || 0);
+    const passage = fullText.slice(start, start + 1800);
+    if (!passage) continue;
+    return { book, passage, start, end: Math.min(fullText.length, start + passage.length), today };
+  }
+  return null;
 }
 
 async function handleReflect(request, env) {
@@ -779,6 +879,36 @@ function cleanCodeProject(raw) {
   if (!raw || typeof raw !== "object") return null;
   const title = cleanText(raw.title, 90);
   const languageValue = cleanText(raw.language, 30).toLowerCase();
+  const note = cleanText(raw.note, 220);
+  if (languageValue === "mabelscript") {
+    const commands = Array.isArray(raw.program) ? raw.program.slice(0, 32) : [];
+    const program = commands.map(command => {
+      if (!command || typeof command !== "object") return null;
+      const op = ["circle", "rect", "line", "text"].includes(command.op) ? command.op : "";
+      const number = value => Number.isFinite(Number(value)) ? Math.max(0, Math.min(240, Number(value))) : null;
+      const color = /^#[0-9a-fA-F]{6}$/.test(String(command.color || "")) ? command.color : "#826a91";
+      if (!op) return null;
+      if (op === "text") {
+        const text = cleanText(command.text, 60);
+        const x = number(command.x); const y = number(command.y);
+        return text && x !== null && y !== null ? { op, text, x, y, color } : null;
+      }
+      const x = number(command.x); const y = number(command.y);
+      if (x === null || y === null) return null;
+      if (op === "circle") {
+        const radius = Number(command.radius);
+        return Number.isFinite(radius) && radius > 0 && radius <= 50 ? { op, x, y, radius, color } : null;
+      }
+      if (op === "rect") {
+        const width = Number(command.width); const height = Number(command.height);
+        return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && width <= 100 && height <= 100 ? { op, x, y, width, height, color } : null;
+      }
+      const endX = number(command.endX); const endY = number(command.endY);
+      return endX !== null && endY !== null ? { op, x, y, endX, endY, color } : null;
+    }).filter(Boolean);
+    if (!title || !note || !program.length) return null;
+    return { title, language: "MabelScript", code: JSON.stringify({ commands: program }), note };
+  }
   const language = languageValue === "javascript" || languageValue === "js"
     ? "JavaScript"
     : languageValue === "python" || languageValue === "py"
@@ -788,7 +918,6 @@ function cleanCodeProject(raw) {
   let code = typeof raw.code === "string" ? raw.code.trim() : "";
   if (code.startsWith(fence)) code = code.slice(fence.length).replace(/^(?:javascript|js|python|py)?\s*/i, "");
   if (code.endsWith(fence)) code = code.slice(0, -fence.length).trim();
-  const note = cleanText(raw.note, 220);
   if (!title || !language || code.length < 12 || code.length > 1800 || !note) return null;
   if (code.split(/\r?\n/).length > 36) return null;
   const forbidden = /\b(fetch|require|import|export|process|document|window|localStorage|XMLHttpRequest|WebSocket|Deno|Bun|child_process|readFile|writeFile|exec|spawn)\b/i;
@@ -811,6 +940,11 @@ function advanceLifeNeeds(state) {
 async function runMabelLife(env) {
   const state = await loadState(env);
   advanceLifeNeeds(state);
+  if (practiceWithAvailableObject(state)) {
+    state.lastLifeUpdate = new Date().toISOString();
+    await saveState(env, state);
+    return state;
+  }
   if (maybeBakeTreat(state)) {
     state.lastLifeUpdate = new Date().toISOString();
     await saveState(env, state);
@@ -830,9 +964,12 @@ async function runMabelLife(env) {
     state.needs.food >= 0.3 && state.needs.water >= 0.3 && state.needs.rest >= 0.35 &&
     (!Number.isFinite(lastCraftIdeaAt) || Date.now() - lastCraftIdeaAt > 2 * 60 * 60 * 1000);
   const codingHobby = state.interests.find(item => item && item.kind === "hobby" && /coding|programming/i.test(String(item.title || "")));
+  const returningInterest = state.interests.find(item => item && item.kind === "hobby" && Number(item.pull) >= 0.6);
   const lastCodingAttempt = Date.parse(state.coding.lastAttemptAt || state.coding.lastCreatedAt || "");
-  const codingDue = Boolean(codingHobby && (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
+  const codingDue = Boolean((codingHobby || (returningInterest && Math.random() < 0.18)) &&
+    (!Number.isFinite(lastCodingAttempt) || Date.now() - lastCodingAttempt >= 48 * 60 * 60 * 1000));
   if (codingDue) state.coding.lastAttemptAt = new Date().toISOString();
+  const reading = await getEveningReading(state, env).catch(() => null);
 
   const system = [
     "You are Mabel, a small mouse who lives in Hawthorn Hollow.",
@@ -846,12 +983,15 @@ async function runMabelLife(env) {
     "When a making moment is due, at least two listed materials are available, and Mabel has enough food, water, and rest, use this life moment to make one small, safe, useful mouse-sized object from those actual materials. If a making moment is not due, return craftIdea null. Never invent materials or use food as a craft supply. Set tried:true only if she actually makes it now; otherwise return a grounded idea with tried:false.",
     "Mabel’s own unprompted artwork may help a making interest take shape, but the artwork alone is not material: combine it only with actual found objects listed below. Treat art as inspiration for what a useful invention might look or feel like, not as a physical supply.",
     "When running or cycling is already a hobby, occasionally choose a small practice moment if Mabel has enough rest and water. Running can be a short familiar-path jog; cycling requires an actual rideable little bicycle in her recorded world and must never be invented. Describe actual practice in the activity field so it can become part of her progress.",
-    "When codingDue is true, Coding is already one of Mabel’s hobbies and she may write one tiny self-contained code experiment for her notebook. Use only basic JavaScript or Python; keep it under 36 lines and 1,800 characters, grounded in a real interest or useful mouse-sized idea. This is text for display only: never use network, browser, file, process, import, evaluation, or system access. Return codeProject null unless it is a complete small experiment.",
-    "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject}. Do not set needs; those change only through elapsed time and concrete actions.",
+    "When codingDue is true, Mabel may write a tiny code experiment inspired by one of her own recurring interests, even if coding is not yet a hobby. Prefer a MabelScript visual experiment: return codeProject {title,language:'MabelScript',program,note}, where program is an array of no more than 24 objects using only circle {op,x,y,radius,color}, rect {op,x,y,width,height,color}, line {op,x,y,endX,endY,color}, or text {op,x,y,text,color}. Use coordinates on a 240 by 160 canvas, hex colours, and make the image relate to her interest. This tiny instruction set is interpreted by the site with bounded drawing commands; it has no access to the network, visitor data, files, or website controls. Do not write JavaScript or Python for execution. Return null unless she has a small, complete idea.",
+    "If a book passage is supplied, Mabel is spending a quiet evening reading those pages. Write one short original readingNote about a specific idea she took from the passage; do not invent claims beyond it and do not quote more than a short phrase. If she has returned to a specific question or subject and truly wishes to keep learning, she may also create one grounded wish with type book, learn, or world. Do not create a wish every cycle or repeat one already on her wish list.",
+    "Return only JSON: {activity,thought,mood,remember,memory,interest,pendingThought,craftIdea,codeProject,wish,readingNote}. Do not set needs; those change only through elapsed time and concrete actions.",
     "interest is null or {id,title,question,kind,pullChange,evidence}; only create a new interest when one has honestly begun. Otherwise update the id of an existing interest.",
     "pendingThought is null or a small unresolved question Mabel wants to return to.",
     "craftIdea is null or {title,materials,idea,reason,tried}. Its materials must be chosen from the supplied found objects.",
-    "codeProject is null unless codingDue is true; otherwise use {title,language,code,note}. Keep the code as a short, self-contained written experiment with no imports, network, browser, file, process, or system access."
+    "codeProject is null unless codingDue is true; otherwise prefer {title,language:'MabelScript',program:[...allowed drawing commands...],note}. The site only interprets the allowed MabelScript drawing instructions; never produce executable JavaScript or Python for the runner.",
+    "wish is null or {type,title,reason}; use type book for a specific book Mabel has genuinely wished to read, learn for a specific subject, or world for one small object/place she hopes to have. Keep it concrete and grounded in a supplied interest, conversation, discovery, or reading.",
+    "readingNote is null unless a book passage is supplied; then write one original 1–2 sentence note in Mabel’s voice about an idea she learned."
   ].join("\n");
   const prompt = [
     "Current activity: " + state.activity,
@@ -860,17 +1000,20 @@ async function runMabelLife(env) {
     "Needs: " + JSON.stringify(state.needs),
     "Interests:\n" + interests,
     "Selected memories:\n" + memories,
+    "Recent Library subjects Mabel has genuinely researched:\n" + state.researchNotes.slice(0, 4).map(item => "- " + item.topic + ": " + item.query + " — " + cleanText(item.summary, 240)).join("\n") + (state.researchNotes.length ? "" : "No research notes have reached the shared Brain yet."),
     "Things Mabel has actually found and could use as materials:\n" + craftMaterials,
     "Mabel’s recent unprompted artwork that may inspire her approach:\n" + state.crafting.artInspirations.slice(0, 5).map(item => "- " + item.title + ": " + item.inspiration).join("\n"),
     "Existing crafting ideas: " + state.crafting.projects.slice(0, 5).map(item => item.title).join(", "),
     "A crafting attempt is due: " + (craftingReady ? "yes; if a safe pair fits, make one and return tried:true" : "no; return craftIdea null"),
     "Personality: " + JSON.stringify(state.personality),
     "Last life update: " + (state.lastLifeUpdate || "This is Mabel's first recorded moment."),
-    "Coding practice is due: " + (codingDue ? "yes; return a small codeProject" : "no; return codeProject null")
+    "Coding practice is due: " + (codingDue ? "yes; make a tiny experiment inspired by " + (returningInterest?.title || codingHobby?.title || "a recurring interest") : "no; return codeProject null"),
+    "Existing wishes: " + state.wishes.slice(0, 12).map(item => item.title + " (" + item.status + ")").join("; ") + (state.wishes.length ? "" : "none yet"),
+    "Evening book passage: " + (reading ? "Mabel is reading ‘" + reading.book.title + "’:\n" + reading.passage : "no reading session is due")
   ].join("\n\n");
 
   try {
-    const update = await askModel(env, system, prompt, codingDue ? 760 : 500);
+    const update = await askModel(env, system, prompt, (codingDue || reading) ? 820 : 500);
     if (!update) {
       maybeBakeTreat(state);
       state.lastLifeUpdate = new Date().toISOString();
@@ -900,6 +1043,32 @@ async function runMabelLife(env) {
         text: cleanText(update.pendingThought, 220),
         at: new Date().toISOString()
       };
+    }
+
+    if (update.wish && typeof update.wish === "object") addMabelWish(state, update.wish);
+    if (reading) {
+      const note = cleanText(update.readingNote, 260);
+      const at = new Date().toISOString();
+      reading.book.progress = reading.end;
+      reading.book.lastReadAt = at;
+      reading.book.readCount = Math.max(0, Number(reading.book.readCount) || 0) + 1;
+      reading.book.status = reading.end >= Number(reading.book.totalLength) ? "finished" : "reading";
+      if (reading.book.status === "finished") {
+        const completedWish = state.wishes.find(item => item.bookId === reading.book.id || (item.type === "book" && makeId(item.title) === makeId(reading.book.title)));
+        if (completedWish) completedWish.status = "fulfilled";
+      }
+      reading.book.notes = Array.isArray(reading.book.notes) ? reading.book.notes : [];
+      if (note) {
+        reading.book.notes.unshift({ at, text: note });
+        reading.book.notes = reading.book.notes.slice(0, 12);
+        state.knowledge.unshift({ id: "book-note-" + reading.book.id + "-" + reading.book.readCount, title: reading.book.title, text: note, at, kind: "book" });
+        state.knowledge = state.knowledge.slice(0, 40);
+      }
+      state.lastReadingDate = reading.today;
+      state.activity = "reading " + reading.book.title + " at the library in the quiet evening";
+      state.thought = note || "I read a few more pages of " + reading.book.title + " tonight.";
+      recordLifeAction(state, "Mabel read more of “" + reading.book.title + "” at the library.", note || "She chose to spend her quiet evening with a book.", at);
+      remember(state, "Mabel read “" + reading.book.title + "” and kept this thought: " + (note || "she wants to continue tomorrow."), "reading");
     }
 
     const craftIdea = update.craftIdea && typeof update.craftIdea === "object" ? update.craftIdea : null;
@@ -957,6 +1126,7 @@ async function runMabelLife(env) {
         language: codeProject.language,
         code: codeProject.code,
         note: codeProject.note,
+        inspiredBy: cleanText(returningInterest?.title || codingHobby?.title, 80),
         at,
         skillLevel: state.coding.skillLevel
       });
@@ -969,6 +1139,13 @@ async function runMabelLife(env) {
         savedCodingHobby.events = Array.isArray(savedCodingHobby.events) ? savedCodingHobby.events : [];
         savedCodingHobby.events.unshift({ at, text: "Mabel wrote a small " + codeProject.language + " experiment: " + codeProject.title + "." });
         savedCodingHobby.events = savedCodingHobby.events.slice(0, 12);
+      } else if (state.coding.skillLevel >= 3) {
+        upsertInterest(state, {
+          id: "coding", title: "Coding", kind: "hobby",
+          question: "What small playful or useful programs might Mabel make from the things she cares about?",
+          evidence: "Mabel has returned to writing little programs inspired by her interests several times.",
+          pull: 0.52
+        }, 0);
       }
       state.activity = "writing a little " + codeProject.language + " program";
       state.thought = "I wonder what other small things a few lines of code might do.";
@@ -995,6 +1172,74 @@ async function handleSharedWorldEvent(request, env) {
   try { data = await request.json(); } catch { return jsonResponse({ error: "A small world event is needed." }, 400); }
   const state = await loadState(env);
   const kind = cleanText(data.kind, 24);
+  if (kind === "research-note") {
+    const id = cleanText(data.eventId, 140);
+    const topic = cleanText(data.topic, 120);
+    if (!id || !topic) return jsonResponse({ error: "A research topic and event ID are needed." }, 400);
+    if (state.researchNotes.some(item => item.id === id)) return jsonResponse({ ok: true, duplicate: true });
+    const note = {
+      id, topic,
+      query: cleanText(data.query, 160),
+      summary: cleanText(data.summary, 400),
+      sourceTitle: cleanText(data.sourceTitle, 140),
+      at: new Date().toISOString()
+    };
+    state.researchNotes.unshift(note);
+    state.researchNotes = state.researchNotes.slice(0, 40);
+    const related = state.researchNotes.filter(item => makeId(item.topic) === makeId(topic));
+    const bookClue = /\b(book|novel|chronicle|story|author|novelist|chapter|literary|read(?:ing)?)\b/i.test([topic, note.query, note.summary, note.sourceTitle].join(" "));
+    if (related.length >= 2 && bookClue) {
+      addMabelWish(state, {
+        type: "book", title: topic,
+        reason: "This book has stayed with Mabel across more than one Library visit, and she would like to read more of it in her own time."
+      });
+    }
+    await saveState(env, state);
+    return jsonResponse({ ok: true, wish: state.wishes.find(item => makeId(item.title) === makeId(topic)) || null });
+  }
+  if (kind === "book-supply") {
+    const title = cleanText(data.title, 120);
+    const suppliedText = typeof data.text === "string" ? data.text.replace(/\u0000/g, "").trim() : "";
+    if (suppliedText.length > 800000) return jsonResponse({ error: "That book is too long for Mabel’s shelf. Please use an edition under 800,000 characters." }, 413);
+    const text = suppliedText;
+    if (!title || text.length < 500) return jsonResponse({ error: "Please add a titled book with readable text." }, 400);
+    const duplicate = state.readingBooks.find(book => makeId(book.title) === makeId(title));
+    if (duplicate) return jsonResponse({ ok: true, alreadyAdded: true, book: duplicate });
+    if (state.readingBooks.filter(book => book.status !== "finished").length >= 8) return jsonResponse({ error: "Mabel already has eight books waiting to read. She’ll need to finish one first." }, 409);
+    if (state.readingBooks.length >= 32) return jsonResponse({ error: "Mabel has reached the end of her reading shelf for now." }, 409);
+    const id = "book-" + makeId(title) + "-" + crypto.randomUUID().slice(0, 8);
+    const book = { id, title, status: "waiting", progress: 0, totalLength: text.length, notes: [], addedAt: new Date().toISOString(), readCount: 0 };
+    await env.MABEL_STATE.put("mabel-book-text:" + id, text);
+    state.readingBooks.unshift(book);
+    const wish = state.wishes.find(item => makeId(item.title) === makeId(title) && item.type === "book");
+    if (wish) { wish.status = "supplied"; wish.bookId = id; }
+    else addMabelWish(state, { type: "book", title, reason: "A visitor added this book to Mabel’s reading shelf." });
+    recordLifeAction(state, "A visitor left “" + title + "” on the library shelf for Mabel.", "She can choose a few pages to read during quiet evenings.");
+    await saveState(env, state);
+    return jsonResponse({ ok: true, book });
+  }
+  if (kind === "practice-object") {
+    const eventId = cleanText(data.eventId, 140);
+    const itemName = cleanText(data.item, 100);
+    state.appliedPracticeObjectEvents = Array.isArray(state.appliedPracticeObjectEvents) ? state.appliedPracticeObjectEvents.slice(-300) : [];
+    if (eventId && state.appliedPracticeObjectEvents.includes(eventId)) return jsonResponse({ ok: true, duplicate: true });
+    const skill = practiceSkillForObject(itemName);
+    if (!skill) return jsonResponse({ ok: true, practiceObject: false });
+    if (!state.practiceProps.some(item => makeId(item.name) === makeId(itemName))) {
+      state.practiceProps.unshift({ id: eventId || makeId(itemName), name: itemName, skill: skill.title, addedAt: new Date().toISOString(), practiceCount: 0, lastPractisedAt: null });
+      state.practiceProps = state.practiceProps.slice(0, 20);
+    }
+    if (eventId) state.appliedPracticeObjectEvents.push(eventId);
+    upsertInterest(state, { id: makeId(skill.title), title: skill.title, kind: "hobby", question: skill.question, evidence: "Mabel has a " + itemName + " nearby and may try it in her own time." }, 0.03);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, practiceObject: true, skill: skill.title });
+  }
+  if (kind === "wish") {
+    const wish = addMabelWish(state, data.wish);
+    if (!wish) return jsonResponse({ error: "Mabel’s wish needs a specific title and reason." }, 400);
+    await saveState(env, state);
+    return jsonResponse({ ok: true, wish });
+  }
   if (kind === "needs") {
     const eventId = cleanText(data.eventId, 140);
     state.appliedNeedEvents = Array.isArray(state.appliedNeedEvents) ? state.appliedNeedEvents.slice(-500) : [];
@@ -1236,7 +1481,14 @@ async function handleSharedWorldEvent(request, env) {
     }
   } else if (kind === "exploration") {
     const names = Array.isArray(data.finds) ? data.finds.map(name => cleanText(name, 100)).filter(Boolean).slice(0, 3) : [];
-    for (const name of names) addFoundMaterial(state, name);
+    for (const name of names) {
+      addFoundMaterial(state, name);
+      const skill = practiceSkillForObject(name);
+      if (skill && !state.practiceProps.some(item => makeId(item.name) === makeId(name))) {
+        state.practiceProps.unshift({ id: "find-" + makeId(name), name, skill: skill.title, addedAt: new Date().toISOString(), practiceCount: 0, lastPractisedAt: null });
+        state.practiceProps = state.practiceProps.slice(0, 20);
+      }
+    }
   } else if (kind === "artwork") {
     const title = cleanText(data.title, 100);
     const inspiration = cleanText(data.inspiration, 220);
@@ -1351,6 +1603,9 @@ export default {
           drawingPractice: state.drawingPractice,
           baking: state.baking,
           coding: state.coding,
+          wishes: state.wishes,
+          readingBooks: state.readingBooks,
+          practiceProps: state.practiceProps,
           updatedAt: state.lastLifeUpdate
         }
       });
@@ -1370,4 +1625,5 @@ export default {
     return jsonResponse({ error: "Mabel's life is not here." }, 404);
   }
 };
+
 
