@@ -1427,14 +1427,14 @@ async function handleSharedWorldEvent(request, env) {
     const bond = Math.max(0, Number(data.bond) || 0);
     if (!visitorId || bond < 35) return jsonResponse({ error: "A closer friendship with Mabel is needed before voting." }, 403);
     const candidate = state.artExhibition.candidates.find(item => item && item.id === artworkId);
-    if (!candidate) return jsonResponse({ error: "That drawing is not in today’s exhibition shortlist." }, 404);
+    if (!candidate || !state.artExhibition.works.some(item => item && item.id === artworkId)) {
+      return jsonResponse({ error: "That drawing is not in today’s exhibition." }, 404);
+    }
     candidate.votedBy = Array.isArray(candidate.votedBy) ? candidate.votedBy : [];
-    if (candidate.votedBy.includes(visitorId)) return jsonResponse({ ok: true, alreadyVoted: true });
+    if (candidate.votedBy.includes(visitorId)) return jsonResponse({ ok: true, alreadyVoted: true, votes: candidate.votes || 0 });
     candidate.votedBy.push(visitorId);
     candidate.votedBy = candidate.votedBy.slice(-200);
     candidate.votes = Math.max(0, Number(candidate.votes) || 0) + 1;
-    candidate.score = (Number(candidate.score) || 0) + 0.75;
-    state.artExhibition.candidates.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
     refreshArtExhibitionWorks(state.artExhibition);
     await saveState(env, state);
     return jsonResponse({ ok: true, votes: candidate.votes });
