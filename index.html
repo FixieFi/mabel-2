@@ -120,4 +120,321 @@
       <section id="chat" class="tab-panel">
         <h2>Chat with Mabel</h2>
         <p class="day-intro chat-one-turn-note">Each message and reply stays together in its own card, with the newest conversation at the top.</p>
-        <form id="chat-form" class="chat-for
+        <form id="chat-form" class="chat-form">
+          <label for="message" class="chat-message-label">Your message</label>
+          <textarea id="message" rows="4" placeholder="Say hello to Mabel..." enterkeyhint="send"></textarea>
+          <button id="send" type="submit">Send message</button>
+        </form>
+        <p id="chat-status" class="chat-status" aria-live="polite"></p>
+        <div id="chat-exchanges" class="chat-exchanges" aria-live="polite" aria-label="Conversations, newest first"></div>
+      </section>
+
+<div id="hollow" class="tab-panel">
+  <h2>Mabel’s home</h2>
+  <p class="day-intro home-intro">A little home with a nook for gifts and a kitchen of her own.</p>
+  <div id="home-room-switch" class="home-room-switch" role="group" aria-label="Rooms in Mabel’s home">
+    <button class="home-room-choice gift-room-choice" type="button" data-home-view="gifts" aria-controls="home-view-gifts" aria-pressed="true">
+      <span class="home-room-icon" aria-hidden="true">🪺</span>
+      <span class="home-room-label"><strong>Her gift nook</strong><small>Leave something or see what she carries</small></span>
+      <span class="home-room-chevron" aria-hidden="true">✿</span>
+    </button>
+    <button class="home-room-choice kitchen-room-choice" type="button" data-home-view="kitchen" aria-controls="home-view-kitchen" aria-pressed="false">
+      <span class="home-room-icon" aria-hidden="true">🥣</span>
+      <span class="home-room-label"><strong>Mabel’s kitchen</strong><small>Her pantry and little baking adventures</small></span>
+      <span class="home-room-chevron" aria-hidden="true">✿</span>
+    </button>
+  </div>
+  <section id="home-view-gifts" class="home-room-view gift-nook-section" tabindex="-1">
+    <h3 class="home-room-heading">Leave Mabel a little something</h3>
+  <div class="home-nest-art" aria-hidden="true">
+    <svg viewBox="0 0 96 64" role="img" shape-rendering="crispEdges" aria-label="Pixel blackberry">
+      <rect x="44" y="8" width="8" height="8" fill="#6f8f5e"/><rect x="36" y="12" width="8" height="8" fill="#85a76c"/><rect x="52" y="12" width="8" height="8" fill="#85a76c"/><rect x="44" y="16" width="8" height="8" fill="#71945e"/>
+      <rect x="28" y="20" width="8" height="8" fill="#4b3567"/><rect x="36" y="20" width="8" height="8" fill="#5d3c7e"/><rect x="44" y="22" width="8" height="8" fill="#50356f"/><rect x="52" y="20" width="8" height="8" fill="#674489"/><rect x="60" y="20" width="8" height="8" fill="#4b3567"/>
+      <rect x="24" y="28" width="8" height="8" fill="#50356f"/><rect x="32" y="28" width="8" height="8" fill="#684587"/><rect x="40" y="30" width="8" height="8" fill="#563976"/><rect x="48" y="30" width="8" height="8" fill="#6e4a8f"/><rect x="56" y="28" width="8" height="8" fill="#563976"/><rect x="64" y="28" width="8" height="8" fill="#4b3567"/>
+      <rect x="28" y="36" width="8" height="8" fill="#4b3567"/><rect x="36" y="38" width="8" height="8" fill="#684587"/><rect x="44" y="38" width="8" height="8" fill="#50356f"/><rect x="52" y="38" width="8" height="8" fill="#5d3c7e"/><rect x="60" y="36" width="8" height="8" fill="#4b3567"/>
+      <rect x="36" y="46" width="8" height="8" fill="#4b3567"/><rect x="44" y="46" width="8" height="8" fill="#684587"/><rect x="52" y="46" width="8" height="8" fill="#4b3567"/>
+      <rect x="36" y="24" width="3" height="3" fill="#a88cc0"/><rect x="52" y="32" width="3" height="3" fill="#b59ac9"/><rect x="40" y="40" width="3" height="3" fill="#a88cc0"/>
+      <rect x="20" y="52" width="12" height="4" fill="#718f62"/><rect x="28" y="48" width="8" height="4" fill="#91aa70"/><rect x="60" y="48" width="8" height="4" fill="#91aa70"/><rect x="68" y="52" width="12" height="4" fill="#718f62"/>
+    </svg>
+  </div>
+
+  <div class="gift-choices">
+    <h3>Leave Mabel a gift</h3>
+    <p>Choose something to eat, a drink, or a small surprise of your own.</p>
+    <div class="gift-choice-buttons" role="group" aria-label="Choose a gift for Mabel">
+      <button type="button" data-gift-kind="food">Something to eat</button>
+      <button type="button" data-gift-kind="water">A drink of water</button>
+      <button type="button" data-gift-kind="surprise">A small surprise</button>
+    </div>
+    <form id="introduce-object-form" class="introduce-object-form">
+      <label for="hollow-object-input">Or leave something of your own</label>
+      <div class="introduce-object-controls">
+        <input id="hollow-object-input" name="object" maxlength="80" placeholder="Describe a small surprise…" autocomplete="off" required>
+        <button type="submit">Leave it for Mabel</button>
+      </div>
+    </form>
+  </div>
+  <div id="hollow-speech" class="hollow-speech hidden" aria-live="polite">
+    <p id="hollow-speech-text"></p>
+  </div>
+  <p id="hollow-status">Mabel will find what you leave during one of her quiet moments.</p>
+  <div class="home-inventory">
+    <h3>Mabel’s bindle</h3>
+    <p class="bindle-intro">Things Mabel is carrying for now. She may eat, drink, keep, or move on from them as she needs.</p>
+    <div id="bindle" class="bindle-card">
+      <p class="bindle-empty">Mabel’s bindle is light today.</p>
+    </div>
+    <h3>Mabel’s treasure box</h3>
+    <p class="bindle-intro">Only the things that become especially meaningful to Mabel find a place here.</p>
+    <div id="treasure-box" class="bindle-card treasure-box-card">
+      <p class="bindle-empty">Nothing has found its way into the treasure box yet.</p>
+    </div>
+    <h3>Things she has used or moved on from</h3>
+    <div id="bindle-history" class="bindle-card bindle-history-card">
+      <p class="bindle-empty">Nothing has left Mabel’s bindle yet.</p>
+    </div>
+  </div>
+  </section>
+  <section id="home-view-kitchen" class="home-room-view kitchen-room-section" tabindex="-1" hidden>
+    <div class="kitchen-scene">
+      <div class="kitchen-scene-mark" aria-hidden="true">🥣　🍓　🍯</div>
+      <div>
+        <h3>Mabel’s little kitchen</h3>
+        <p>Her own small corner for trying sweet things with ingredients she has gathered. A treat she bakes is for her to eat, and helps ease her hunger.</p>
+      </div>
+    </div>
+    <p id="baking-level" class="kitchen-note">Mabel’s baking hobby is just beginning; she’ll try a treat when she has suitable ingredients.</p>
+    <div class="kitchen-serving-card">
+      <span class="kitchen-card-label">Fresh from the oven</span>
+      <div id="latest-bake" class="kitchen-latest-bake"><p class="bindle-empty">Mabel has not baked a little treat yet.</p></div>
+    </div>
+    <div class="kitchen-shelves">
+      <section class="kitchen-shelf">
+        <h3>In Mabel’s pantry</h3>
+        <p>Ingredients she has saved for another little recipe.</p>
+        <ul id="baking-pantry" class="brain-trait-list"></ul>
+      </section>
+      <section class="kitchen-shelf">
+        <h3>Things she has baked</h3>
+        <p>A small record of Mabel’s kitchen experiments.</p>
+        <ul id="baking-log" class="brain-trait-list kitchen-baking-log"></ul>
+      </section>
+    </div>
+  </section>
+</div>
+
+      <section id="about-you" class="tab-panel">
+        <h2>What Mabel remembers about you</h2>
+        <div class="visitor-bond-card">
+          <h3>Your friendship with Mabel</h3>
+          <strong id="visitor-bond-level">Getting to know each other</strong>
+          <progress id="visitor-bond-progress" max="100" value="0" aria-label="Friendship with Mabel"></progress>
+          <p id="visitor-bond-note">Grows through time spent together, chats, and gifts Mabel notices.</p>
+        </div>
+        <p class="day-intro">Notes she chose to keep from things you shared and moments between you. They stay in this browser.</p>
+        <h3>Things you’ve shared</h3>
+        <ul id="visitor-profile-facts" class="visitor-profile-list"></ul>
+        <h3>Moments you shared with Mabel</h3>
+        <ul id="visitor-profile-moments" class="visitor-profile-list"></ul>
+        <p id="visitor-profile-empty" class="visitor-profile-empty">Mabel is still getting to know this visitor.</p>
+        <button id="forget-visitor-profile" type="button">Forget these notes</button>
+        <div class="browser-reset">
+          <h3>Start fresh in this browser</h3>
+          <p>Your gifts, bindle, postbox, personal Gallery, visitor notes, old notices, friendship level, and time spent together in this browser are kept here. Resetting clears them; Mabel’s shared personality, Art Exhibition, and the Visitors’ board stay.</p>
+          <button id="reset-browser-mabel" type="button">Reset this browser’s Mabel</button>
+        </div>
+      </section>
+
+      <section id="visitor-board" class="tab-panel">
+        <h2>Visitors’ noticeboard</h2>
+        <p class="day-intro">Leave a note for the next visitor. Notes are shared with everyone who visits this page.</p>
+        <form id="visitor-board-form" class="visitor-board-form">
+          <label for="visitor-board-name">Your name or sign-off (optional)</label>
+          <input id="visitor-board-name" name="name" maxlength="40" autocomplete="nickname" placeholder="A little sign-off">
+          <label for="visitor-board-message">A note for another visitor</label>
+          <textarea id="visitor-board-message" name="message" rows="3" maxlength="280" required placeholder="What would you like the next visitor to know?"></textarea>
+          <button type="submit">Post to the board</button>
+        </form>
+        <p id="visitor-board-status" aria-live="polite">Loading notes…</p>
+        <ul id="visitor-board-messages" class="visitor-board-messages"></ul>
+      </section>
+
+      <section id="musings" class="tab-panel">
+        <h2>Explore</h2>
+        <div class="explore-scene">
+          <div class="explore-scene-mark" aria-hidden="true">🍃 ✦ 🍓</div>
+          <div class="explore-scene-copy">
+            <h3>A little wander</h3>
+            <p>The path beyond Mabel’s door is full of oddments, snacks, and small surprises. Mabel may decide for herself which discoveries stay on her mind.</p>
+            <button id="explore" class="explore-button" type="button"><span aria-hidden="true">✿</span> Go exploring <span aria-hidden="true">✿</span></button>
+            <p id="explore-status" aria-live="polite">Mabel hasn’t set out just yet.</p>
+          </div>
+        </div>
+        <div class="explore-trail-card">
+          <h3>Along Mabel’s path</h3>
+          <p class="day-intro">A little trail of what she found and what caught her eye.</p>
+          <ul id="wanderings" class="wandering-trail"></ul>
+        </div>
+        <div class="explore-trail-card autonomous-explorer-card">
+          <h3>Mabel’s own wanderings</h3>
+          <p class="day-intro">Sometimes she sets out because of what she needs or what is pulling at her curiosity.</p>
+          <ul id="autonomous-explorer-log" class="autonomous-explorer-log"></ul>
+        </div>
+      </section>
+
+      <section id="research" class="tab-panel">
+        <h2>Mabel’s library</h2>
+        <p class="day-intro">When a discovery, conversation, or visitor note catches Mabel’s attention, she can look into it here.</p>
+        <h3>Research Mabel has done</h3>
+        <p class="day-intro">Notes and sources from the questions Mabel has researched.</p>
+        <p id="wander-status" aria-live="polite"></p>
+        <ul id="research-log" class="research-log" aria-live="polite"></ul>
+        <div class="reading-shelf-card">
+          <h3>Books Mabel wants to read</h3>
+          <p class="day-intro">If a book has caught her imagination, you can add a PDF. Mabel keeps the book privately on her shared library shelf and chooses a little to read during quiet evenings.</p>
+          <ul id="reading-shelf" class="research-log"></ul>
+          <form id="book-upload-form" class="book-upload-form">
+            <label for="book-title-input">Add a book for Mabel</label>
+            <input id="book-title-input" name="title" maxlength="120" placeholder="Book title" required>
+            <input id="book-pdf-input" name="book" type="file" accept="application/pdf,.pdf" required>
+            <button type="submit">Place it on the shelf</button>
+            <p id="book-upload-status" role="status" aria-live="polite">PDFs are converted to text for Mabel’s gradual reading; the original file is not kept.</p>
+          </form>
+        </div>
+      </section>
+
+      
+
+      <section id="day" class="tab-panel">
+        <h2>Mabel’s activity log</h2>
+
+        <p class="day-intro">
+          A quiet record of the moments Mabel chooses to remember.
+        </p>
+
+        <ul id="activity-log"></ul>
+      </section>
+
+      <section id="inner-life" class="tab-panel">
+        <h2>Mabel’s Inner Life</h2>
+
+        <div class="brain-state-card">
+          <div class="brain-mood-row">
+            <div><span class="brain-label">Right now</span><strong id="brain-mood"></strong></div>
+            <div><span class="brain-label">Mood balance</span><strong id="brain-mood-score"></strong></div>
+          </div>
+          <p id="brain-thought" class="brain-current-thought"></p>
+          <small>Balance is the average of Mabel’s current needs, shown out of 100.</small>
+        </div>
+        <details class="inner-life-details">
+          <summary>Her steady self and what is growing</summary>
+        <div class="brain-trait-columns">
+          <section class="brain-trait-card brain-core-card">
+            <h3>Her steady self</h3><p>These are Mabel’s starting traits.</p>
+            <ul id="brain-core-traits" class="brain-trait-list"></ul>
+          </section>
+          <section class="brain-trait-card brain-evolved-card">
+            <h3>What is growing</h3><p>Small habits and beliefs she has returned to over time.</p>
+            <ul id="brain-evolved-traits" class="brain-trait-list"></ul>
+          </section>
+        </div>
+        </details>
+
+        <div class="inner-life-note">
+          <p>Mabel grows and changes through the things you share, the places she explores, and the questions she researches at the library. Come back to see what begins to matter to her.</p>
+        </div>
+
+        <h3>Mabel’s wishes</h3>
+        <ul id="wishes"></ul>
+
+        <h3>Hobbies</h3>
+        <p class="day-intro">A hobby appears only when Mabel repeatedly returns to a specific, recognizable activity. New hobbies begin at the very start and grow through time and practice.</p>
+        <ul id="interests"></ul>
+
+        <details class="inner-life-details">
+          <summary>Skills and projects</summary>
+        <h3>Things Mabel can try</h3>
+        <p class="day-intro">Useful objects she finds or receives can become invitations to practise. She’ll choose a suitable quiet moment herself.</p>
+        <ul id="practice-props" class="brain-trait-list"></ul>
+
+        <h3>Mabel’s coding notebook</h3>
+        <p class="day-intro">Mabel’s little programs can grow from the subjects she keeps returning to. Some can be tried in her sealed drawing lab, which only understands a few safe picture-making instructions.</p>
+        <p id="coding-level" class="day-intro">If coding becomes one of Mabel’s hobbies, she may start a tiny programming experiment.</p>
+        <ul id="coding-projects" class="brain-trait-list"></ul>
+
+        <h3>Mabel’s making</h3>
+        <p class="day-intro">No button is needed: Mabel gathers materials on her own wanders. When she has at least two and an idea catches her, she may try joining them into a useful mouse-sized object. The shared Brain keeps her materials and projects across visitors.</p>
+        <p id="crafting-level" class="day-intro">Mabel has not tried crafting yet.</p>
+        <h4>Things she could use</h4>
+        <ul id="crafting-materials" class="brain-trait-list crafting-materials"></ul>
+        <h4>Ideas she is trying</h4>
+        <ul id="crafting-projects" class="brain-trait-list"></ul>
+        </details>
+
+        <details class="inner-life-details">
+          <summary>Thoughts and lasting changes</summary>
+        <h3>What’s on Mabel’s mind?</h3>
+        <p class="day-intro">Questions, discoveries, and subjects that have caught her attention. Some may lead to more research; most are simply thoughts for now.</p>
+        <ul id="mind-topics"></ul>
+
+        <h3>How Mabel is changing</h3>
+        <p class="day-intro">This space records lasting changes that grow from Mabel’s Sparks, like a hobby taking root or deepening. Passing thoughts stay in her diary and activity log.</p>
+        <ul id="changes"></ul>
+
+                <div class="item-knowledge-section" hidden>
+          <h3>Things Mabel has learned about</h3>
+          <p class="day-intro">Little bits of knowledge she has gathered and wants to remember.</p>
+          <ul id="item-knowledge" class="research-log"></ul>
+        </div>
+        </details>
+
+        <details class="inner-life-details">
+          <summary>Diary pages</summary>
+        <h3>Mabel’s diary</h3>
+        <ul id="diary"></ul>
+        </details>
+
+      </section>
+
+      <section id="gallery-tab" class="tab-panel">
+        <h2>Mabel’s Gallery</h2>
+        <p class="gallery-intro">Little drawings Mabel made when a thought or moment felt worth keeping. With a closer friendship, you can vote for her own-time drawings or nominate a reference study for the shared Art Exhibition.</p>
+        <ul id="gallery" class="gallery-stream"></ul>
+        <dialog id="gallery-detail" class="gallery-detail" aria-labelledby="gallery-detail-title">
+          <form method="dialog" class="gallery-detail-close">
+            <button type="submit" aria-label="Close artwork details">✕</button>
+          </form>
+          <div id="gallery-detail-image" class="gallery-detail-image"></div>
+          <h3 id="gallery-detail-title"></h3>
+          <time id="gallery-detail-time"></time>
+          <time id="gallery-detail-exhibition-date" class="gallery-detail-exhibition-date" hidden></time>
+          <p id="gallery-detail-description"></p>
+          <div id="gallery-detail-context-block" class="gallery-detail-context">
+            <strong id="gallery-detail-context-label">What led to it</strong>
+            <p id="gallery-detail-context"></p>
+          </div>
+        </dialog>
+      </section>
+
+      <section id="art-exhibition" class="tab-panel">
+        <h2>Daily Art Exhibition</h2>
+        <p class="gallery-intro">Each day Mabel chooses a little collection of drawings to hang for everyone. Visitors can also nominate a reference study; her personal Gallery stays just for this browser.</p>
+        <p id="art-exhibition-week" class="exhibition-period"></p>
+        <ul id="art-exhibition-works" class="gallery-stream art-exhibition-stream"></ul>
+      </section>
+
+      <section id="postbox" class="tab-panel">
+        <h2>Visitor’s postbox</h2>
+        <p class="day-intro">A little place for questions and drawings Mabel has left for you.</p>
+        <ul id="mabel-postbox" class="postbox-list" aria-live="polite"></ul>
+      </section>
+
+<footer class="site-footer">
+  <p>🍀 🍀 🍀 formed beneath the Hawthorn 🍀 🍀 🍀</p>
+</footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
