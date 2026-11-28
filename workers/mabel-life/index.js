@@ -147,7 +147,7 @@ function cleanExhibitionArtwork(raw) {
     source,
     title,
     description: source === "visitor-nominated"
-      ? "A reference study of " + cleanText(raw.subject, 60, title) + ", nominated by a visitor."
+      ? "A drawing of " + cleanText(raw.subject, 60, title) + ", nominated by a visitor."
       : "A little drawing Mabel chose for today’s exhibition.",
     exhibitionReason: cleanText(raw.exhibitionReason, 220, source === "visitor-nominated"
       ? "A visitor nominated this study after Mabel returned to the subject with a visual reference."
@@ -1445,10 +1445,14 @@ async function handleSharedWorldEvent(request, env) {
     const bond = Math.max(0, Number(data.bond) || 0);
     const supplied = data.artwork && typeof data.artwork === "object" ? data.artwork : {};
     if (!visitorId || bond < 35) return jsonResponse({ error: "A closer friendship with Mabel is needed before nominating a drawing." }, 403);
-    if (supplied.referenceRetry !== true || !cleanText(supplied.subject, 80)) {
-      return jsonResponse({ error: "Only a finished reference study can be nominated this way." }, 400);
+    if (!cleanText(supplied.title, 100) && !cleanText(supplied.subject, 80)) {
+      return jsonResponse({ error: "A finished drawing needs a title before it can be nominated." }, 400);
     }
-    const artwork = cleanExhibitionArtwork({ ...supplied, source: "visitor-nominated" });
+    const artwork = cleanExhibitionArtwork({
+      ...supplied,
+      subject: cleanText(supplied.subject, 80, cleanText(supplied.title, 80, "a little drawing")),
+      source: "visitor-nominated"
+    });
     if (!artwork || !artwork.vectorPaths.length) {
       return jsonResponse({ error: "That reference drawing is missing its finished artwork." }, 400);
     }
@@ -1877,6 +1881,42 @@ async function runMabelReading(env) {
   return { ok: true, read: true, book: reading.book.title };
 }
 
+async function handleOwnerKoFiPick(request, env) {
+  if (request.method !== "POST") return jsonResponse({ error: "This owner page only accepts a passcode." }, 405);
+  if (!env.MABEL_ADMIN_PASSWORD) return jsonResponse({ error: "The owner passcode is not configured yet." }, 503);
+  let data;
+  try { data = await request.json(); } catch { return jsonResponse({ error: "Please enter the owner passcode." }, 400); }
+  const supplied = typeof data?.password === "string" ? data.password : "";
+  const expected = String(env.MABEL_ADMIN_PASSWORD);
+  let difference = supplied.length ^ expected.length;
+  const length = Math.max(supplied.length, expected.length);
+  for (let i = 0; i < length; i += 1) difference |= (supplied.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+  if (!supplied || difference !== 0) return jsonResponse({ error: "That passcode didn’t open Mabel’s private art note." }, 401);
+
+  const state = await loadState(env);
+  const today = artExhibitionDayOf();
+  const works = state.artExhibition && state.artExhibition.dayOf === today && Array.isArray(state.artExhibition.works)
+    ? state.artExhibition.works
+    : [];
+  const candidates = Array.isArray(state.artExhibition?.candidates) ? state.artExhibition.candidates : [];
+  const winner = works
+    .filter(item => Number(item.votes) > 0)
+    .sort((a, b) => Number(b.votes) - Number(a.votes) ||
+      Number(candidates.find(candidate => candidate.id === b.id)?.score || 0) -
+      Number(candidates.find(candidate => candidate.id === a.id)?.score || 0))[0] || null;
+  const response = winner
+    ? jsonResponse({
+        ok: true,
+        dayOf: today,
+        artwork: winner,
+        caption: "Mabel’s daily art pick: “" + cleanText(winner.title, 100, "A little drawing") + "”. " +
+          cleanText(winner.description, 240, cleanText(winner.exhibitionReason, 220, "Chosen by Mabel’s visitors for today’s exhibition."))
+      })
+    : jsonResponse({ ok: true, dayOf: today, artwork: null, caption: "" });
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1891,6 +1931,9 @@ export default {
       });
     }
 
+    if (url.pathname === "/owner-ko-fi-pick") {
+      return handleOwnerKoFiPick(request, env);
+    }
     if (url.pathname === "/mabel-brain" && request.method === "POST") {
       return handleSharedWorldEvent(request, env);
     }
